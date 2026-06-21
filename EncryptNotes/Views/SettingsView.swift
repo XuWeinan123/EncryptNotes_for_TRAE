@@ -111,7 +111,9 @@ struct SettingsView: View {
                 Button("重置", role: .destructive) {
                     Task {
                         try? await vaultStore.resetVault()
-                        dismiss()
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            dismiss()
+                        }
                     }
                 }
             } message: {
@@ -119,6 +121,9 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                    .interactiveDismissDisabled()
             }
         }
     }

@@ -27,15 +27,18 @@ struct NoteEditorView: View {
             Form {
                 Section("标题") {
                     TextField("可选，默认从正文生成", text: $title)
+                        .textFieldStyle(.plain)
                 }
 
                 Section("正文") {
                     TextEditor(text: $body)
                         .frame(minHeight: 200)
+                        .scrollContentBackground(.hidden)
                 }
 
                 Section("标签") {
                     TextField("用逗号分隔，如: 工作,重要", text: $tagsText)
+                        .textFieldStyle(.plain)
                 }
             }
             .navigationTitle(isEditing ? "编辑笔记" : "新建笔记")
@@ -43,13 +46,17 @@ struct NoteEditorView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {
-                        dismiss()
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            dismiss()
+                        }
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
-                        saveNote()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            saveNote()
+                        }
                     }
                     .disabled(body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }

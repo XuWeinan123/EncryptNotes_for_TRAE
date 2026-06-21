@@ -12,22 +12,29 @@ struct PaywallView: View {
                 Image(systemName: "star.fill")
                     .font(.system(size: 80))
                     .foregroundStyle(.yellow)
+                    .transition(.scale(scale: 0.5).combined(with: .opacity))
 
                 VStack(spacing: 12) {
                     Text("升级 Pro")
                         .font(.title)
                         .fontWeight(.bold)
+                        .transition(.move(edge: .top).combined(with: .opacity))
 
                     Text("解锁无限笔记")
                         .font(.headline)
                         .foregroundStyle(.secondary)
+                        .transition(.move(edge: .top).combined(with: .opacity).delay(0.1))
                 }
 
                 VStack(alignment: .leading, spacing: 16) {
                     FeatureRow(icon: "infinity", text: "无限笔记数量")
+                        .transition(.move(edge: .leading).combined(with: .opacity))
                     FeatureRow(icon: "icloud", text: "iCloud 同步")
+                        .transition(.move(edge: .leading).combined(with: .opacity).delay(0.05))
                     FeatureRow(icon: "key", text: "导出密钥文件")
+                        .transition(.move(edge: .leading).combined(with: .opacity).delay(0.1))
                     FeatureRow(icon: "trash", text: "重置加密空间")
+                        .transition(.move(edge: .leading).combined(with: .opacity).delay(0.15))
                 }
                 .padding(.horizontal, 40)
 
@@ -38,10 +45,13 @@ struct PaywallView: View {
                         ProgressView()
                             .frame(maxWidth: .infinity)
                             .padding()
+                            .transition(.opacity)
                     } else if let product = purchaseStore.products.first {
                         Button {
-                            Task {
-                                try? await purchaseStore.purchase()
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                                Task {
+                                    try? await purchaseStore.purchase()
+                                }
                             }
                         } label: {
                             Text("立即升级 - \(product.displayPrice)")
@@ -52,6 +62,7 @@ struct PaywallView: View {
                                 .foregroundColor(.white)
                                 .cornerRadius(12)
                         }
+                        .transition(.scale(scale: 0.9).combined(with: .opacity))
                     }
 
                     Button {
@@ -63,6 +74,7 @@ struct PaywallView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
+                    .transition(.opacity)
                 }
                 .padding(.horizontal, 40)
                 .padding(.bottom, 40)
@@ -70,8 +82,12 @@ struct PaywallView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") {
-                        dismiss()
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            dismiss()
+                        }
+                    } label: {
+                        Text("关闭")
                     }
                 }
             }

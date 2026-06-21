@@ -14,16 +14,23 @@ struct HomeView: View {
     var body: some View {
         ZStack {
             mainContent
+                .animation(.easeInOut(duration: 0.3), value: vaultStore.state)
 
             if showPrivacyScreen {
                 PrivacyScreenView()
+                    .transition(.opacity)
             }
         }
         .onChange(of: scenePhase) { _, newPhase in
-            handleScenePhaseChange(newPhase)
+            withAnimation(.easeInOut(duration: 0.2)) {
+                handleScenePhaseChange(newPhase)
+            }
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .presentationBackgroundInteraction(.enabled)
         }
         .sheet(isPresented: $showNewNoteEditor) {
             NoteEditorView(mode: .create) { title, body, tags in
@@ -31,6 +38,8 @@ struct HomeView: View {
                     try? await vaultStore.createNote(title: title, body: body, tags: tags)
                 }
             }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
         .sheet(item: $selectedNote) { note in
             NoteEditorView(mode: .edit(note)) { title, body, tags in
@@ -38,6 +47,8 @@ struct HomeView: View {
                     try? await vaultStore.updateNote(note, title: title, body: body, tags: tags)
                 }
             }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
         .fileImporter(
             isPresented: $showKeyImporter,
@@ -222,11 +233,14 @@ struct UnlockedHomeView: View {
     var body: some View {
         VStack(spacing: 0) {
             headerView
+                .transition(.move(edge: .top).combined(with: .opacity))
 
             if vaultStore.filteredNotes.isEmpty {
                 emptyState
+                    .transition(.scale(scale: 0.9).combined(with: .opacity))
             } else {
                 noteList
+                    .transition(.opacity)
             }
 
             BottomComposerView(
@@ -234,14 +248,21 @@ struct UnlockedHomeView: View {
                     if !vaultStore.purchaseStore.isPro && vaultStore.notes.count >= 20 {
                         showNewNoteEditor = false
                     } else {
-                        showNewNoteEditor = true
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                            showNewNoteEditor = true
+                        }
                     }
                 },
                 isDisabled: false
             )
+            .transition(.move(edge: .bottom))
         }
+        .animation(.easeInOut(duration: 0.3), value: vaultStore.filteredNotes.count)
         .sheet(isPresented: $showSettings) {
             SettingsView()
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .presentationBackgroundInteraction(.enabled)
         }
     }
 
@@ -342,13 +363,20 @@ struct UnlockedHomeView: View {
                 ForEach(vaultStore.filteredNotes) { note in
                     NoteCardView(note: note)
                         .onTapGesture {
-                            selectedNote = note
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                selectedNote = note
+                            }
                         }
+                        .transition(.asymmetric(
+                            insertion: .scale(scale: 0.8).combined(with: .opacity),
+                            removal: .opacity
+                        ))
                 }
             }
             .padding(.horizontal)
             .padding(.vertical, 12)
         }
+        .animation(.easeInOut(duration: 0.25), value: vaultStore.filteredNotes)
     }
 }
 
@@ -374,15 +402,18 @@ struct PrivacyScreenView: View {
     var body: some View {
         ZStack {
             Color(.systemBackground)
+                .ignoresSafeArea()
 
             VStack(spacing: 16) {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 50))
                     .foregroundStyle(.secondary)
+                    .transition(.scale(scale: 0.5).combined(with: .opacity))
 
                 Text("别看我")
                     .font(.title)
                     .fontWeight(.bold)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .ignoresSafeArea()

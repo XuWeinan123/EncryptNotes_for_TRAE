@@ -4,6 +4,8 @@ struct BottomComposerView: View {
     let onCreateNote: () -> Void
     let isDisabled: Bool
 
+    @State private var isPressed = false
+
     var body: some View {
         VStack(spacing: 0) {
             Divider()
@@ -20,8 +22,20 @@ struct BottomComposerView: View {
                     Image(systemName: "plus.circle.fill")
                         .font(.title)
                         .foregroundColor(isDisabled ? .gray : .accentColor)
+                        .scaleEffect(isPressed ? 0.9 : 1.0)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPressed)
                 }
                 .disabled(isDisabled)
+                .buttonStyle(.plain)
+                .pressEvents {
+                    withAnimation(.easeInOut(duration: 0.1)) {
+                        isPressed = true
+                    }
+                } onRelease: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                        isPressed = false
+                    }
+                }
             }
             .padding()
             .background(Color(.systemBackground))
