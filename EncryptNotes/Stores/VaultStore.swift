@@ -42,7 +42,6 @@ final class VaultStore: ObservableObject {
     @Published private(set) var state: VaultState = .noVault
     @Published private(set) var notes: [Note] = []
     @Published var searchText: String = ""
-    @Published var selectedTag: String?
     @Published var lastError: String?
     @Published var needsKeyExport: Bool = false
 
@@ -60,20 +59,11 @@ final class VaultStore: ObservableObject {
 
         if !searchText.isEmpty {
             result = result.filter {
-                $0.title.localizedCaseInsensitiveContains(searchText) ||
                 $0.body.localizedCaseInsensitiveContains(searchText)
             }
         }
 
-        if let tag = selectedTag {
-            result = result.filter { $0.tags.contains(tag) }
-        }
-
         return result
-    }
-
-    var allTags: [String] {
-        Array(Set(notes.flatMap { $0.tags })).sorted()
     }
 
     var isUnlocked: Bool {
@@ -84,6 +74,15 @@ final class VaultStore: ObservableObject {
     init(storage: VaultStorage? = nil) {
         self.storage = storage ?? (ICloudVaultStorage.shared.isAvailable ? ICloudVaultStorage.shared : LocalFallbackStorage.shared)
     }
+
+    #if DEBUG
+    func configureForTesting(state: VaultState, notes: [Note], vaultId: String? = nil, key: CryptoKit.SymmetricKey? = nil) {
+        self.state = state
+        self.notes = notes
+        self.currentVaultId = vaultId
+        self.currentKey = key
+    }
+    #endif
 
     func initialize() async {
         do {
@@ -242,7 +241,7 @@ final class VaultStore: ObservableObject {
         }
     }
 
-    func createNote(title: String, body: String, tags: [String] = []) async throws {
+    func createNote(body: String) async throws {
         guard isUnlocked else { throw VaultError.notUnlocked }
         guard let vaultId = currentVaultId, let key = currentKey else { throw VaultError.notUnlocked }
 
@@ -252,12 +251,8 @@ final class VaultStore: ObservableObject {
 
         let noteId = UUID().uuidString
         let now = Date()
-        let finalTitle = title.isEmpty ? String(body.prefix(50)) : title
-
         let payload = PlainNotePayload(
-            title: finalTitle,
             body: body,
-            tags: tags,
             createdAt: now,
             updatedAt: now
         )
@@ -278,9 +273,7 @@ final class VaultStore: ObservableObject {
         let note = Note(
             id: noteId,
             vaultId: vaultId,
-            title: finalTitle,
             body: body,
-            tags: tags,
             createdAt: now,
             updatedAt: now
         )
@@ -288,17 +281,13 @@ final class VaultStore: ObservableObject {
         notes.insert(note, at: 0)
     }
 
-    func updateNote(_ note: Note, title: String, body: String, tags: [String]) async throws {
+    func updateNote(_ note: Note, body: String) async throws {
         guard isUnlocked else { throw VaultError.notUnlocked }
         guard let vaultId = currentVaultId, let key = currentKey else { throw VaultError.notUnlocked }
 
         let now = Date()
-        let finalTitle = title.isEmpty ? String(body.prefix(50)) : title
-
         let payload = PlainNotePayload(
-            title: finalTitle,
             body: body,
-            tags: tags,
             createdAt: note.createdAt,
             updatedAt: now
         )
@@ -324,9 +313,7 @@ final class VaultStore: ObservableObject {
             notes[index] = Note(
                 id: note.id,
                 vaultId: vaultId,
-                title: finalTitle,
                 body: body,
-                tags: tags,
                 createdAt: note.createdAt,
                 updatedAt: now
             )
@@ -344,7 +331,6 @@ final class VaultStore: ObservableObject {
         currentKey = nil
         notes = []
         searchText = ""
-        selectedTag = nil
 
         Task {
             await loadEncryptedFiles()

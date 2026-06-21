@@ -12,9 +12,7 @@ final class CryptoServiceTests: XCTestCase {
         let now = Date()
 
         let payload = PlainNotePayload(
-            title: "测试标题",
             body: "这是一段测试正文内容",
-            tags: ["测试", "加密"],
             createdAt: now,
             updatedAt: now
         )
@@ -32,9 +30,7 @@ final class CryptoServiceTests: XCTestCase {
 
         let decryptedNote = try cryptoService.decryptNote(file: encryptedFile, using: key)
 
-        XCTAssertEqual(decryptedNote.title, "测试标题")
         XCTAssertEqual(decryptedNote.body, "这是一段测试正文内容")
-        XCTAssertEqual(decryptedNote.tags, ["测试", "加密"])
     }
 
     func testWrongKeyFailsDecryption() throws {
@@ -46,9 +42,7 @@ final class CryptoServiceTests: XCTestCase {
         let now = Date()
 
         let payload = PlainNotePayload(
-            title: "机密内容",
             body: "只有正确密钥才能解密",
-            tags: [],
             createdAt: now,
             updatedAt: now
         )

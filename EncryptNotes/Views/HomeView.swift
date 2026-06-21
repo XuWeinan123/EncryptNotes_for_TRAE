@@ -41,15 +41,15 @@ struct HomeView: View {
                 .presentationBackgroundInteraction(.enabled)
         }
         .sheet(isPresented: $showNewNoteEditor) {
-            NoteEditorView(mode: .create) { title, body, tags in
-                try await vaultStore.createNote(title: title, body: body, tags: tags)
+            NoteEditorView(mode: .create) { body in
+                try await vaultStore.createNote(body: body)
             }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
         .sheet(item: $selectedNote) { note in
-            NoteEditorView(mode: .edit(note)) { title, body, tags in
-                try await vaultStore.updateNote(note, title: title, body: body, tags: tags)
+            NoteEditorView(mode: .edit(note)) { body in
+                try await vaultStore.updateNote(note, body: body)
             }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -339,31 +339,7 @@ struct UnlockedHomeView: View {
             .padding(.horizontal)
             .padding(.top)
 
-            if !vaultStore.allTags.isEmpty {
-                tagFilter
-            }
-
             searchBar
-        }
-    }
-
-    private var tagFilter: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(vaultStore.allTags, id: \.self) { tag in
-                    TagChip(
-                        tag: tag,
-                        isSelected: vaultStore.selectedTag == tag
-                    ) {
-                        if vaultStore.selectedTag == tag {
-                            vaultStore.selectedTag = nil
-                        } else {
-                            vaultStore.selectedTag = tag
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal)
         }
     }
 
@@ -459,24 +435,6 @@ struct UnlockedHomeView: View {
             }
         } message: {
             Text("确定要删除这条笔记吗？此操作不可撤销。")
-        }
-    }
-}
-
-struct TagChip: View {
-    let tag: String
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(tag)
-                .font(.caption)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(isSelected ? Color.accentColor : Color(.systemGray5))
-                .foregroundColor(isSelected ? .white : .primary)
-                .cornerRadius(16)
         }
     }
 }

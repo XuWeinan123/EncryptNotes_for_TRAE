@@ -7,13 +7,11 @@ enum NoteEditorMode {
 
 struct NoteEditorView: View {
     let mode: NoteEditorMode
-    let onSave: (String, String, [String]) async throws -> Void
+    let onSave: (String) async throws -> Void
 
     @Environment(\.dismiss) private var dismiss
 
-    @State private var title: String = ""
     @State private var noteBody: String = ""
-    @State private var tagsText: String = ""
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var isSaving = false
@@ -26,20 +24,10 @@ struct NoteEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("标题") {
-                    TextField("可选，默认从正文生成", text: $title)
-                        .textFieldStyle(.plain)
-                }
-
                 Section("正文") {
                     TextEditor(text: $noteBody)
                         .frame(minHeight: 200)
                         .scrollContentBackground(.hidden)
-                }
-
-                Section("标签") {
-                    TextField("用逗号分隔，如: 工作,重要", text: $tagsText)
-                        .textFieldStyle(.plain)
                 }
             }
             .navigationTitle(isEditing ? "编辑笔记" : "新建笔记")
@@ -65,9 +53,7 @@ struct NoteEditorView: View {
             }
             .onAppear {
                 if case .edit(let note) = mode {
-                    title = note.title
                     noteBody = note.body
-                    tagsText = note.tags.joined(separator: ",")
                 }
             }
             .alert("保存失败", isPresented: $showError) {
@@ -85,15 +71,10 @@ struct NoteEditorView: View {
             return
         }
 
-        let tags = tagsText
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-
         isSaving = true
         Task {
             do {
-                try await onSave(title, noteBody, tags)
+                try await onSave(noteBody)
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription

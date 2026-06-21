@@ -1,4 +1,5 @@
 import XCTest
+import CryptoKit
 @testable import EncryptNotes
 
 final class VaultStoreTests: XCTestCase {
@@ -6,26 +7,31 @@ final class VaultStoreTests: XCTestCase {
     @MainActor
     func testFreeLimitReached() async throws {
         let store = VaultStore(storage: LocalFallbackStorage.shared)
-        store.state = .unlocked
 
         // 模拟已有 20 条笔记
+        var notes: [Note] = []
         for i in 0..<20 {
             let note = Note(
                 id: "note-\(i)",
                 vaultId: "test-vault",
-                title: "笔记 \(i)",
                 body: "内容 \(i)",
-                tags: [],
                 createdAt: Date(),
                 updatedAt: Date()
             )
-            store.notes.append(note)
+            notes.append(note)
         }
+
+        store.configureForTesting(
+            state: .unlocked,
+            notes: notes,
+            vaultId: "test-vault",
+            key: SymmetricKey(size: .bits256)
+        )
 
         // 由于没有真实密钥，createNote 会在加密阶段失败
         // 但 free limit 检查在加密之前，所以会先抛出 freeLimitReached
         do {
-            try await store.createNote(title: "第21条", body: "超出限制")
+            try await store.createNote(body: "超出限制")
             XCTFail("应该抛出 freeLimitReached 错误")
         } catch VaultError.freeLimitReached {
             // 预期行为
@@ -47,10 +53,8 @@ final class VaultStoreTests: XCTestCase {
     @MainActor
     func testResetVaultClearsAllData() async throws {
         let store = VaultStore(storage: LocalFallbackStorage.shared)
-        store.state = .unlocked
-        store.notes = [
-            Note(id: "1", vaultId: "test", title: "test", body: "test", tags: [], createdAt: Date(), updatedAt: Date())
-        ]
+        let notes = [Note(id: "1", vaultId: "test", body: "test", createdAt: Date(), updatedAt: Date())]
+        store.configureForTesting(state: .unlocked, notes: notes)
 
         // 重置后应该清空笔记
         // 注意：由于没有完整的 vault 设置，这里只验证逻辑路径
