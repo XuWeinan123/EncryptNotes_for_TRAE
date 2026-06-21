@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 
 struct PaywallView: View {
     @StateObject private var purchaseStore = PurchaseStore.shared
@@ -23,18 +24,18 @@ struct PaywallView: View {
                     Text("解锁无限笔记")
                         .font(.headline)
                         .foregroundStyle(.secondary)
-                        .transition(.move(edge: .top).combined(with: .opacity).delay(0.1))
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
                 VStack(alignment: .leading, spacing: 16) {
                     FeatureRow(icon: "infinity", text: "无限笔记数量")
                         .transition(.move(edge: .leading).combined(with: .opacity))
                     FeatureRow(icon: "icloud", text: "iCloud 同步")
-                        .transition(.move(edge: .leading).combined(with: .opacity).delay(0.05))
+                        .transition(.move(edge: .leading).combined(with: .opacity))
                     FeatureRow(icon: "key", text: "导出密钥文件")
-                        .transition(.move(edge: .leading).combined(with: .opacity).delay(0.1))
+                        .transition(.move(edge: .leading).combined(with: .opacity))
                     FeatureRow(icon: "trash", text: "重置加密空间")
-                        .transition(.move(edge: .leading).combined(with: .opacity).delay(0.15))
+                        .transition(.move(edge: .leading).combined(with: .opacity))
                 }
                 .padding(.horizontal, 40)
 
@@ -48,10 +49,8 @@ struct PaywallView: View {
                             .transition(.opacity)
                     } else if let product = purchaseStore.products.first {
                         Button {
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                                Task {
-                                    try? await purchaseStore.purchase()
-                                }
+                            Task {
+                                try? await purchaseStore.purchase()
                             }
                         } label: {
                             Text("立即升级 - \(product.displayPrice)")
@@ -103,7 +102,7 @@ struct FeatureRow: View {
         HStack(spacing: 16) {
             Image(systemName: icon)
                 .font(.title3)
-                .foregroundStyle(.accentColor)
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 30)
 
             Text(text)

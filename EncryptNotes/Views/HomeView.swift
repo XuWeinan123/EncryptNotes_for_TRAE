@@ -226,6 +226,7 @@ struct UnlockingView: View {
 
 struct UnlockedHomeView: View {
     @StateObject private var vaultStore = VaultStore.shared
+    @StateObject private var purchaseStore = PurchaseStore.shared
     @Binding var showSettings: Bool
     @Binding var showNewNoteEditor: Bool
     @Binding var selectedNote: Note?

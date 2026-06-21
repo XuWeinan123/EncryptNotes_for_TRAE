@@ -193,7 +193,7 @@ final class VaultStore: ObservableObject {
     }
 
     private func decryptAllNotes() async {
-        guard let vaultId = currentVaultId else { return }
+        guard currentVaultId != nil else { return }
 
         do {
             let noteURLs = try storage.listNoteFiles()
