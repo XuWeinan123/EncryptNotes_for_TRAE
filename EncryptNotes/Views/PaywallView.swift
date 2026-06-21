@@ -5,6 +5,9 @@ struct PaywallView: View {
     @StateObject private var purchaseStore = PurchaseStore.shared
     @Environment(\.dismiss) private var dismiss
 
+    @State private var showError = false
+    @State private var errorMessage = ""
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 32) {
@@ -50,7 +53,12 @@ struct PaywallView: View {
                     } else if let product = purchaseStore.products.first {
                         Button {
                             Task {
-                                try? await purchaseStore.purchase()
+                                do {
+                                    try await purchaseStore.purchase()
+                                } catch {
+                                    errorMessage = error.localizedDescription
+                                    showError = true
+                                }
                             }
                         } label: {
                             Text("立即升级 - \(product.displayPrice)")
@@ -82,13 +90,16 @@ struct PaywallView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            dismiss()
-                        }
+                        dismiss()
                     } label: {
                         Text("关闭")
                     }
                 }
+            }
+            .alert("购买失败", isPresented: $showError) {
+                Button("确定") {}
+            } message: {
+                Text(errorMessage)
             }
         }
     }

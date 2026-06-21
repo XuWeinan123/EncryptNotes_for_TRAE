@@ -77,7 +77,7 @@ final class LocalFallbackStorage: VaultStorage {
         )
 
         return contents
-            .filter { $0.pathExtension == "bkwenc.json" }
+            .filter { $0.lastPathComponent.hasSuffix(".bkwenc.json") }
             .sorted { url1, url2 in
                 let date1 = (try? url1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date.distantPast
                 let date2 = (try? url2.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date.distantPast

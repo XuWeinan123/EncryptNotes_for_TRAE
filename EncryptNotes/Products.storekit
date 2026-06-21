@@ -1,0 +1,70 @@
+{
+  "identifier" : "F4A8B2C0-1D2E-4F3A-9B5C-6E7F8A9B0C1D",
+  "type" : "local",
+  "version" : 3,
+  "products" : [
+    {
+      "displayPrice" : "6",
+      "familyShareable" : false,
+      "internalID" : "F4A8B2C0-1D2E-4F3A-9B5C-6E7F8A9B0C1D",
+      "localizations" : [
+        {
+          "description" : "解锁无限笔记数量",
+          "displayName" : "Pro 月度订阅",
+          "locale" : "zh_CN"
+        }
+      ],
+      "productID" : "com.biekanwo.encryptnotes.pro.monthly",
+      "referenceName" : "Pro Monthly",
+      "subscriptionPeriod" : {
+        "period" : 1,
+        "unit" : "month"
+      },
+      "subscriptionGroupID" : "B5C9D3E1-2F4A-4B5C-8D7E-9F0A1B2C3D4E",
+      "type" : "RecurringSubscription"
+    },
+    {
+      "displayPrice" : "28",
+      "familyShareable" : false,
+      "internalID" : "A1B2C3D4-5E6F-4A7B-8C9D-0E1F2A3B4C5D",
+      "localizations" : [
+        {
+          "description" : "解锁无限笔记数量，节省 60%",
+          "displayName" : "Pro 年度订阅",
+          "locale" : "zh_CN"
+        }
+      ],
+      "productID" : "com.biekanwo.encryptnotes.pro.yearly",
+      "referenceName" : "Pro Yearly",
+      "subscriptionPeriod" : {
+        "period" : 1,
+        "unit" : "year"
+      },
+      "subscriptionGroupID" : "B5C9D3E1-2F4A-4B5C-8D7E-9F0A1B2C3D4E",
+      "type" : "RecurringSubscription"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "zh_CN",
+    "_storefront" : "CHN",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "B5C9D3E1-2F4A-4B5C-8D7E-9F0A1B2C3D4E",
+      "localizations" : [
+        {
+          "description" : "EncryptNotes Pro 订阅",
+          "displayName" : "Pro",
+          "locale" : "zh_CN"
+        }
+      ],
+      "name" : "Pro",
+      "subscriptions" : [
+        "F4A8B2C0-1D2E-4F3A-9B5C-6E7F8A9B0C1D",
+        "A1B2C3D4-5E6F-4A7B-8C9D-0E1F2A3B4C5D"
+      ]
+    }
+  ]
+}

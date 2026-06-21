@@ -43,6 +43,8 @@ final class VaultStore: ObservableObject {
     @Published private(set) var notes: [Note] = []
     @Published var searchText: String = ""
     @Published var selectedTag: String?
+    @Published var lastError: String?
+    @Published var needsKeyExport: Bool = false
 
     private let storage: VaultStorage
     private let cryptoService = CryptoService.shared
@@ -127,6 +129,8 @@ final class VaultStore: ObservableObject {
             currentKey = key
             notes = []
             state = .unlocked
+            // 首次创建 vault 后引导用户导出密钥文件
+            needsKeyExport = true
         } catch {
             state = .error(message: error.localizedDescription)
         }
@@ -171,12 +175,25 @@ final class VaultStore: ObservableObject {
         }
 
         let key = try keyManager.extractKey(vaultKey)
-        let keyMaterial = vaultKey.keyMaterial
 
+        // 先验证密钥能否解密现有笔记，验证通过后才写入 Keychain
+        let noteURLs = try storage.listNoteFiles()
+        var decryptedNotes: [Note] = []
+
+        for (index, url) in noteURLs.enumerated() {
+            state = .unlocking(progress: UnlockProgress(current: index, total: noteURLs.count))
+            let file = try storage.loadNoteFile(at: url)
+            let note = try cryptoService.decryptNote(file: file, using: key)
+            decryptedNotes.append(note)
+        }
+
+        // 解密全部成功后才持久化密钥
+        let keyMaterial = vaultKey.keyMaterial
         try keychainStore.saveKey(keyMaterial, forVaultId: vaultId)
 
         currentKey = key
-        await decryptAllNotes()
+        notes = decryptedNotes
+        state = .unlocked
         return true
     }
 
@@ -193,36 +210,41 @@ final class VaultStore: ObservableObject {
     }
 
     private func decryptAllNotes() async {
-        guard currentVaultId != nil else { return }
+        guard currentVaultId != nil else {
+            state = .error(message: "No vault available for decryption")
+            return
+        }
+
+        guard let key = currentKey else {
+            state = .error(message: "No key available for decryption")
+            return
+        }
 
         do {
             let noteURLs = try storage.listNoteFiles()
             let total = noteURLs.count
             var decryptedNotes: [Note] = []
-            var failedCount = 0
 
             for (index, url) in noteURLs.enumerated() {
                 state = .unlocking(progress: UnlockProgress(current: index, total: total))
 
-                do {
-                    let file = try storage.loadNoteFile(at: url)
-                    let note = try cryptoService.decryptNote(file: file, using: currentKey!)
-                    decryptedNotes.append(note)
-                } catch {
-                    failedCount += 1
-                }
+                let file = try storage.loadNoteFile(at: url)
+                let note = try cryptoService.decryptNote(file: file, using: key)
+                decryptedNotes.append(note)
             }
 
             notes = decryptedNotes
             state = .unlocked
         } catch {
-            state = .error(message: error.localizedDescription)
+            // 解密失败不应进入 unlocked 状态
+            currentKey = nil
+            state = .error(message: "解密失败：\(error.localizedDescription)")
         }
     }
 
     func createNote(title: String, body: String, tags: [String] = []) async throws {
-        guard isUnlocked else { return }
-        guard let vaultId = currentVaultId, let key = currentKey else { return }
+        guard isUnlocked else { throw VaultError.notUnlocked }
+        guard let vaultId = currentVaultId, let key = currentKey else { throw VaultError.notUnlocked }
 
         if !purchaseStore.isPro && notes.count >= 20 {
             throw VaultError.freeLimitReached
@@ -267,8 +289,8 @@ final class VaultStore: ObservableObject {
     }
 
     func updateNote(_ note: Note, title: String, body: String, tags: [String]) async throws {
-        guard isUnlocked else { return }
-        guard let vaultId = currentVaultId, let key = currentKey else { return }
+        guard isUnlocked else { throw VaultError.notUnlocked }
+        guard let vaultId = currentVaultId, let key = currentKey else { throw VaultError.notUnlocked }
 
         let now = Date()
         let finalTitle = title.isEmpty ? String(body.prefix(50)) : title
@@ -349,11 +371,38 @@ final class VaultStore: ObservableObject {
     func resetVault() async throws {
         guard let vaultId = currentVaultId else { return }
 
+        // 删除 Keychain 中的密钥
         try keychainStore.deleteKey(forVaultId: vaultId)
 
+        // 删除所有笔记文件
         let noteURLs = try storage.listNoteFiles()
         for url in noteURLs {
-            try? storage.deleteNoteFile(at: url)
+            try storage.deleteNoteFile(at: url)
+        }
+
+        // 删除 vault.json
+        if let manifestURL = storage.vaultManifestURL {
+            try? FileManager.default.removeItem(at: manifestURL)
+        }
+
+        // 清空 trash 和 meta 目录
+        if let container = storage.containerURL {
+            let trashURL = container.appendingPathComponent("trash")
+            let metaURL = container.appendingPathComponent("meta")
+            if FileManager.default.fileExists(atPath: trashURL.path) {
+                if let trashContents = try? FileManager.default.contentsOfDirectory(at: trashURL, includingPropertiesForKeys: nil) {
+                    for file in trashContents {
+                        try? FileManager.default.removeItem(at: file)
+                    }
+                }
+            }
+            if FileManager.default.fileExists(atPath: metaURL.path) {
+                if let metaContents = try? FileManager.default.contentsOfDirectory(at: metaURL, includingPropertiesForKeys: nil) {
+                    for file in metaContents {
+                        try? FileManager.default.removeItem(at: file)
+                    }
+                }
+            }
         }
 
         currentKey = nil
@@ -370,8 +419,8 @@ enum VaultError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .freeLimitReached: return "Free limit reached. Upgrade to Pro for unlimited notes."
-        case .notUnlocked: return "Vault is not unlocked"
+        case .freeLimitReached: return "已达免费版上限（20 条），升级 Pro 解锁无限笔记"
+        case .notUnlocked: return "加密空间未解锁"
         }
     }
 }

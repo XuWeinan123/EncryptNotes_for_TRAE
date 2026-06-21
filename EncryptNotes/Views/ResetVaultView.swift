@@ -58,8 +58,12 @@ struct ResetVaultView: View {
             Button("取消", role: .cancel) {}
             Button("确认重置", role: .destructive) {
                 Task {
-                    try? await vaultStore.resetVault()
-                    dismiss()
+                    do {
+                        try await vaultStore.resetVault()
+                        dismiss()
+                    } catch {
+                        vaultStore.lastError = "重置失败：\(error.localizedDescription)"
+                    }
                 }
             }
         } message: {
