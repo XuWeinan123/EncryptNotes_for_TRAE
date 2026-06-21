@@ -173,6 +173,7 @@ struct LockedHomeView: View {
     @StateObject private var vaultStore = VaultStore.shared
     @State private var showResetConfirmation = false
     @State private var showFinalResetConfirmation = false
+    @State private var isResettingVault = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -218,12 +219,19 @@ struct LockedHomeView: View {
                 Button(role: .destructive) {
                     showResetConfirmation = true
                 } label: {
-                    Text("清空文件并重新开始")
+                    Label("清空数据重来", systemImage: "trash")
                         .font(.subheadline)
                         .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
                 .tint(.red)
+                .disabled(isResettingVault)
+
+                Text("会删除当前加密文件并生成新密钥，让 App 重新进入可用状态。")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
             }
             .padding(.top, 8)
 
@@ -243,6 +251,9 @@ struct LockedHomeView: View {
             Button("取消", role: .cancel) {}
             Button("清空并重置", role: .destructive) {
                 Task {
+                    isResettingVault = true
+                    defer { isResettingVault = false }
+
                     do {
                         try await vaultStore.resetVault()
                     } catch {
