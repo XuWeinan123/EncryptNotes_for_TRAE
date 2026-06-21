@@ -21,5 +21,6 @@ struct ContentView: View {
 }
 
 #Playground {
-    _ = 1 + 2
+    var play = 1 + 2
+    print("play: \(play)")
 }
