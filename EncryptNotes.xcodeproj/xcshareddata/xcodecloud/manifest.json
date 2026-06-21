@@ -1,0 +1,9 @@
+{
+  "id" : "84edc134-491d-4f98-b1fd-63daef2d65db",
+  "targets" : [
+    {
+      "id" : "9cfd2589-bcd2-4ed8-b539-34dd7af1c01b",
+      "name" : "EncryptNotes"
+    }
+  ]
+}
