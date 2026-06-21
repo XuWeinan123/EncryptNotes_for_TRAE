@@ -12,7 +12,7 @@ struct NoteEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var title: String = ""
-    @State private var body: String = ""
+    @State private var noteBody: String = ""
     @State private var tagsText: String = ""
     @State private var showError = false
     @State private var errorMessage = ""
@@ -31,7 +31,7 @@ struct NoteEditorView: View {
                 }
 
                 Section("正文") {
-                    TextEditor(text: $body)
+                    TextEditor(text: $noteBody)
                         .frame(minHeight: 200)
                         .scrollContentBackground(.hidden)
                 }
@@ -58,13 +58,13 @@ struct NoteEditorView: View {
                             saveNote()
                         }
                     }
-                    .disabled(body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
             .onAppear {
                 if case .edit(let note) = mode {
                     title = note.title
-                    body = note.body
+                    noteBody = note.body
                     tagsText = note.tags.joined(separator: ",")
                 }
             }
@@ -77,7 +77,7 @@ struct NoteEditorView: View {
     }
 
     private func saveNote() {
-        guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             errorMessage = "正文不能为空"
             showError = true
             return
@@ -88,7 +88,7 @@ struct NoteEditorView: View {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
 
-        onSave(title, body, tags)
+        onSave(title, noteBody, tags)
         dismiss()
     }
 }

@@ -245,7 +245,7 @@ struct UnlockedHomeView: View {
 
             BottomComposerView(
                 onCreateNote: {
-                    if !vaultStore.purchaseStore.isPro && vaultStore.notes.count >= 20 {
+                    if !purchaseStore.isPro && vaultStore.notes.count >= 20 {
                         showNewNoteEditor = false
                     } else {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
