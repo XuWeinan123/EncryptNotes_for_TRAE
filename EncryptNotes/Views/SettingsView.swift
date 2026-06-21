@@ -156,6 +156,6 @@ struct KeyFileDocument: FileDocument {
     }
 
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(url: url)
+        try FileWrapper(url: url)
     }
 }

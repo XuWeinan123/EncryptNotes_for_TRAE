@@ -210,7 +210,12 @@ final class VaultStore: ObservableObject {
     }
 
     private func decryptAllNotes() async {
-        guard currentKey != nil else {
+        guard currentVaultId != nil else {
+            state = .error(message: "No vault available for decryption")
+            return
+        }
+
+        guard let key = currentKey else {
             state = .error(message: "No key available for decryption")
             return
         }
@@ -224,7 +229,7 @@ final class VaultStore: ObservableObject {
                 state = .unlocking(progress: UnlockProgress(current: index, total: total))
 
                 let file = try storage.loadNoteFile(at: url)
-                let note = try cryptoService.decryptNote(file: file, using: currentKey!)
+                let note = try cryptoService.decryptNote(file: file, using: key)
                 decryptedNotes.append(note)
             }
 

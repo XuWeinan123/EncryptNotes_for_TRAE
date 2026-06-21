@@ -11,9 +11,24 @@
 		000000000000000000000121 /* EncryptNotesTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EncryptNotesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		000000000000000000000040 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Tests/CryptoServiceTests.swift,
+				Tests/SchemaTests.swift,
+				Tests/VaultStoreTests.swift,
+			);
+			target = 000000000000000100000000 /* EncryptNotes */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		000000000000000000000010 /* EncryptNotes */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				000000000000000000000040 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+			);
 			path = EncryptNotes;
 			sourceTree = "<group>";
 		};
@@ -322,6 +337,7 @@
 				CODE_SIGN_ENTITLEMENTS = EncryptNotes/EncryptNotes.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BPP589VP97;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -360,6 +376,7 @@
 				CODE_SIGN_ENTITLEMENTS = EncryptNotes/EncryptNotes.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BPP589VP97;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
