@@ -7,7 +7,7 @@ enum NoteEditorMode {
 
 struct NoteEditorView: View {
     let mode: NoteEditorMode
-    let onSave: (String, String, [String]) -> Void
+    let onSave: (String, String, [String]) async throws -> Void
 
     @Environment(\.dismiss) private var dismiss
 
@@ -16,6 +16,7 @@ struct NoteEditorView: View {
     @State private var tagsText: String = ""
     @State private var showError = false
     @State private var errorMessage = ""
+    @State private var isSaving = false
 
     var isEditing: Bool {
         if case .edit = mode { return true }
@@ -46,19 +47,20 @@ struct NoteEditorView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            dismiss()
-                        }
+                        dismiss()
                     }
+                    .disabled(isSaving)
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    if isSaving {
+                        ProgressView()
+                    } else {
+                        Button("保存") {
                             saveNote()
                         }
+                        .disabled(noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
-                    .disabled(noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
             .onAppear {
@@ -88,7 +90,16 @@ struct NoteEditorView: View {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
 
-        onSave(title, noteBody, tags)
-        dismiss()
+        isSaving = true
+        Task {
+            do {
+                try await onSave(title, noteBody, tags)
+                dismiss()
+            } catch {
+                errorMessage = error.localizedDescription
+                showError = true
+            }
+            isSaving = false
+        }
     }
 }

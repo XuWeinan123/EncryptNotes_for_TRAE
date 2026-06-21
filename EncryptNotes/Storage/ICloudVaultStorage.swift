@@ -77,7 +77,7 @@ final class ICloudVaultStorage: VaultStorage {
         )
 
         return contents
-            .filter { $0.pathExtension == "bkwenc.json" }
+            .filter { $0.lastPathComponent.hasSuffix(".bkwenc.json") }
             .sorted { url1, url2 in
                 let date1 = (try? url1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date.distantPast
                 let date2 = (try? url2.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date.distantPast
@@ -134,6 +134,10 @@ final class ICloudVaultStorage: VaultStorage {
     private func atomicWrite(data: Data, to url: URL) throws {
         let tempURL = url.appendingPathExtension("tmp")
         try data.write(to: tempURL, options: .atomic)
+        // 目标文件已存在时先删除再移动，避免 moveItem 失败
+        if fileManager.fileExists(atPath: url.path) {
+            try fileManager.removeItem(at: url)
+        }
         try fileManager.moveItem(at: tempURL, to: url)
     }
 }

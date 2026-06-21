@@ -110,9 +110,13 @@ struct SettingsView: View {
                 Button("取消", role: .cancel) {}
                 Button("重置", role: .destructive) {
                     Task {
-                        try? await vaultStore.resetVault()
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            dismiss()
+                        do {
+                            try await vaultStore.resetVault()
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                dismiss()
+                            }
+                        } catch {
+                            vaultStore.lastError = "重置失败：\(error.localizedDescription)"
                         }
                     }
                 }

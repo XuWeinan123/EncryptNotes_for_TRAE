@@ -10,6 +10,9 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var showNewNoteEditor = false
     @State private var selectedNote: Note?
+    @State private var showKeyExportGuide = false
+    @State private var exportedKeyURL: URL?
+    @State private var showShareSheet = false
 
     var body: some View {
         ZStack {
@@ -26,6 +29,11 @@ struct HomeView: View {
                 handleScenePhaseChange(newPhase)
             }
         }
+        .onChange(of: vaultStore.needsKeyExport) { _, needsExport in
+            if needsExport {
+                showKeyExportGuide = true
+            }
+        }
         .sheet(isPresented: $showSettings) {
             SettingsView()
                 .presentationDetents([.medium, .large])
@@ -34,18 +42,14 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showNewNoteEditor) {
             NoteEditorView(mode: .create) { title, body, tags in
-                Task {
-                    try? await vaultStore.createNote(title: title, body: body, tags: tags)
-                }
+                try await vaultStore.createNote(title: title, body: body, tags: tags)
             }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
         .sheet(item: $selectedNote) { note in
             NoteEditorView(mode: .edit(note)) { title, body, tags in
-                Task {
-                    try? await vaultStore.updateNote(note, title: title, body: body, tags: tags)
-                }
+                try await vaultStore.updateNote(note, title: title, body: body, tags: tags)
             }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -56,6 +60,31 @@ struct HomeView: View {
             allowsMultipleSelection: false
         ) { result in
             handleKeyImport(result)
+        }
+        .alert("保存密钥文件", isPresented: $showKeyExportGuide) {
+            Button("立即保存") {
+                exportKeyFile()
+            }
+            Button("稍后", role: .cancel) {
+                vaultStore.needsKeyExport = false
+            }
+        } message: {
+            Text("请保存你的密钥文件（.bkwkey）。没有密钥文件，换设备或重装应用后将无法解密笔记。")
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let url = exportedKeyURL {
+                ShareSheet(items: [url])
+            }
+        }
+        .alert("错误", isPresented: Binding(
+            get: { vaultStore.lastError != nil },
+            set: { if !$0 { vaultStore.lastError = nil } }
+        )) {
+            Button("确定") {
+                vaultStore.lastError = nil
+            }
+        } message: {
+            Text(vaultStore.lastError ?? "")
         }
         .task {
             await vaultStore.initialize()
@@ -119,11 +148,22 @@ struct HomeView: View {
                 do {
                     _ = try await vaultStore.importKeyFile(from: url)
                 } catch {
-                    // Handle error
+                    vaultStore.lastError = "导入密钥失败：\(error.localizedDescription)"
                 }
             }
         case .failure:
             break
+        }
+    }
+
+    private func exportKeyFile() {
+        do {
+            exportedKeyURL = try vaultStore.exportKeyFile()
+            vaultStore.needsKeyExport = false
+            // 使用系统分享导出
+            showShareSheet = true
+        } catch {
+            vaultStore.lastError = "导出密钥失败：\(error.localizedDescription)"
         }
     }
 }
@@ -230,6 +270,10 @@ struct UnlockedHomeView: View {
     @Binding var showNewNoteEditor: Bool
     @Binding var selectedNote: Note?
 
+    @State private var noteToDelete: Note?
+    @State private var showDeleteConfirmation = false
+    @State private var showPaywall = false
+
     var body: some View {
         VStack(spacing: 0) {
             headerView
@@ -246,7 +290,7 @@ struct UnlockedHomeView: View {
             BottomComposerView(
                 onCreateNote: {
                     if !purchaseStore.isPro && vaultStore.notes.count >= 20 {
-                        showNewNoteEditor = false
+                        showPaywall = true
                     } else {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
                             showNewNoteEditor = true
@@ -263,6 +307,11 @@ struct UnlockedHomeView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
                 .presentationBackgroundInteraction(.enabled)
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
     }
 
@@ -367,6 +416,22 @@ struct UnlockedHomeView: View {
                                 selectedNote = note
                             }
                         }
+                        .contextMenu {
+                            Button {
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                    selectedNote = note
+                                }
+                            } label: {
+                                Label("编辑", systemImage: "pencil")
+                            }
+
+                            Button(role: .destructive) {
+                                noteToDelete = note
+                                showDeleteConfirmation = true
+                            } label: {
+                                Label("删除", systemImage: "trash")
+                            }
+                        }
                         .transition(.asymmetric(
                             insertion: .scale(scale: 0.8).combined(with: .opacity),
                             removal: .opacity
@@ -377,6 +442,23 @@ struct UnlockedHomeView: View {
             .padding(.vertical, 12)
         }
         .animation(.easeInOut(duration: 0.25), value: vaultStore.filteredNotes)
+        .alert("删除笔记", isPresented: $showDeleteConfirmation) {
+            Button("取消", role: .cancel) {}
+            Button("删除", role: .destructive) {
+                if let note = noteToDelete {
+                    Task {
+                        do {
+                            try await vaultStore.deleteNote(note)
+                        } catch {
+                            vaultStore.lastError = "删除失败：\(error.localizedDescription)"
+                        }
+                    }
+                }
+                noteToDelete = nil
+            }
+        } message: {
+            Text("确定要删除这条笔记吗？此操作不可撤销。")
+        }
     }
 }
 
@@ -448,4 +530,14 @@ struct ErrorView: View {
             Spacer()
         }
     }
+}
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
