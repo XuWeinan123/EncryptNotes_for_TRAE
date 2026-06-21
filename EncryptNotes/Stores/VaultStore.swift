@@ -1,5 +1,7 @@
 import Foundation
 import SwiftUI
+import Combine
+import CryptoKit
 
 enum VaultState: Equatable {
     case noVault
@@ -35,6 +37,8 @@ struct UnlockProgress: Equatable {
 
 @MainActor
 final class VaultStore: ObservableObject {
+    static let shared = VaultStore()
+
     @Published private(set) var state: VaultState = .noVault
     @Published private(set) var notes: [Note] = []
     @Published var searchText: String = ""
@@ -44,7 +48,7 @@ final class VaultStore: ObservableObject {
     private let cryptoService = CryptoService.shared
     private let keychainStore = KeychainStore.shared
     private let keyManager = VaultKeyManager.shared
-    private let purchaseStore = PurchaseStore.shared
+    let purchaseStore = PurchaseStore.shared
 
     private var currentVaultId: String?
     private var currentKey: CryptoKit.SymmetricKey?
