@@ -143,7 +143,7 @@ struct SettingsView: View {
 }
 
 struct KeyFileDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.json] }
+    static var readableContentTypes: [UTType] { [UTType(filenameExtension: "bkwkey") ?? .json] }
 
     let url: URL
 

@@ -162,6 +162,13 @@ final class VaultStore: ObservableObject {
             throw StorageError.iCloudUnavailable
         }
 
+        let hasSecurityScopedAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if hasSecurityScopedAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
         let data = try Data(contentsOf: url)
         let vaultKey = try JSONDecoder.default.decode(VaultKey.self, from: data)
 
