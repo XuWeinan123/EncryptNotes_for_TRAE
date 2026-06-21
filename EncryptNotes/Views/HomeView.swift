@@ -328,31 +328,36 @@ struct UnlockedHomeView: View {
     @State private var showPaywall = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            headerView
-                .transition(.move(edge: .top).combined(with: .opacity))
+        ZStack(alignment: .bottom) {
+            Color(red: 0.05, green: 0.05, blue: 0.055)
+                .ignoresSafeArea()
 
-            if vaultStore.filteredNotes.isEmpty {
-                emptyState
-                    .transition(.scale(scale: 0.9).combined(with: .opacity))
-            } else {
-                noteList
-                    .transition(.opacity)
+            VStack(spacing: 0) {
+                headerView
+                    .transition(.move(edge: .top).combined(with: .opacity))
+
+                if vaultStore.filteredNotes.isEmpty {
+                    emptyState
+                        .transition(.scale(scale: 0.9).combined(with: .opacity))
+                } else {
+                    noteList
+                        .transition(.opacity)
+                }
             }
 
-            BottomComposerView(
-                onCreateNote: {
-                    if !purchaseStore.isPro && vaultStore.notes.count >= 20 {
-                        showPaywall = true
-                    } else {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                            showNewNoteEditor = true
-                        }
-                    }
-                },
-                isDisabled: false
-            )
-            .transition(.move(edge: .bottom))
+            Button {
+                createNote()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 36, weight: .regular))
+                    .foregroundStyle(.white)
+                    .frame(width: 78, height: 78)
+                    .background(Color(red: 0.25, green: 0.52, blue: 0.36))
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .shadow(color: .black.opacity(0.25), radius: 10, x: 0, y: 6)
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, 32)
         }
         .animation(.easeInOut(duration: 0.3), value: vaultStore.filteredNotes.count)
         .sheet(isPresented: $showSettings) {
@@ -368,30 +373,67 @@ struct UnlockedHomeView: View {
         }
     }
 
+
+    private func createNote() {
+        if !purchaseStore.isPro && vaultStore.notes.count >= 20 {
+            showPaywall = true
+        } else {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                showNewNoteEditor = true
+            }
+        }
+    }
+
     private var headerView: some View {
-        VStack(spacing: 12) {
-            HStack {
-                VStack(alignment: .leading) {
-                    Text("已解锁")
-                        .font(.headline)
-                    Text("当前笔记已在本机解密显示。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            HStack(alignment: .center) {
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 24, weight: .medium))
+                        .foregroundStyle(.white)
+                        .frame(width: 64, height: 64)
+                        .background(.white.opacity(0.13))
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(.white.opacity(0.08), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                HStack(spacing: 6) {
+                    Text("Flomo")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.62))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.9))
                 }
 
                 Spacer()
 
                 Button {
-                    showSettings = true
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        vaultStore.searchText = ""
+                    }
                 } label: {
-                    Image(systemName: "gearshape")
-                        .font(.title2)
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 28, weight: .regular))
+                        .foregroundStyle(.white)
+                        .frame(width: 64, height: 64)
+                        .background(.white.opacity(0.13))
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(.white.opacity(0.08), lineWidth: 1))
                 }
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal)
-            .padding(.top)
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 20)
 
-            searchBar
+            Divider()
+                .overlay(.white.opacity(0.08))
         }
     }
 
@@ -437,7 +479,7 @@ struct UnlockedHomeView: View {
 
     private var noteList: some View {
         ScrollView {
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: 18) {
                 ForEach(vaultStore.filteredNotes) { note in
                     NoteCardView(note: note)
                         .onTapGesture {
@@ -467,8 +509,9 @@ struct UnlockedHomeView: View {
                         ))
                 }
             }
-            .padding(.horizontal)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 18)
+            .padding(.top, 14)
+            .padding(.bottom, 130)
         }
         .animation(.easeInOut(duration: 0.25), value: vaultStore.filteredNotes)
         .alert("删除笔记", isPresented: $showDeleteConfirmation) {
