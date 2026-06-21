@@ -171,6 +171,8 @@ struct HomeView: View {
 struct LockedHomeView: View {
     @Binding var showKeyImporter: Bool
     @StateObject private var vaultStore = VaultStore.shared
+    @State private var showResetConfirmation = false
+    @State private var showFinalResetConfirmation = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -208,9 +210,48 @@ struct LockedHomeView: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
 
+            VStack(spacing: 8) {
+                Text("忘记密钥？")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Button(role: .destructive) {
+                    showResetConfirmation = true
+                } label: {
+                    Text("清空文件并重新开始")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                .buttonStyle(.bordered)
+                .tint(.red)
+            }
+            .padding(.top, 8)
+
             Spacer()
 
             lockedNoteList
+        }
+        .alert("清空加密文件？", isPresented: $showResetConfirmation) {
+            Button("取消", role: .cancel) {}
+            Button("继续", role: .destructive) {
+                showFinalResetConfirmation = true
+            }
+        } message: {
+            Text("如果你忘记了密钥，可以清空当前加密笔记文件并创建新的加密空间。此操作不可撤销。")
+        }
+        .alert("最终确认", isPresented: $showFinalResetConfirmation) {
+            Button("取消", role: .cancel) {}
+            Button("清空并重置", role: .destructive) {
+                Task {
+                    do {
+                        try await vaultStore.resetVault()
+                    } catch {
+                        vaultStore.lastError = "重置失败：\(error.localizedDescription)"
+                    }
+                }
+            }
+        } message: {
+            Text("确定要永久删除所有加密笔记文件，并在这台设备上生成新的密钥吗？")
         }
     }
 
