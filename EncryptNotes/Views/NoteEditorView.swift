@@ -23,20 +23,28 @@ struct NoteEditorView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("正文") {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
                     TextEditor(text: $noteBody)
-                        .frame(minHeight: 200)
+                        .font(DS.bodyLg())
+                        .foregroundColor(DS.textBody)
+                        .frame(minHeight: 320)
                         .scrollContentBackground(.hidden)
+                        .padding(.horizontal, DS.cardPadding)
+                        .padding(.vertical, DS.cardPadding)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .background(DS.bg.ignoresSafeArea())
             .navigationTitle(isEditing ? "编辑笔记" : "新建笔记")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {
                         dismiss()
                     }
+                    .foregroundColor(DS.textSecondary)
                     .disabled(isSaving)
                 }
 
@@ -47,6 +55,10 @@ struct NoteEditorView: View {
                         Button("保存") {
                             saveNote()
                         }
+                        .font(DS.body())
+                        .foregroundColor(noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                         ? DS.textSubtle
+                                         : DS.primary)
                         .disabled(noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }

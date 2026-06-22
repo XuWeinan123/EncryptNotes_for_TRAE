@@ -17,16 +17,20 @@ struct SettingsView: View {
                 Section("状态") {
                     HStack {
                         Label("加密空间", systemImage: "lock.fill")
+                            .foregroundColor(DS.textBody)
                         Spacer()
                         Text(vaultStore.isUnlocked ? "已解锁" : "已锁定")
-                            .foregroundStyle(.secondary)
+                            .font(DS.body())
+                            .foregroundColor(DS.textSecondary)
                     }
 
                     HStack {
                         Label("iCloud", systemImage: "icloud")
+                            .foregroundColor(DS.textBody)
                         Spacer()
                         Text(ICloudVaultStorage.shared.isAvailable ? "可用" : "不可用")
-                            .foregroundStyle(.secondary)
+                            .font(DS.body())
+                            .foregroundColor(DS.textSecondary)
                     }
                 }
 
@@ -35,6 +39,7 @@ struct SettingsView: View {
                         exportKey()
                     } label: {
                         Label("导出密钥文件", systemImage: "square.and.arrow.up")
+                            .foregroundColor(DS.textBody)
                     }
                     .disabled(!vaultStore.isUnlocked)
                 }
@@ -45,6 +50,7 @@ struct SettingsView: View {
                         dismiss()
                     } label: {
                         Label("锁定 App", systemImage: "lock")
+                            .foregroundColor(DS.textBody)
                     }
                     .disabled(!vaultStore.isUnlocked)
 
@@ -52,45 +58,56 @@ struct SettingsView: View {
                         showResetConfirmation = true
                     } label: {
                         Label("重置加密空间", systemImage: "trash")
+                            .foregroundColor(DS.destructive)
                     }
                 }
 
                 Section {
                     HStack {
                         Label("版本", systemImage: "info.circle")
+                            .foregroundColor(DS.textBody)
                         Spacer()
                         Text("v0.1")
-                            .foregroundStyle(.secondary)
+                            .font(DS.body())
+                            .foregroundColor(DS.textSecondary)
                     }
 
                     if purchaseStore.isPro {
                         HStack {
-                            Label("Pro", systemImage: "star.fill")
+                            Label("PRO", systemImage: "star.fill")
+                                .foregroundColor(DS.pro)
                             Spacer()
                             Text("已激活")
-                                .foregroundStyle(.secondary)
+                                .font(DS.body())
+                                .foregroundColor(DS.textSecondary)
                         }
                     } else {
                         Button {
                             showPaywall = true
                         } label: {
                             HStack {
-                                Label("升级 Pro", systemImage: "star")
+                                Label("升级 PRO", systemImage: "star")
+                                    .foregroundColor(DS.pro)
                                 Spacer()
                                 Image(systemName: "chevron.right")
-                                    .foregroundStyle(.tertiary)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(DS.textSubtle)
                             }
                         }
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(DS.bg.ignoresSafeArea())
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") {
                         dismiss()
                     }
+                    .foregroundColor(DS.primary)
                 }
             }
             .fileExporter(

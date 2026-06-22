@@ -21,56 +21,94 @@ struct NoteCardView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(DateFormatters.formatDisplayDateTime(note.updatedAt).replacingOccurrences(of: ".", with: "-"))
-                        .font(.system(size: 16, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.45))
+        VStack(alignment: .leading, spacing: DS.s3) {
+            // 时间戳 - text-subtle
+            Text(DateFormatters.formatDisplayDateTime(note.updatedAt).replacingOccurrences(of: ".", with: "-"))
+                .font(DS.caption())
+                .foregroundColor(DS.textSubtle)
 
-                    Text(title)
-                        .font(.system(size: 19, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.86))
-                        .lineLimit(1)
-                }
+            // 标题 - text-emphasize
+            Text(title)
+                .font(DS.bodyLg())
+                .foregroundColor(DS.textEmphasize)
+                .lineLimit(1)
 
-                Spacer()
-
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.55))
-                    .padding(.top, 2)
-            }
-
-            VStack(alignment: .leading, spacing: 13) {
-                ForEach(Array(previewLines.enumerated()), id: \.offset) { _, line in
-                    Text(line)
-                        .font(.system(size: line.hasPrefix("•") ? 17 : 19, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.82))
-                        .lineLimit(1)
+            // 预览行 - text-body，#tags 用叶绿色
+            if !previewLines.isEmpty {
+                VStack(alignment: .leading, spacing: DS.s2) {
+                    ForEach(Array(previewLines.enumerated()), id: \.offset) { _, line in
+                        tagAwareText(line)
+                            .lineLimit(1)
+                    }
                 }
             }
-
-            Text("展开")
-                .font(.system(size: 18, weight: .regular))
-                .foregroundStyle(Color(red: 0.12, green: 0.58, blue: 1.0))
-                .padding(.top, 2)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.075))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .scaleEffect(isPressed ? 0.985 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isPressed)
+        .padding(.horizontal, DS.cardPadding)
+        .padding(.vertical, DS.cardPadding)
+        .background(DS.surfaceCard)
+        .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
+                .stroke(DS.line, lineWidth: 0.5)
+        )
+        .shadow(color: DS.cardShadow.color,
+                radius: isPressed ? 1 : DS.cardShadow.radius,
+                x: DS.cardShadow.x,
+                y: isPressed ? 0 : DS.cardShadow.y)
+        .scaleEffect(isPressed ? 0.97 : 1.0)
+        .animation(.easeInOut(duration: 0.15), value: isPressed)
         .pressEvents {
             withAnimation(.easeInOut(duration: 0.1)) {
                 isPressed = true
             }
         } onRelease: {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+            withAnimation(.easeInOut(duration: 0.15)) {
                 isPressed = false
             }
         }
+    }
+
+    /// 将 `#tags` 渲染为叶绿色，其余文字保持正文色。
+    private func tagAwareText(_ source: String) -> Text {
+        let pattern = #"#[^\s#]+"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return Text(source)
+                .font(DS.body())
+                .foregroundColor(DS.textBody)
+        }
+
+        let ns = source as NSString
+        let matches = regex.matches(in: source, range: NSRange(location: 0, length: ns.length))
+
+        if matches.isEmpty {
+            return Text(source)
+                .font(DS.body())
+                .foregroundColor(DS.textBody)
+        }
+
+        var result = Text("")
+        var cursor = 0
+        for match in matches {
+            let matchRange = match.range
+            if matchRange.location > cursor {
+                let before = ns.substring(with: NSRange(location: cursor, length: matchRange.location - cursor))
+                result = result + Text(before)
+                    .font(DS.body())
+                    .foregroundColor(DS.textBody)
+            }
+            let tag = ns.substring(with: matchRange)
+            result = result + Text(tag)
+                .font(DS.body())
+                .foregroundColor(DS.primary)
+            cursor = matchRange.location + matchRange.length
+        }
+        if cursor < ns.length {
+            let tail = ns.substring(from: cursor)
+            result = result + Text(tail)
+                .font(DS.body())
+                .foregroundColor(DS.textBody)
+        }
+        return result
     }
 }

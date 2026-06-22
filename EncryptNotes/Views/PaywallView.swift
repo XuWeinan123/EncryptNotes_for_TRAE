@@ -10,89 +10,96 @@ struct PaywallView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 32) {
-                Spacer()
+            ScrollView {
+                VStack(spacing: DS.s8) {
+                    VStack(spacing: DS.s3) {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 56, weight: .regular))
+                            .foregroundColor(DS.pro)
+                            .transition(.scale(scale: 0.5).combined(with: .opacity))
 
-                Image(systemName: "star.fill")
-                    .font(.system(size: 80))
-                    .foregroundStyle(.yellow)
-                    .transition(.scale(scale: 0.5).combined(with: .opacity))
+                        VStack(spacing: DS.s2) {
+                            Text("升级 PRO")
+                                .font(DS.display())
+                                .foregroundColor(DS.textEmphasize)
+                                .transition(.move(edge: .top).combined(with: .opacity))
 
-                VStack(spacing: 12) {
-                    Text("升级 Pro")
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                            Text("解锁无限笔记")
+                                .font(DS.bodyLg())
+                                .foregroundColor(DS.textSecondary)
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                        }
+                    }
+                    .padding(.top, DS.s6)
 
-                    Text("解锁无限笔记")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
+                    VStack(alignment: .leading, spacing: DS.s4) {
+                        FeatureRow(icon: "infinity", text: "无限笔记数量")
+                            .transition(.move(edge: .leading).combined(with: .opacity))
+                        FeatureRow(icon: "icloud", text: "iCloud 同步")
+                            .transition(.move(edge: .leading).combined(with: .opacity))
+                        FeatureRow(icon: "key", text: "导出密钥文件")
+                            .transition(.move(edge: .leading).combined(with: .opacity))
+                        FeatureRow(icon: "trash", text: "重置加密空间")
+                            .transition(.move(edge: .leading).combined(with: .opacity))
+                    }
+                    .padding(.horizontal, DS.s6)
 
-                VStack(alignment: .leading, spacing: 16) {
-                    FeatureRow(icon: "infinity", text: "无限笔记数量")
-                        .transition(.move(edge: .leading).combined(with: .opacity))
-                    FeatureRow(icon: "icloud", text: "iCloud 同步")
-                        .transition(.move(edge: .leading).combined(with: .opacity))
-                    FeatureRow(icon: "key", text: "导出密钥文件")
-                        .transition(.move(edge: .leading).combined(with: .opacity))
-                    FeatureRow(icon: "trash", text: "重置加密空间")
-                        .transition(.move(edge: .leading).combined(with: .opacity))
-                }
-                .padding(.horizontal, 40)
-
-                Spacer()
-
-                VStack(spacing: 16) {
-                    if purchaseStore.purchaseInProgress {
-                        ProgressView()
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .transition(.opacity)
-                    } else if let product = purchaseStore.products.first {
-                        Button {
-                            Task {
-                                do {
-                                    try await purchaseStore.purchase()
-                                } catch {
-                                    errorMessage = error.localizedDescription
-                                    showError = true
-                                }
-                            }
-                        } label: {
-                            Text("立即升级 - \(product.displayPrice)")
-                                .font(.headline)
+                    VStack(spacing: DS.s4) {
+                        if purchaseStore.purchaseInProgress {
+                            ProgressView()
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(Color.accentColor)
-                                .foregroundColor(.white)
-                                .cornerRadius(12)
+                                .transition(.opacity)
+                        } else if let product = purchaseStore.products.first {
+                            Button {
+                                Task {
+                                    do {
+                                        try await purchaseStore.purchase()
+                                    } catch {
+                                        errorMessage = error.localizedDescription
+                                        showError = true
+                                    }
+                                }
+                            } label: {
+                                Text("立即升级 - \(product.displayPrice)")
+                                    .font(DS.body())
+                                    .foregroundColor(DS.onPrimary)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(DS.primary)
+                                    .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                            .transition(.scale(scale: 0.9).combined(with: .opacity))
                         }
-                        .transition(.scale(scale: 0.9).combined(with: .opacity))
-                    }
 
-                    Button {
-                        Task {
-                            await purchaseStore.restorePurchases()
+                        Button {
+                            Task {
+                                await purchaseStore.restorePurchases()
+                            }
+                        } label: {
+                            Text("恢复购买")
+                                .font(DS.body())
+                                .foregroundColor(DS.textSecondary)
                         }
-                    } label: {
-                        Text("恢复购买")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        .buttonStyle(.plain)
+                        .transition(.opacity)
                     }
-                    .transition(.opacity)
+                    .padding(.horizontal, DS.s6)
+                    .padding(.bottom, DS.s8)
                 }
-                .padding(.horizontal, 40)
-                .padding(.bottom, 40)
+                .frame(maxWidth: .infinity)
             }
+            .background(DS.bg.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
                         dismiss()
                     } label: {
                         Text("关闭")
+                            .foregroundColor(DS.textSecondary)
                     }
                 }
             }
@@ -110,14 +117,15 @@ struct FeatureRow: View {
     let text: String
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: DS.s4) {
             Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 30)
+                .font(.system(size: 17, weight: .regular))
+                .foregroundColor(DS.pro)
+                .frame(width: 28)
 
             Text(text)
-                .font(.body)
+                .font(DS.bodyLg())
+                .foregroundColor(DS.textBody)
 
             Spacer()
         }
