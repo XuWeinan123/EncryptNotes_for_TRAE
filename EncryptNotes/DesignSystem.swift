@@ -95,38 +95,50 @@ enum DS {
     // MARK: - Typography
 
     /// 时间戳、元信息、列标题。13/16/400。
-    static func caption() -> Font {
-        .system(size: 13, weight: .regular)
-    }
+    static func caption() -> Font { .system(size: 13, weight: .regular) }
 
     /// 默认 memo 内容。14/20/400。
-    static func body() -> Font {
-        .system(size: 14, weight: .regular)
-    }
+    static func body() -> Font { .system(size: 14, weight: .regular) }
 
     /// 舒适阅读与设置行。15/22/400。
-    static func bodyLg() -> Font {
-        .system(size: 15, weight: .regular)
-    }
+    static func bodyLg() -> Font { .system(size: 15, weight: .regular) }
 
     /// 分区 / 分组标题。16/24/600。
-    static func title() -> Font {
-        .system(size: 16, weight: .semibold)
-    }
+    static func title() -> Font { .system(size: 16, weight: .semibold) }
 
     /// 屏幕 / 导航栏标题。20/28/600。
-    static func page() -> Font {
-        .system(size: 20, weight: .semibold)
-    }
+    static func page() -> Font { .system(size: 20, weight: .semibold) }
 
     /// 引导页标题、大数字、字标兜底。28/34/600。
-    static func display() -> Font {
-        .system(size: 28, weight: .semibold)
-    }
+    static func display() -> Font { .system(size: 28, weight: .semibold) }
 
     /// API 片段与等宽数据。13/18/400。
-    static func mono() -> Font {
-        .system(size: 13, weight: .regular, design: .monospaced)
+    static func mono() -> Font { .system(size: 13, weight: .regular, design: .monospaced) }
+}
+
+extension View {
+    /// L2 索引卡片：3px 圆角、0.5px 细线和非常轻的纸面阴影。
+    func dsCardSurface(cornerRadius: CGFloat = DS.rSm) -> some View {
+        background(DS.surfaceCard)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(DS.line, lineWidth: 0.5)
+            )
+            .shadow(color: DS.cardShadow.color,
+                    radius: DS.cardShadow.radius,
+                    x: DS.cardShadow.x,
+                    y: DS.cardShadow.y)
+    }
+
+    /// L1 输入表面：白色卡片背景与 0.5px 细线，保持捕捉区安静。
+    func dsInputSurface(cornerRadius: CGFloat = DS.rSm) -> some View {
+        background(DS.surfaceCard)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(DS.line, lineWidth: 0.5)
+            )
     }
 }
 

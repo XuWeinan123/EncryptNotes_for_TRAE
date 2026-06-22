@@ -241,6 +241,8 @@ struct LockedHomeView: View {
 
                 lockedNoteList
             }
+            .frame(maxWidth: DS.contentMax)
+            .frame(maxWidth: .infinity)
             .padding(.bottom, DS.s6)
         }
         .background(DS.bg.ignoresSafeArea())
@@ -447,8 +449,7 @@ struct UnlockedHomeView: View {
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, DS.cardPadding)
-            .padding(.top, DS.s4)
-            .padding(.bottom, DS.s3)
+            .frame(height: DS.navbarHeight)
 
             Divider()
                 .overlay(DS.line)
@@ -481,12 +482,7 @@ struct UnlockedHomeView: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, DS.s3)
-        .background(DS.surfaceSunken)
-        .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
-                .stroke(DS.line, lineWidth: 0.5)
-        )
+        .dsInputSurface()
     }
 
     private var emptyState: some View {
@@ -540,6 +536,8 @@ struct UnlockedHomeView: View {
             .padding(.horizontal, DS.cardPadding)
             .padding(.top, DS.s3)
             .padding(.bottom, 120)
+            .frame(maxWidth: DS.contentMax)
+            .frame(maxWidth: .infinity)
         }
         .animation(.easeInOut(duration: 0.2), value: vaultStore.filteredNotes)
         .alert("删除笔记", isPresented: $showDeleteConfirmation) {

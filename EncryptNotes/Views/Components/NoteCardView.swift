@@ -46,16 +46,11 @@ struct NoteCardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, DS.cardPadding)
         .padding(.vertical, DS.cardPadding)
-        .background(DS.surfaceCard)
-        .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
-                .stroke(DS.line, lineWidth: 0.5)
-        )
+        .dsCardSurface()
         .shadow(color: DS.cardShadow.color,
-                radius: isPressed ? 1 : DS.cardShadow.radius,
-                x: DS.cardShadow.x,
-                y: isPressed ? 0 : DS.cardShadow.y)
+                radius: isPressed ? 1 : 0,
+                x: 0,
+                y: isPressed ? -1 : 0)
         .scaleEffect(isPressed ? 0.97 : 1.0)
         .animation(.easeInOut(duration: 0.15), value: isPressed)
         .pressEvents {
