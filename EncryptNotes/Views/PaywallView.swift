@@ -42,6 +42,8 @@ struct PaywallView: View {
                         FeatureRow(icon: "trash", text: "重置加密空间")
                             .transition(.move(edge: .leading).combined(with: .opacity))
                     }
+                    .padding(DS.cardPadding)
+                    .dsCardSurface()
                     .padding(.horizontal, DS.s6)
 
                     VStack(spacing: DS.s4) {
@@ -91,6 +93,8 @@ struct PaywallView: View {
                 .frame(maxWidth: .infinity)
             }
             .background(DS.bg.ignoresSafeArea())
+            .toolbarBackground(DS.surfaceRaised, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
