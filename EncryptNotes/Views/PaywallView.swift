@@ -92,14 +92,10 @@ struct PaywallView: View {
             }
             .background(DS.bg.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button {
+                    Button("关闭") {
                         dismiss()
-                    } label: {
-                        Text("关闭")
-                            .foregroundColor(DS.textSecondary)
                     }
                 }
             }

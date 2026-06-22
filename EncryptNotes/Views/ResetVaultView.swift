@@ -51,7 +51,6 @@ struct ResetVaultView: View {
         .background(DS.bg.ignoresSafeArea())
         .navigationTitle("重置")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.light, for: .navigationBar)
         .alert("确认重置", isPresented: $showFirstConfirmation) {
             Button("取消", role: .cancel) {}
             Button("继续", role: .destructive) {

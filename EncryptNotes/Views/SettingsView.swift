@@ -101,13 +101,11 @@ struct SettingsView: View {
             .background(DS.bg.ignoresSafeArea())
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") {
                         dismiss()
                     }
-                    .foregroundColor(DS.primary)
                 }
             }
             .fileExporter(
