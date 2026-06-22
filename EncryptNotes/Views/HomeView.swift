@@ -105,7 +105,7 @@ struct HomeView: View {
                 }
 
         case .locked:
-            LockedHomeView(showKeyImporter: $showKeyImporter)
+            LockedHomeView(showKeyImporter: $showKeyImporter, showNewNoteEditor: $showNewNoteEditor)
 
         case .unlocking(let progress):
             UnlockingView(progress: progress)
@@ -171,104 +171,156 @@ struct HomeView: View {
 
 struct LockedHomeView: View {
     @Binding var showKeyImporter: Bool
+    @Binding var showNewNoteEditor: Bool
     @StateObject private var vaultStore = VaultStore.shared
+    @StateObject private var purchaseStore = PurchaseStore.shared
     @State private var showResetConfirmation = false
     @State private var showFinalResetConfirmation = false
     @State private var isResettingVault = false
+    @State private var isFloatPressed = false
+    @State private var showPaywall = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: DS.s6) {
-                VStack(spacing: DS.s2) {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 48, weight: .regular))
-                        .foregroundColor(DS.textSecondary)
-                        .padding(.bottom, DS.s2)
+        ZStack(alignment: .bottom) {
+            ScrollView {
+                VStack(spacing: DS.s6) {
+                    VStack(spacing: DS.s2) {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 48, weight: .regular))
+                            .foregroundColor(DS.textSecondary)
+                            .padding(.bottom, DS.s2)
 
-                    Text("这台设备还没有密钥")
-                        .font(DS.title())
-                        .foregroundColor(DS.textEmphasize)
+                        Text("这台设备还没有密钥")
+                            .font(DS.title())
+                            .foregroundColor(DS.textEmphasize)
 
-                    Text("导入密钥文件后，笔记将在本机解密显示。")
-                        .font(DS.body())
-                        .foregroundColor(DS.textSecondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.top, DS.s8)
-                .padding(.horizontal, DS.s6)
-
-                Button {
-                    showKeyImporter = true
-                } label: {
-                    Text("导入密钥文件")
-                        .font(DS.body())
-                        .foregroundColor(DS.onPrimary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(DS.primary)
-                        .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 40)
-
-                Text("密钥文件只会在本机读取，不会上传。")
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSubtle)
-
-                VStack(spacing: DS.s2) {
-                    Text("忘记密钥？")
-                        .font(DS.caption())
-                        .foregroundColor(DS.textSecondary)
-
-                    Button(role: .destructive) {
-                        showResetConfirmation = true
-                    } label: {
-                        Label("清空数据重来", systemImage: "trash")
+                        Text("导入密钥文件后，笔记将在本机解密显示。未导入前也可添加笔记，内容会以乱码显示。")
                             .font(DS.body())
-                            .foregroundColor(DS.destructive)
-                            .frame(maxWidth: .infinity)
+                            .foregroundColor(DS.textSecondary)
+                            .multilineTextAlignment(.center)
                     }
-                    .disabled(isResettingVault)
+                    .padding(.top, DS.s8)
+                    .padding(.horizontal, DS.s6)
 
-                    Text("会删除当前加密文件并生成新密钥，让 App 重新进入可用状态。")
+                    Button {
+                        showKeyImporter = true
+                    } label: {
+                        Text("导入密钥文件")
+                            .font(DS.body())
+                            .foregroundColor(DS.onPrimary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(DS.primary)
+                            .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 40)
+
+                    Text("密钥文件只会在本机读取，不会上传。")
                         .font(DS.caption())
                         .foregroundColor(DS.textSubtle)
-                        .multilineTextAlignment(.center)
+
+                    VStack(spacing: DS.s2) {
+                        Text("忘记密钥？")
+                            .font(DS.caption())
+                            .foregroundColor(DS.textSecondary)
+
+                        Button(role: .destructive) {
+                            showResetConfirmation = true
+                        } label: {
+                            Label("清空数据重来", systemImage: "trash")
+                                .font(DS.body())
+                                .foregroundColor(DS.destructive)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .disabled(isResettingVault)
+
+                        Text("会删除当前加密文件并生成新密钥，让 App 重新进入可用状态。")
+                            .font(DS.caption())
+                            .foregroundColor(DS.textSubtle)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.top, DS.s2)
+                    .padding(.horizontal, DS.s6)
+
+                    lockedNoteList
+                    plainNoteList
                 }
-                .padding(.top, DS.s2)
-                .padding(.horizontal, DS.s6)
-
-                lockedNoteList
+                .frame(maxWidth: DS.contentMax)
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 120)
             }
-            .frame(maxWidth: DS.contentMax)
-            .frame(maxWidth: .infinity)
-            .padding(.bottom, DS.s6)
-        }
-        .dsCanvasBackground()
-        .alert("清空加密文件？", isPresented: $showResetConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("继续", role: .destructive) {
-                showFinalResetConfirmation = true
+            .dsCanvasBackground()
+            .alert("清空加密文件？", isPresented: $showResetConfirmation) {
+                Button("取消", role: .cancel) {}
+                Button("继续", role: .destructive) {
+                    showFinalResetConfirmation = true
+                }
+            } message: {
+                Text("如果你忘记了密钥，可以清空当前加密笔记文件并创建新的加密空间。此操作不可撤销。")
             }
-        } message: {
-            Text("如果你忘记了密钥，可以清空当前加密笔记文件并创建新的加密空间。此操作不可撤销。")
-        }
-        .alert("最终确认", isPresented: $showFinalResetConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("清空并重置", role: .destructive) {
-                Task {
-                    isResettingVault = true
-                    defer { isResettingVault = false }
+            .alert("最终确认", isPresented: $showFinalResetConfirmation) {
+                Button("取消", role: .cancel) {}
+                Button("清空并重置", role: .destructive) {
+                    Task {
+                        isResettingVault = true
+                        defer { isResettingVault = false }
 
-                    do {
-                        try await vaultStore.resetVault()
-                    } catch {
-                        vaultStore.lastError = "重置失败：\(error.localizedDescription)"
+                        do {
+                            try await vaultStore.resetVault()
+                        } catch {
+                            vaultStore.lastError = "重置失败：\(error.localizedDescription)"
+                        }
                     }
                 }
+            } message: {
+                Text("确定要永久删除所有加密笔记文件，并在这台设备上生成新的密钥吗？")
             }
-        } message: {
-            Text("确定要永久删除所有加密笔记文件，并在这台设备上生成新的密钥吗？")
+            .sheet(isPresented: $showPaywall) {
+                PaywallView()
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            }
+
+            // 浮动 + 按钮：未导入密钥时也可添加笔记
+            Button {
+                createNote()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 24, weight: .regular))
+                    .foregroundColor(DS.onPrimary)
+                    .frame(width: 56, height: 56)
+                    .background(DS.primary)
+                    .clipShape(Circle())
+                    .shadow(color: DS.floatShadow.color,
+                            radius: DS.floatShadow.radius,
+                            x: DS.floatShadow.x,
+                            y: DS.floatShadow.y)
+                    .scaleEffect(isFloatPressed ? 0.92 : 1.0)
+            }
+            .buttonStyle(.plain)
+            .pressEvents {
+                withAnimation(.easeInOut(duration: 0.1)) {
+                    isFloatPressed = true
+                }
+            } onRelease: {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isFloatPressed = false
+                }
+            }
+            .padding(.bottom, DS.s8)
+        }
+        .animation(.easeInOut(duration: 0.2), value: vaultStore.plainNotes.count)
+    }
+
+    private func createNote() {
+        let totalCount = vaultStore.notes.count + vaultStore.plainNotes.count
+        if !purchaseStore.isPro && totalCount >= 20 {
+            showPaywall = true
+        } else {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showNewNoteEditor = true
+            }
         }
     }
 
@@ -284,6 +336,25 @@ struct LockedHomeView: View {
                 LazyVStack(spacing: DS.memoGap) {
                     ForEach(files) { file in
                         EncryptedCardView(info: file)
+                    }
+                }
+                .padding(.horizontal, DS.cardPadding)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var plainNoteList: some View {
+        if !vaultStore.plainNotes.isEmpty {
+            VStack(alignment: .leading, spacing: DS.s3) {
+                Text("待加密笔记")
+                    .font(DS.title())
+                    .foregroundColor(DS.textEmphasize)
+                    .padding(.horizontal, DS.cardPadding)
+
+                LazyVStack(spacing: DS.memoGap) {
+                    ForEach(vaultStore.plainNotes) { note in
+                        PlainNoteLockedCardView(note: note)
                     }
                 }
                 .padding(.horizontal, DS.cardPadding)
@@ -467,7 +538,8 @@ struct UnlockedHomeView: View {
     }
 
     private func createNote() {
-        if !purchaseStore.isPro && vaultStore.notes.count >= 20 {
+        let totalCount = vaultStore.notes.count + vaultStore.plainNotes.count
+        if !purchaseStore.isPro && totalCount >= 20 {
             showPaywall = true
         } else {
             withAnimation(.easeInOut(duration: 0.2)) {
@@ -498,7 +570,7 @@ struct UnlockedHomeView: View {
         ScrollView {
             LazyVStack(spacing: DS.memoGap) {
                 ForEach(vaultStore.filteredNotes) { note in
-                    NoteCardView(note: note)
+                    NoteCardView(note: note, isPlain: vaultStore.plainNoteIds.contains(note.id))
                         .onTapGesture {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 selectedNote = note
