@@ -24,25 +24,47 @@ struct NoteEditorView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: DS.s3) {
+                    Text(isEditing ? "继续整理这条想法" : "快速记下一闪而过的想法")
+                        .font(DS.caption())
+                        .foregroundColor(DS.textSecondary)
+
                     TextEditor(text: $noteBody)
                         .font(DS.bodyLg())
                         .foregroundColor(DS.textBody)
                         .frame(minHeight: 320)
                         .scrollContentBackground(.hidden)
-                        .padding(.horizontal, DS.cardPadding)
-                        .padding(.vertical, DS.cardPadding)
+                        .padding(DS.cardPadding)
+                        .dsInputSurface()
+
+                    HStack(spacing: DS.s1) {
+                        Text("用")
+                        Text("#tag")
+                            .foregroundColor(DS.primary)
+                        Text("把想法连接起来")
+                    }
+                    .font(DS.caption())
+                    .foregroundColor(DS.textSubtle)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, DS.cardPadding)
+                .padding(.top, DS.s4)
+                .padding(.bottom, DS.s8)
+                .frame(maxWidth: DS.contentMax, alignment: .leading)
+                .frame(maxWidth: .infinity)
             }
             .background(DS.bg.ignoresSafeArea())
             .navigationTitle(isEditing ? "编辑笔记" : "新建笔记")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.light, for: .navigationBar)
+            .toolbarBackground(DS.surfaceRaised, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {
                         dismiss()
                     }
+                    .font(DS.body())
+                    .foregroundColor(DS.textSecondary)
                     .disabled(isSaving)
                 }
 

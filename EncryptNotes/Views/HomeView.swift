@@ -240,6 +240,8 @@ struct LockedHomeView: View {
 
                 lockedNoteList
             }
+            .frame(maxWidth: DS.contentMax)
+            .frame(maxWidth: .infinity)
             .padding(.bottom, DS.s6)
         }
         .background(DS.bg.ignoresSafeArea())
@@ -495,13 +497,40 @@ struct UnlockedHomeView: View {
                 }
             }
             .padding(.horizontal, DS.cardPadding)
-            .padding(.top, DS.s4)
-            .padding(.bottom, DS.s3)
+            .frame(height: DS.navbarHeight)
 
             Divider()
                 .overlay(DS.line)
         }
         .background(DS.surfaceCard)
+    }
+
+    private var searchBar: some View {
+        HStack(spacing: DS.s2) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14, weight: .regular))
+                .foregroundColor(DS.textSubtle)
+
+            TextField("搜索笔记", text: $vaultStore.searchText)
+                .font(DS.body())
+                .foregroundColor(DS.textBody)
+                .textFieldStyle(.plain)
+
+            if !vaultStore.searchText.isEmpty {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        vaultStore.searchText = ""
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(DS.textSubtle)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, DS.s3)
+        .dsInputSurface()
     }
 
     private var emptyState: some View {
@@ -557,6 +586,8 @@ struct UnlockedHomeView: View {
             .padding(.horizontal, DS.cardPadding)
             .padding(.top, DS.s3)
             .padding(.bottom, 120)
+            .frame(maxWidth: DS.contentMax)
+            .frame(maxWidth: .infinity)
         }
         .animation(.easeInOut(duration: 0.2), value: vaultStore.filteredNotes)
         .alert("删除笔记", isPresented: $showDeleteConfirmation) {
