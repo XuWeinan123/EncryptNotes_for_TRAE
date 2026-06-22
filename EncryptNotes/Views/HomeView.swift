@@ -97,7 +97,7 @@ struct HomeView: View {
         case .noVault:
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(DS.bg.ignoresSafeArea())
+                .dsCanvasBackground()
                 .onAppear {
                     Task {
                         await vaultStore.initialize()
@@ -244,7 +244,7 @@ struct LockedHomeView: View {
             .frame(maxWidth: .infinity)
             .padding(.bottom, DS.s6)
         }
-        .background(DS.bg.ignoresSafeArea())
+        .dsCanvasBackground()
         .alert("清空加密文件？", isPresented: $showResetConfirmation) {
             Button("取消", role: .cancel) {}
             Button("继续", role: .destructive) {
@@ -318,7 +318,7 @@ struct UnlockingView: View {
 
             Spacer()
         }
-        .background(DS.bg.ignoresSafeArea())
+        .dsCanvasBackground()
     }
 }
 
@@ -663,7 +663,7 @@ struct ErrorView: View {
 
             Spacer()
         }
-        .background(DS.bg.ignoresSafeArea())
+        .dsCanvasBackground()
     }
 }
 

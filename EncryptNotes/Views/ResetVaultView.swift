@@ -48,7 +48,7 @@ struct ResetVaultView: View {
             }
             .frame(maxWidth: .infinity, minHeight: 600)
         }
-        .background(DS.bg.ignoresSafeArea())
+        .dsCanvasBackground()
         .navigationTitle("重置")
         .navigationBarTitleDisplayMode(.inline)
         .alert("确认重置", isPresented: $showFirstConfirmation) {

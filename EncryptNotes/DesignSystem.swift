@@ -151,3 +151,34 @@ extension Color {
         self.init(.sRGB, red: r, green: g, blue: b, opacity: alpha)
     }
 }
+
+extension View {
+    /// 应用画布背景。
+    ///
+    /// iOS 26+ 不使用 `.ignoresSafeArea()`，避免自定义背景延伸到 navigation bar
+    /// 下方干扰系统 Liquid Glass 折射效果；toolbar 由系统自动渲染为 liquid glass。
+    /// iOS 26 以下保留 `.ignoresSafeArea()` 以铺满屏幕。
+    @ViewBuilder
+    func dsCanvasBackground() -> some View {
+        if #available(iOS 26.0, *) {
+            self.background(DS.bg)
+        } else {
+            self.background(DS.bg.ignoresSafeArea())
+        }
+    }
+
+    /// List 背景处理。
+    ///
+    /// iOS 26+ 不隐藏 `scrollContentBackground`，让 List 与系统 Liquid Glass
+    /// toolbar 协作；iOS 26 以下隐藏默认背景并使用 DS.bg。
+    @ViewBuilder
+    func dsListBackground() -> some View {
+        if #available(iOS 26.0, *) {
+            self.scrollContentBackground(.hidden)
+                .background(DS.bg)
+        } else {
+            self.scrollContentBackground(.hidden)
+                .background(DS.bg.ignoresSafeArea())
+        }
+    }
+}

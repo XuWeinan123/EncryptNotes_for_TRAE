@@ -52,19 +52,14 @@ struct NoteEditorView: View {
                 .frame(maxWidth: DS.contentMax, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
-            .background(DS.bg.ignoresSafeArea())
+            .dsCanvasBackground()
             .navigationTitle(isEditing ? "编辑笔记" : "新建笔记")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.light, for: .navigationBar)
-            .toolbarBackground(DS.surfaceRaised, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {
                         dismiss()
                     }
-                    .font(DS.body())
-                    .foregroundColor(DS.textSecondary)
                     .disabled(isSaving)
                 }
 
