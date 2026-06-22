@@ -38,12 +38,24 @@ protocol VaultStorage {
     func deleteNoteFile(at url: URL) throws
 
     func createConflictCopy(for url: URL) throws -> URL
+
+    // MARK: - Plain note files (未导入密钥时创建的明文笔记)
+
+    func listPlainNoteFiles() throws -> [URL]
+    func loadPlainNoteFile(at url: URL) throws -> PlainNoteFile
+    func savePlainNoteFile(_ file: PlainNoteFile, at url: URL) throws
+    func deletePlainNoteFile(at url: URL) throws
 }
 
 extension VaultStorage {
     func noteFileURL(for noteId: String) -> URL? {
         guard let container = containerURL else { return nil }
         return container.appendingPathComponent("notes").appendingPathComponent("\(noteId).bkwenc.json")
+    }
+
+    func plainNoteFileURL(for noteId: String) -> URL? {
+        guard let container = containerURL else { return nil }
+        return container.appendingPathComponent("notes").appendingPathComponent("\(noteId).bkwplain.json")
     }
 
     var vaultManifestURL: URL? {

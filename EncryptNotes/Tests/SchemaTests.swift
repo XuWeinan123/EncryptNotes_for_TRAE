@@ -88,4 +88,78 @@ final class SchemaTests: XCTestCase {
         XCTAssertTrue(filtered.contains { $0.lastPathComponent == "note1.bkwenc.json" })
         XCTAssertTrue(filtered.contains { $0.lastPathComponent == "note2.bkwenc.json" })
     }
+
+    // MARK: - PlainNoteFile
+
+    func testPlainNoteFileCoding() throws {
+        let file = PlainNoteFile(
+            noteId: "plain-test-id",
+            vaultId: "plain-test-vault",
+            createdAt: Date(timeIntervalSince1970: 1000000),
+            updatedAt: Date(timeIntervalSince1970: 1000000),
+            body: "未导入密钥时添加的明文笔记"
+        )
+
+        let data = try JSONEncoder.default.encode(file)
+        let decoded = try JSONDecoder.default.decode(PlainNoteFile.self, from: data)
+
+        XCTAssertEqual(decoded.noteId, "plain-test-id")
+        XCTAssertEqual(decoded.vaultId, "plain-test-vault")
+        XCTAssertEqual(decoded.type, "plain_note")
+        XCTAssertEqual(decoded.body, "未导入密钥时添加的明文笔记")
+    }
+
+    func testPlainNoteFileToNote() {
+        let createdAt = Date(timeIntervalSince1970: 1000000)
+        let updatedAt = Date(timeIntervalSince1970: 2000000)
+        let file = PlainNoteFile(
+            noteId: "to-note-id",
+            vaultId: "to-note-vault",
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            body: "转换为 Note"
+        )
+
+        let note = file.toNote()
+        XCTAssertEqual(note.id, "to-note-id")
+        XCTAssertEqual(note.vaultId, "to-note-vault")
+        XCTAssertEqual(note.body, "转换为 Note")
+        XCTAssertEqual(note.createdAt, createdAt)
+        XCTAssertEqual(note.updatedAt, updatedAt)
+    }
+
+    func testPlainNoteFileExtensionFiltering() {
+        let urls = [
+            URL(fileURLWithPath: "/tmp/plain1.bkwplain.json"),
+            URL(fileURLWithPath: "/tmp/plain2.bkwplain.json"),
+            URL(fileURLWithPath: "/tmp/note1.bkwenc.json"),
+            URL(fileURLWithPath: "/tmp/vault.json")
+        ]
+
+        let filtered = urls.filter { $0.lastPathComponent.hasSuffix(".bkwplain.json") }
+
+        XCTAssertEqual(filtered.count, 2)
+        XCTAssertTrue(filtered.contains { $0.lastPathComponent == "plain1.bkwplain.json" })
+        XCTAssertTrue(filtered.contains { $0.lastPathComponent == "plain2.bkwplain.json" })
+    }
+
+    // MARK: - NoteObfuscator
+
+    func testNoteObfuscatorProducesGarbledOutput() {
+        let body = "这是一段明文笔记内容"
+        let garbled = NoteObfuscator.garbledPreview(of: body)
+
+        // 乱码应为 base64 编码，不等于原文
+        XCTAssertNotEqual(garbled, body)
+        XCTAssertFalse(garbled.isEmpty)
+        // base64 字符集
+        XCTAssertTrue(garbled.allSatisfy { $0.isLetter || $0.isNumber || $0 == "+" || $0 == "/" || $0 == "=" })
+    }
+
+    func testNoteObfuscatorTruncatesTo50() {
+        let longBody = String(repeating: "a", count: 100)
+        let garbled = NoteObfuscator.garbledPreview(of: longBody)
+
+        XCTAssertLessThanOrEqual(garbled.count, 50)
+    }
 }

@@ -41,6 +41,7 @@ final class VaultStore: ObservableObject {
 
     @Published private(set) var state: VaultState = .noVault
     @Published private(set) var notes: [Note] = []
+    @Published private(set) var plainNotes: [Note] = []
     @Published var searchText: String = ""
     @Published var lastError: String?
     @Published var needsKeyExport: Bool = false
@@ -54,8 +55,10 @@ final class VaultStore: ObservableObject {
     private var currentVaultId: String?
     private var currentKey: CryptoKit.SymmetricKey?
 
+    /// 合并加密笔记与明文笔记，按更新时间倒序返回。
     var filteredNotes: [Note] {
-        var result = notes
+        var result = (notes + plainNotes)
+            .sorted { $0.updatedAt > $1.updatedAt }
 
         if !searchText.isEmpty {
             result = result.filter {
@@ -64,6 +67,11 @@ final class VaultStore: ObservableObject {
         }
 
         return result
+    }
+
+    /// 明文笔记 ID 集合，用于 UI 判断是否显示小锁标志。
+    var plainNoteIds: Set<String> {
+        Set(plainNotes.map { $0.id })
     }
 
     var isUnlocked: Bool {
@@ -76,9 +84,10 @@ final class VaultStore: ObservableObject {
     }
 
     #if DEBUG
-    func configureForTesting(state: VaultState, notes: [Note], vaultId: String? = nil, key: CryptoKit.SymmetricKey? = nil) {
+    func configureForTesting(state: VaultState, notes: [Note], plainNotes: [Note] = [], vaultId: String? = nil, key: CryptoKit.SymmetricKey? = nil) {
         self.state = state
         self.notes = notes
+        self.plainNotes = plainNotes
         self.currentVaultId = vaultId
         self.currentKey = key
     }
@@ -151,10 +160,26 @@ final class VaultStore: ObservableObject {
                     updatedAt: file.updatedAt
                 )
             }
+
+            // 同时加载明文笔记，使其在锁定状态下也可见（显示为乱码）
+            let loadedPlainNotes = try loadPlainNotesFromDisk()
+            plainNotes = loadedPlainNotes
+
             state = .locked(encryptedFiles: encryptedInfos)
         } catch {
             state = .error(message: error.localizedDescription)
         }
+    }
+
+    /// 从磁盘加载所有明文笔记，按更新时间倒序返回。
+    private func loadPlainNotesFromDisk() throws -> [Note] {
+        let plainURLs = try storage.listPlainNoteFiles()
+        var loaded: [Note] = []
+        for url in plainURLs {
+            let file = try storage.loadPlainNoteFile(at: url)
+            loaded.append(file.toNote())
+        }
+        return loaded.sorted { $0.updatedAt > $1.updatedAt }
     }
 
     func importKeyFile(from url: URL) async throws -> Bool {
@@ -199,6 +224,8 @@ final class VaultStore: ObservableObject {
 
         currentKey = key
         notes = decryptedNotes
+        // 导入密钥后也加载明文笔记，使其在解锁状态下可正常显示
+        plainNotes = (try? loadPlainNotesFromDisk()) ?? []
         state = .unlocked
         return true
     }
@@ -240,6 +267,8 @@ final class VaultStore: ObservableObject {
             }
 
             notes = decryptedNotes
+            // 解锁后也加载明文笔记，使其在解锁状态下可正常显示
+            plainNotes = (try? loadPlainNotesFromDisk()) ?? []
             state = .unlocked
         } catch {
             // 解密失败不应进入 unlocked 状态
@@ -249,95 +278,164 @@ final class VaultStore: ObservableObject {
     }
 
     func createNote(body: String) async throws {
-        guard isUnlocked else { throw VaultError.notUnlocked }
-        guard let vaultId = currentVaultId, let key = currentKey else { throw VaultError.notUnlocked }
+        guard let vaultId = currentVaultId else { throw VaultError.notUnlocked }
 
-        if !purchaseStore.isPro && notes.count >= 20 {
+        let totalNoteCount = notes.count + plainNotes.count
+        if !purchaseStore.isPro && totalNoteCount >= 20 {
             throw VaultError.freeLimitReached
         }
 
         let noteId = UUID().uuidString
         let now = Date()
-        let payload = PlainNotePayload(
-            body: body,
-            createdAt: now,
-            updatedAt: now
-        )
 
-        let noteFile = try cryptoService.encryptToNoteFile(
-            noteId: noteId,
-            vaultId: vaultId,
-            payload: payload,
-            key: key
-        )
+        if let key = currentKey {
+            // 已解锁：创建加密笔记
+            let payload = PlainNotePayload(
+                body: body,
+                createdAt: now,
+                updatedAt: now
+            )
 
-        guard let url = storage.noteFileURL(for: noteId) else {
-            throw StorageError.iCloudUnavailable
+            let noteFile = try cryptoService.encryptToNoteFile(
+                noteId: noteId,
+                vaultId: vaultId,
+                payload: payload,
+                key: key
+            )
+
+            guard let url = storage.noteFileURL(for: noteId) else {
+                throw StorageError.iCloudUnavailable
+            }
+
+            try storage.saveNoteFile(noteFile, at: url)
+
+            let note = Note(
+                id: noteId,
+                vaultId: vaultId,
+                body: body,
+                createdAt: now,
+                updatedAt: now
+            )
+
+            notes.insert(note, at: 0)
+        } else {
+            // 未解锁（未导入密钥）：创建明文笔记，带小锁标志
+            let plainFile = PlainNoteFile(
+                noteId: noteId,
+                vaultId: vaultId,
+                createdAt: now,
+                updatedAt: now,
+                body: body
+            )
+
+            guard let url = storage.plainNoteFileURL(for: noteId) else {
+                throw StorageError.iCloudUnavailable
+            }
+
+            try storage.savePlainNoteFile(plainFile, at: url)
+
+            let note = Note(
+                id: noteId,
+                vaultId: vaultId,
+                body: body,
+                createdAt: now,
+                updatedAt: now
+            )
+
+            plainNotes.insert(note, at: 0)
         }
-
-        try storage.saveNoteFile(noteFile, at: url)
-
-        let note = Note(
-            id: noteId,
-            vaultId: vaultId,
-            body: body,
-            createdAt: now,
-            updatedAt: now
-        )
-
-        notes.insert(note, at: 0)
     }
 
     func updateNote(_ note: Note, body: String) async throws {
-        guard isUnlocked else { throw VaultError.notUnlocked }
-        guard let vaultId = currentVaultId, let key = currentKey else { throw VaultError.notUnlocked }
+        guard let vaultId = currentVaultId else { throw VaultError.notUnlocked }
 
         let now = Date()
-        let payload = PlainNotePayload(
-            body: body,
-            createdAt: note.createdAt,
-            updatedAt: now
-        )
 
-        let noteFile = try cryptoService.encryptToNoteFile(
-            noteId: note.id,
-            vaultId: vaultId,
-            payload: payload,
-            key: key
-        )
-
-        guard let url = storage.noteFileURL(for: note.id) else {
-            throw StorageError.iCloudUnavailable
-        }
-
-        if let diskFile = try? storage.loadNoteFile(at: url), diskFile.updatedAt > note.updatedAt {
-            _ = try storage.createConflictCopy(for: url)
-        }
-
-        try storage.saveNoteFile(noteFile, at: url)
-
-        if let index = notes.firstIndex(where: { $0.id == note.id }) {
-            notes[index] = Note(
-                id: note.id,
-                vaultId: vaultId,
+        if let key = currentKey, notes.contains(where: { $0.id == note.id }) {
+            // 更新加密笔记
+            let payload = PlainNotePayload(
                 body: body,
                 createdAt: note.createdAt,
                 updatedAt: now
             )
+
+            let noteFile = try cryptoService.encryptToNoteFile(
+                noteId: note.id,
+                vaultId: vaultId,
+                payload: payload,
+                key: key
+            )
+
+            guard let url = storage.noteFileURL(for: note.id) else {
+                throw StorageError.iCloudUnavailable
+            }
+
+            if let diskFile = try? storage.loadNoteFile(at: url), diskFile.updatedAt > note.updatedAt {
+                _ = try storage.createConflictCopy(for: url)
+            }
+
+            try storage.saveNoteFile(noteFile, at: url)
+
+            if let index = notes.firstIndex(where: { $0.id == note.id }) {
+                notes[index] = Note(
+                    id: note.id,
+                    vaultId: vaultId,
+                    body: body,
+                    createdAt: note.createdAt,
+                    updatedAt: now
+                )
+            }
+        } else if plainNotes.contains(where: { $0.id == note.id }) {
+            // 更新明文笔记
+            let plainFile = PlainNoteFile(
+                noteId: note.id,
+                vaultId: vaultId,
+                createdAt: note.createdAt,
+                updatedAt: now,
+                body: body
+            )
+
+            guard let url = storage.plainNoteFileURL(for: note.id) else {
+                throw StorageError.iCloudUnavailable
+            }
+
+            try storage.savePlainNoteFile(plainFile, at: url)
+
+            if let index = plainNotes.firstIndex(where: { $0.id == note.id }) {
+                plainNotes[index] = Note(
+                    id: note.id,
+                    vaultId: vaultId,
+                    body: body,
+                    createdAt: note.createdAt,
+                    updatedAt: now
+                )
+            }
         }
     }
 
     func deleteNote(_ note: Note) async throws {
-        guard let url = storage.noteFileURL(for: note.id) else { return }
+        // 先尝试删除加密笔记文件
+        if let url = storage.noteFileURL(for: note.id),
+           FileManager.default.fileExists(atPath: url.path) {
+            try storage.deleteNoteFile(at: url)
+            notes.removeAll { $0.id == note.id }
+            return
+        }
 
-        try storage.deleteNoteFile(at: url)
-        notes.removeAll { $0.id == note.id }
+        // 再尝试删除明文笔记文件
+        if let url = storage.plainNoteFileURL(for: note.id),
+           FileManager.default.fileExists(atPath: url.path) {
+            try storage.deletePlainNoteFile(at: url)
+            plainNotes.removeAll { $0.id == note.id }
+            return
+        }
     }
 
     func lock() {
         currentKey = nil
         notes = []
         searchText = ""
+        // 明文笔记在锁定状态下仍可见（显示为乱码），不清理
 
         Task {
             await loadEncryptedFiles()
@@ -367,10 +465,16 @@ final class VaultStore: ObservableObject {
         // 删除 Keychain 中的密钥
         try keychainStore.deleteKey(forVaultId: vaultId)
 
-        // 删除所有笔记文件
+        // 删除所有加密笔记文件
         let noteURLs = try storage.listNoteFiles()
         for url in noteURLs {
             try storage.deleteNoteFile(at: url)
+        }
+
+        // 删除所有明文笔记文件
+        let plainNoteURLs = try storage.listPlainNoteFiles()
+        for url in plainNoteURLs {
+            try storage.deletePlainNoteFile(at: url)
         }
 
         // 删除 vault.json
@@ -400,6 +504,7 @@ final class VaultStore: ObservableObject {
 
         currentKey = nil
         notes = []
+        plainNotes = []
         currentVaultId = nil
 
         await createNewVault()

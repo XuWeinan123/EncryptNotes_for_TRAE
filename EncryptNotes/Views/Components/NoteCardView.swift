@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NoteCardView: View {
     let note: Note
+    var isPlain: Bool = false
 
     @State private var isPressed = false
 
@@ -22,10 +23,18 @@ struct NoteCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.s3) {
-            // 时间戳 - text-subtle
-            Text(DateFormatters.formatDisplayDateTime(note.updatedAt).replacingOccurrences(of: ".", with: "-"))
-                .font(DS.caption())
-                .foregroundColor(DS.textSubtle)
+            // 时间戳 + 小锁标志（仅明文笔记显示）
+            HStack(spacing: DS.s1) {
+                Text(DateFormatters.formatDisplayDateTime(note.updatedAt).replacingOccurrences(of: ".", with: "-"))
+                    .font(DS.caption())
+                    .foregroundColor(DS.textSubtle)
+
+                if isPlain {
+                    Image(systemName: "lock.open.fill")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundColor(DS.primary)
+                }
+            }
 
             // 标题 - text-emphasize
             Text(title)
