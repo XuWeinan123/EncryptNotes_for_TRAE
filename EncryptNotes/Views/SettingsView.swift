@@ -106,13 +106,11 @@ struct SettingsView: View {
             .toolbarBackground(DS.surfaceRaised, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") {
                         dismiss()
                     }
-                    .foregroundColor(DS.primary)
                 }
             }
             .fileExporter(

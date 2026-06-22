@@ -96,14 +96,10 @@ struct PaywallView: View {
             .toolbarBackground(DS.surfaceRaised, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button {
+                    Button("关闭") {
                         dismiss()
-                    } label: {
-                        Text("关闭")
-                            .foregroundColor(DS.textSecondary)
                     }
                 }
             }

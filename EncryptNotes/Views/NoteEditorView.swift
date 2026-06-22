@@ -75,10 +75,6 @@ struct NoteEditorView: View {
                         Button("保存") {
                             saveNote()
                         }
-                        .font(DS.body())
-                        .foregroundColor(noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                         ? DS.textSubtle
-                                         : DS.primary)
                         .disabled(noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
