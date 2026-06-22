@@ -92,9 +92,7 @@ struct PaywallView: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .background(DS.bg.ignoresSafeArea())
-            .toolbarBackground(DS.surfaceRaised, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
+            .dsCanvasBackground()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

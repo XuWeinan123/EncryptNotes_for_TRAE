@@ -99,12 +99,9 @@ struct SettingsView: View {
             }
             .font(DS.bodyLg())
             .foregroundColor(DS.textBody)
-            .scrollContentBackground(.hidden)
-            .background(DS.bg.ignoresSafeArea())
+            .dsListBackground()
             .listSectionSpacing(DS.s3)
             .navigationTitle("设置")
-            .toolbarBackground(DS.surfaceRaised, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
