@@ -155,56 +155,33 @@ extension Color {
 extension View {
     /// 应用画布背景。
     ///
-    /// iOS 26+ 不使用 `.ignoresSafeArea()`，避免自定义背景延伸到 navigation bar
-    /// 下方干扰系统 Liquid Glass 折射效果；toolbar 由系统自动渲染为 liquid glass。
-    /// iOS 26 以下保留 `.ignoresSafeArea()` 以铺满屏幕。
     @ViewBuilder
     func dsCanvasBackground() -> some View {
-        if #available(iOS 26.0, *) {
-            self.background(DS.bg)
-        } else {
-            self.background(DS.bg.ignoresSafeArea())
-        }
+        self.background(DS.bg.ignoresSafeArea())
     }
 
     /// List 背景处理。
-    ///
-    /// iOS 26+ 避免把自定义背景延伸到 navigation bar 下方，保留系统
-    /// toolbar 的 Liquid Glass 折射空间；iOS 26 以下隐藏默认背景并铺满 DS.bg。
     @ViewBuilder
     func dsListBackground() -> some View {
-        if #available(iOS 26.0, *) {
-            self.scrollContentBackground(.hidden)
-                .background(DS.bg)
-        } else {
-            self.scrollContentBackground(.hidden)
-                .background(DS.bg.ignoresSafeArea())
-        }
+        self.scrollContentBackground(.hidden)
+            .background(DS.bg.ignoresSafeArea())
     }
 
     /// 系统导航栏 / toolbar 背景策略。
-    ///
-    /// iOS 26+ 必须让系统管理 navigation bar 背景，不能强制显示旧式实色 /
-    /// material bar，否则系统会退回接近 iOS 18 的 toolbar 观感。这里显式隐藏
-    /// SwiftUI toolbar 背景，交给 iOS 26 的 Liquid Glass toolbar 渲染。
-    /// iOS 26 以下保留浅色实体栏，延续原有设计。
     @ViewBuilder
     func dsLiquidGlassToolbar() -> some View {
         if #available(iOS 26.0, *) {
-            self.toolbarBackground(.hidden, for: .navigationBar)
+            // ponytail: default iOS 26 toolbar supplies Liquid Glass; no custom background.
+            self
         } else {
             self.toolbarBackground(DS.surfaceCard, for: .navigationBar)
                 .toolbarBackground(.visible, for: .navigationBar)
         }
     }
 
-    /// iOS 26+ 为 toolbar 内按钮使用系统 Liquid Glass button style；旧系统保持默认。
+    /// toolbar item 按钮走系统默认样式，避免覆盖 iOS 26 自动分组的 glass surface。
     @ViewBuilder
     func dsToolbarButtonStyle() -> some View {
-        if #available(iOS 26.0, *) {
-            self.buttonStyle(.glass)
-        } else {
-            self
-        }
+        self
     }
 }

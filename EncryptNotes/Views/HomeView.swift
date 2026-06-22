@@ -337,12 +337,9 @@ struct UnlockedHomeView: View {
     @FocusState private var searchFocused: Bool
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            DS.bg.ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                headerView
-                    .transition(.move(edge: .top).combined(with: .opacity))
+        NavigationStack {
+            ZStack(alignment: .bottom) {
+                DS.bg.ignoresSafeArea()
 
                 if vaultStore.filteredNotes.isEmpty {
                     emptyState
@@ -351,35 +348,82 @@ struct UnlockedHomeView: View {
                     noteList
                         .transition(.opacity)
                 }
-            }
 
-            // FloatButton: 唯一允许绿色光晕的元素
-            Button {
-                createNote()
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 24, weight: .regular))
-                    .foregroundColor(DS.onPrimary)
-                    .frame(width: 56, height: 56)
-                    .background(DS.primary)
-                    .clipShape(Circle())
-                    .shadow(color: DS.floatShadow.color,
-                            radius: DS.floatShadow.radius,
-                            x: DS.floatShadow.x,
-                            y: DS.floatShadow.y)
-                    .scaleEffect(isFloatPressed ? 0.92 : 1.0)
-            }
-            .buttonStyle(.plain)
-            .pressEvents {
-                withAnimation(.easeInOut(duration: 0.1)) {
-                    isFloatPressed = true
+                if isSearching {
+                    searchOverlay
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
-            } onRelease: {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isFloatPressed = false
+
+                // FloatButton: 唯一允许绿色光晕的元素
+                Button {
+                    createNote()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 24, weight: .regular))
+                        .foregroundColor(DS.onPrimary)
+                        .frame(width: 56, height: 56)
+                        .background(DS.primary)
+                        .clipShape(Circle())
+                        .shadow(color: DS.floatShadow.color,
+                                radius: DS.floatShadow.radius,
+                                x: DS.floatShadow.x,
+                                y: DS.floatShadow.y)
+                        .scaleEffect(isFloatPressed ? 0.92 : 1.0)
+                }
+                .buttonStyle(.plain)
+                .pressEvents {
+                    withAnimation(.easeInOut(duration: 0.1)) {
+                        isFloatPressed = true
+                    }
+                } onRelease: {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isFloatPressed = false
+                    }
+                }
+                .padding(.bottom, DS.s8)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .dsLiquidGlassToolbar()
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "line.3.horizontal")
+                    }
+                }
+
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: DS.s1) {
+                        Text("flomo")
+                            .font(DS.page())
+                            .foregroundColor(DS.textEmphasize)
+                            .textCase(.lowercase)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(DS.textSecondary)
+                    }
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isSearching = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            searchFocused = true
+                        }
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
                 }
             }
-            .padding(.bottom, DS.s8)
+            .onChange(of: isSearching) { _, newValue in
+                if !newValue {
+                    vaultStore.searchText = ""
+                }
+            }
         }
         .animation(.easeInOut(duration: 0.2), value: vaultStore.filteredNotes.count)
         .sheet(isPresented: $showSettings) {
@@ -395,6 +439,32 @@ struct UnlockedHomeView: View {
         }
     }
 
+    private var searchOverlay: some View {
+        HStack(spacing: DS.s2) {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(DS.textSubtle)
+
+            TextField("搜索笔记", text: $vaultStore.searchText)
+                .font(DS.body())
+                .textFieldStyle(.plain)
+                .focused($searchFocused)
+
+            Button("取消") {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isSearching = false
+                    vaultStore.searchText = ""
+                    searchFocused = false
+                }
+            }
+            .font(DS.body())
+            .foregroundColor(DS.textSecondary)
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, DS.s3)
+        .dsInputSurface(cornerRadius: 18)
+        .padding(.horizontal, DS.cardPadding)
+        .padding(.top, DS.s2)
+    }
 
     private func createNote() {
         if !purchaseStore.isPro && vaultStore.notes.count >= 20 {
@@ -404,133 +474,6 @@ struct UnlockedHomeView: View {
                 showNewNoteEditor = true
             }
         }
-    }
-
-    private var headerView: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: DS.s2) {
-                if isSearching {
-                    // 搜索模式：搜索框 + 取消
-                    HStack(spacing: DS.s2) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 14, weight: .regular))
-                            .foregroundColor(DS.textSubtle)
-
-                        TextField("搜索笔记", text: $vaultStore.searchText)
-                            .font(DS.body())
-                            .foregroundColor(DS.textBody)
-                            .textFieldStyle(.plain)
-                            .focused($searchFocused)
-
-                        if !vaultStore.searchText.isEmpty {
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.15)) {
-                                    vaultStore.searchText = ""
-                                }
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(DS.textSubtle)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, DS.s3)
-                    .background(DS.surfaceSunken)
-                    .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
-                            .stroke(DS.line, lineWidth: 0.5)
-                    )
-
-                    Button("取消") {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isSearching = false
-                            vaultStore.searchText = ""
-                            searchFocused = false
-                        }
-                    }
-                    .font(DS.body())
-                    .foregroundColor(DS.textSecondary)
-                    .buttonStyle(.plain)
-                } else {
-                    // 正常模式：设置按钮 + 标题 + 搜索按钮
-                    Button {
-                        showSettings = true
-                    } label: {
-                        Image(systemName: "line.3.horizontal")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(DS.textSecondary)
-                            .frame(width: 36, height: 36)
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-
-                    HStack(spacing: DS.s1) {
-                        Text("flomo")
-                            .font(DS.page())
-                            .foregroundColor(DS.textEmphasize)
-                            .textCase(.lowercase)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(DS.textSecondary)
-                    }
-
-                    Spacer()
-
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isSearching = true
-                        }
-                        // 等动画启动后聚焦输入框
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            searchFocused = true
-                        }
-                    } label: {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 18, weight: .regular))
-                            .foregroundColor(DS.textSecondary)
-                            .frame(width: 36, height: 36)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, DS.cardPadding)
-            .frame(height: DS.navbarHeight)
-
-            Divider()
-                .overlay(DS.line)
-        }
-        .background(DS.surfaceCard)
-    }
-
-    private var searchBar: some View {
-        HStack(spacing: DS.s2) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 14, weight: .regular))
-                .foregroundColor(DS.textSubtle)
-
-            TextField("搜索笔记", text: $vaultStore.searchText)
-                .font(DS.body())
-                .foregroundColor(DS.textBody)
-                .textFieldStyle(.plain)
-
-            if !vaultStore.searchText.isEmpty {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        vaultStore.searchText = ""
-                    }
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(DS.textSubtle)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.vertical, 10)
-        .padding(.horizontal, DS.s3)
-        .dsInputSurface()
     }
 
     private var emptyState: some View {
