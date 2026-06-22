@@ -6,53 +6,62 @@ struct EncryptedCardView: View {
     @State private var isPressed = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.s2) {
             HStack {
                 Image(systemName: "lock.fill")
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundColor(DS.textSecondary)
 
                 Text("已加密")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
+                    .font(DS.body())
+                    .foregroundColor(DS.textSecondary)
 
                 Spacer()
 
                 Text(DateFormatters.formatDisplayDate(info.updatedAt))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .font(DS.caption())
+                    .foregroundColor(DS.textSubtle)
             }
 
             Text(info.ciphertextPreview)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.tertiary)
+                .font(DS.mono())
+                .foregroundColor(DS.textSubtle)
                 .lineLimit(2)
 
-            HStack {
+            HStack(spacing: DS.s1) {
                 Text("已加密")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .font(DS.caption())
+                    .foregroundColor(DS.textSubtle)
 
                 Text("·")
-                    .foregroundStyle(.tertiary)
+                    .font(DS.caption())
+                    .foregroundColor(DS.textSubtle)
 
                 Text(formatFileSize(info.fileSize))
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .font(DS.caption())
+                    .foregroundColor(DS.textSubtle)
             }
         }
-        .padding()
+        .padding(DS.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
-        .scaleEffect(isPressed ? 0.98 : 1.0)
-        .shadow(color: .black.opacity(isPressed ? 0.05 : 0.08), radius: isPressed ? 2 : 4, x: 0, y: isPressed ? 1 : 2)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isPressed)
+        .background(DS.surfaceCard)
+        .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
+                .stroke(DS.line, lineWidth: 0.5)
+        )
+        .shadow(color: DS.cardShadow.color,
+                radius: isPressed ? 1 : DS.cardShadow.radius,
+                x: DS.cardShadow.x,
+                y: isPressed ? 0 : DS.cardShadow.y)
+        .scaleEffect(isPressed ? 0.97 : 1.0)
+        .animation(.easeInOut(duration: 0.15), value: isPressed)
         .pressEvents {
             withAnimation(.easeInOut(duration: 0.1)) {
                 isPressed = true
             }
         } onRelease: {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            withAnimation(.easeInOut(duration: 0.15)) {
                 isPressed = false
             }
         }

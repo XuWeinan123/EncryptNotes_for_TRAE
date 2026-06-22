@@ -96,6 +96,8 @@ struct HomeView: View {
         switch vaultStore.state {
         case .noVault:
             ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(DS.bg.ignoresSafeArea())
                 .onAppear {
                     Task {
                         await vaultStore.initialize()
@@ -176,69 +178,72 @@ struct LockedHomeView: View {
     @State private var isResettingVault = false
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        ScrollView {
+            VStack(spacing: DS.s6) {
+                VStack(spacing: DS.s2) {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 48, weight: .regular))
+                        .foregroundColor(DS.textSecondary)
+                        .padding(.bottom, DS.s2)
 
-            Image(systemName: "lock.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(.secondary)
+                    Text("这台设备还没有密钥")
+                        .font(DS.title())
+                        .foregroundColor(DS.textEmphasize)
 
-            VStack(spacing: 8) {
-                Text("这台设备还没有密钥")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("导入密钥文件后，笔记将在本机解密显示。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            Button {
-                showKeyImporter = true
-            } label: {
-                Text("导入密钥文件")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
-            }
-            .padding(.horizontal, 40)
-
-            Text("密钥文件只会在本机读取，不会上传。")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-
-            VStack(spacing: 8) {
-                Text("忘记密钥？")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Button(role: .destructive) {
-                    showResetConfirmation = true
-                } label: {
-                    Label("清空数据重来", systemImage: "trash")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
+                    Text("导入密钥文件后，笔记将在本机解密显示。")
+                        .font(DS.body())
+                        .foregroundColor(DS.textSecondary)
+                        .multilineTextAlignment(.center)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
-                .disabled(isResettingVault)
+                .padding(.top, DS.s8)
+                .padding(.horizontal, DS.s6)
 
-                Text("会删除当前加密文件并生成新密钥，让 App 重新进入可用状态。")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .multilineTextAlignment(.center)
+                Button {
+                    showKeyImporter = true
+                } label: {
+                    Text("导入密钥文件")
+                        .font(DS.body())
+                        .foregroundColor(DS.onPrimary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(DS.primary)
+                        .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 40)
+
+                Text("密钥文件只会在本机读取，不会上传。")
+                    .font(DS.caption())
+                    .foregroundColor(DS.textSubtle)
+
+                VStack(spacing: DS.s2) {
+                    Text("忘记密钥？")
+                        .font(DS.caption())
+                        .foregroundColor(DS.textSecondary)
+
+                    Button(role: .destructive) {
+                        showResetConfirmation = true
+                    } label: {
+                        Label("清空数据重来", systemImage: "trash")
+                            .font(DS.body())
+                            .foregroundColor(DS.destructive)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(isResettingVault)
+
+                    Text("会删除当前加密文件并生成新密钥，让 App 重新进入可用状态。")
+                        .font(DS.caption())
+                        .foregroundColor(DS.textSubtle)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.top, DS.s2)
+                .padding(.horizontal, DS.s6)
+
+                lockedNoteList
             }
-            .padding(.top, 8)
-
-            Spacer()
-
-            lockedNoteList
+            .padding(.bottom, DS.s6)
         }
+        .background(DS.bg.ignoresSafeArea())
         .alert("清空加密文件？", isPresented: $showResetConfirmation) {
             Button("取消", role: .cancel) {}
             Button("继续", role: .destructive) {
@@ -269,19 +274,18 @@ struct LockedHomeView: View {
     @ViewBuilder
     private var lockedNoteList: some View {
         if case .locked(let files) = vaultStore.state, !files.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: DS.s3) {
                 Text("已加密笔记")
-                    .font(.headline)
-                    .padding(.horizontal)
+                    .font(DS.title())
+                    .foregroundColor(DS.textEmphasize)
+                    .padding(.horizontal, DS.cardPadding)
 
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(files) { file in
-                            EncryptedCardView(info: file)
-                        }
+                LazyVStack(spacing: DS.memoGap) {
+                    ForEach(files) { file in
+                        EncryptedCardView(info: file)
                     }
-                    .padding(.horizontal)
                 }
+                .padding(.horizontal, DS.cardPadding)
             }
         }
     }
@@ -291,28 +295,29 @@ struct UnlockingView: View {
     let progress: UnlockProgress
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: DS.s6) {
             Spacer()
 
             ProgressView()
                 .scaleEffect(1.5)
 
-            VStack(spacing: 8) {
+            VStack(spacing: DS.s2) {
                 Text("正在本机解析密钥")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+                    .font(DS.title())
+                    .foregroundColor(DS.textEmphasize)
 
                 Text("密钥文件不会上传。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(DS.body())
+                    .foregroundColor(DS.textSecondary)
 
                 Text("正在解密笔记 \(progress.current) / \(progress.total)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(DS.body())
+                    .foregroundColor(DS.textSecondary)
             }
 
             Spacer()
         }
+        .background(DS.bg.ignoresSafeArea())
     }
 }
 
@@ -326,15 +331,19 @@ struct UnlockedHomeView: View {
     @State private var noteToDelete: Note?
     @State private var showDeleteConfirmation = false
     @State private var showPaywall = false
+    @State private var isFloatPressed = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            Color(red: 0.05, green: 0.05, blue: 0.055)
-                .ignoresSafeArea()
+            DS.bg.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 headerView
                     .transition(.move(edge: .top).combined(with: .opacity))
+
+                searchBar
+                    .padding(.horizontal, DS.cardPadding)
+                    .padding(.bottom, DS.s2)
 
                 if vaultStore.filteredNotes.isEmpty {
                     emptyState
@@ -345,21 +354,35 @@ struct UnlockedHomeView: View {
                 }
             }
 
+            // FloatButton: 唯一允许绿色光晕的元素
             Button {
                 createNote()
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 36, weight: .regular))
-                    .foregroundStyle(.white)
-                    .frame(width: 78, height: 78)
-                    .background(Color(red: 0.25, green: 0.52, blue: 0.36))
-                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .shadow(color: .black.opacity(0.25), radius: 10, x: 0, y: 6)
+                    .font(.system(size: 24, weight: .regular))
+                    .foregroundColor(DS.onPrimary)
+                    .frame(width: 56, height: 56)
+                    .background(DS.primary)
+                    .clipShape(Circle())
+                    .shadow(color: DS.floatShadow.color,
+                            radius: DS.floatShadow.radius,
+                            x: DS.floatShadow.x,
+                            y: DS.floatShadow.y)
+                    .scaleEffect(isFloatPressed ? 0.92 : 1.0)
             }
             .buttonStyle(.plain)
-            .padding(.bottom, 32)
+            .pressEvents {
+                withAnimation(.easeInOut(duration: 0.1)) {
+                    isFloatPressed = true
+                }
+            } onRelease: {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isFloatPressed = false
+                }
+            }
+            .padding(.bottom, DS.s8)
         }
-        .animation(.easeInOut(duration: 0.3), value: vaultStore.filteredNotes.count)
+        .animation(.easeInOut(duration: 0.2), value: vaultStore.filteredNotes.count)
         .sheet(isPresented: $showSettings) {
             SettingsView()
                 .presentationDetents([.medium, .large])
@@ -378,7 +401,7 @@ struct UnlockedHomeView: View {
         if !purchaseStore.isPro && vaultStore.notes.count >= 20 {
             showPaywall = true
         } else {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+            withAnimation(.easeInOut(duration: 0.2)) {
                 showNewNoteEditor = true
             }
         }
@@ -391,105 +414,110 @@ struct UnlockedHomeView: View {
                     showSettings = true
                 } label: {
                     Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 24, weight: .medium))
-                        .foregroundStyle(.white)
-                        .frame(width: 64, height: 64)
-                        .background(.white.opacity(0.13))
-                        .clipShape(Circle())
-                        .overlay(Circle().stroke(.white.opacity(0.08), lineWidth: 1))
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(DS.textSecondary)
+                        .frame(width: 36, height: 36)
                 }
                 .buttonStyle(.plain)
 
                 Spacer()
 
-                HStack(spacing: 6) {
-                    Text("Flomo")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.62))
+                HStack(spacing: DS.s1) {
+                    Text("flomo")
+                        .font(DS.page())
+                        .foregroundColor(DS.textEmphasize)
+                        .textCase(.lowercase)
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.9))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(DS.textSecondary)
                 }
 
                 Spacer()
 
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(.easeInOut(duration: 0.15)) {
                         vaultStore.searchText = ""
                     }
                 } label: {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 28, weight: .regular))
-                        .foregroundStyle(.white)
-                        .frame(width: 64, height: 64)
-                        .background(.white.opacity(0.13))
-                        .clipShape(Circle())
-                        .overlay(Circle().stroke(.white.opacity(0.08), lineWidth: 1))
+                        .font(.system(size: 18, weight: .regular))
+                        .foregroundColor(DS.textSecondary)
+                        .frame(width: 36, height: 36)
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
-            .padding(.bottom, 20)
+            .padding(.horizontal, DS.cardPadding)
+            .padding(.top, DS.s4)
+            .padding(.bottom, DS.s3)
 
             Divider()
-                .overlay(.white.opacity(0.08))
+                .overlay(DS.line)
         }
+        .background(DS.surfaceCard)
     }
 
     private var searchBar: some View {
-        HStack {
+        HStack(spacing: DS.s2) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundColor(DS.textSubtle)
 
             TextField("搜索笔记", text: $vaultStore.searchText)
+                .font(DS.body())
+                .foregroundColor(DS.textBody)
                 .textFieldStyle(.plain)
 
             if !vaultStore.searchText.isEmpty {
                 Button {
-                    vaultStore.searchText = ""
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        vaultStore.searchText = ""
+                    }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundColor(DS.textSubtle)
                 }
+                .buttonStyle(.plain)
             }
         }
-        .padding(10)
-        .background(Color(.systemGray6))
-        .cornerRadius(10)
-        .padding(.horizontal)
-        .padding(.bottom, 8)
+        .padding(.vertical, 10)
+        .padding(.horizontal, DS.s3)
+        .background(DS.surfaceSunken)
+        .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
+                .stroke(DS.line, lineWidth: 0.5)
+        )
     }
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: DS.s4) {
             Spacer()
             Image(systemName: "note.text")
-                .font(.system(size: 50))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 44, weight: .regular))
+                .foregroundColor(DS.textSubtle)
             Text("暂无笔记")
-                .font(.headline)
-                .foregroundStyle(.secondary)
+                .font(DS.title())
+                .foregroundColor(DS.textSecondary)
             Text("点击下方按钮创建第一条笔记")
-                .font(.subheadline)
-                .foregroundStyle(.tertiary)
+                .font(DS.body())
+                .foregroundColor(DS.textSubtle)
             Spacer()
         }
     }
 
     private var noteList: some View {
         ScrollView {
-            LazyVStack(spacing: 18) {
+            LazyVStack(spacing: DS.memoGap) {
                 ForEach(vaultStore.filteredNotes) { note in
                     NoteCardView(note: note)
                         .onTapGesture {
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
                                 selectedNote = note
                             }
                         }
                         .contextMenu {
                             Button {
-                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                withAnimation(.easeInOut(duration: 0.2)) {
                                     selectedNote = note
                                 }
                             } label: {
@@ -504,16 +532,16 @@ struct UnlockedHomeView: View {
                             }
                         }
                         .transition(.asymmetric(
-                            insertion: .scale(scale: 0.8).combined(with: .opacity),
+                            insertion: .opacity,
                             removal: .opacity
                         ))
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 14)
-            .padding(.bottom, 130)
+            .padding(.horizontal, DS.cardPadding)
+            .padding(.top, DS.s3)
+            .padding(.bottom, 120)
         }
-        .animation(.easeInOut(duration: 0.25), value: vaultStore.filteredNotes)
+        .animation(.easeInOut(duration: 0.2), value: vaultStore.filteredNotes)
         .alert("删除笔记", isPresented: $showDeleteConfirmation) {
             Button("取消", role: .cancel) {}
             Button("删除", role: .destructive) {
@@ -537,18 +565,17 @@ struct UnlockedHomeView: View {
 struct PrivacyScreenView: View {
     var body: some View {
         ZStack {
-            Color(.systemBackground)
-                .ignoresSafeArea()
+            DS.bg.ignoresSafeArea()
 
-            VStack(spacing: 16) {
+            VStack(spacing: DS.s4) {
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 50))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 44, weight: .regular))
+                    .foregroundColor(DS.textSecondary)
                     .transition(.scale(scale: 0.5).combined(with: .opacity))
 
                 Text("别看我")
-                    .font(.title)
-                    .fontWeight(.bold)
+                    .font(DS.page())
+                    .foregroundColor(DS.textEmphasize)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -561,28 +588,34 @@ struct ErrorView: View {
     let retryAction: () -> Void
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: DS.s6) {
             Spacer()
 
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 50))
-                .foregroundStyle(.orange)
+                .font(.system(size: 44, weight: .regular))
+                .foregroundColor(DS.pro)
 
             Text("出错了")
-                .font(.title2)
-                .fontWeight(.semibold)
+                .font(DS.title())
+                .foregroundColor(DS.textEmphasize)
 
             Text(message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(DS.body())
+                .foregroundColor(DS.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
 
             Button("重试", action: retryAction)
-                .buttonStyle(.borderedProminent)
+                .font(DS.body())
+                .foregroundColor(DS.onPrimary)
+                .padding(.horizontal, DS.s6)
+                .padding(.vertical, 12)
+                .background(DS.primary)
+                .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
 
             Spacer()
         }
+        .background(DS.bg.ignoresSafeArea())
     }
 }
 

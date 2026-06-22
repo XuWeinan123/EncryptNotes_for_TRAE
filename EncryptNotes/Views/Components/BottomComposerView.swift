@@ -9,21 +9,28 @@ struct BottomComposerView: View {
     var body: some View {
         VStack(spacing: 0) {
             Divider()
+                .overlay(DS.line)
 
-            HStack(spacing: 12) {
+            HStack(spacing: DS.s3) {
                 TextField("点击创建笔记...", text: .constant(""))
-                    .font(.subheadline)
-                    .padding(12)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
+                    .font(DS.body())
+                    .foregroundColor(DS.textBody)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, DS.s3)
+                    .background(DS.surfaceSunken)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
+                            .stroke(DS.line, lineWidth: 0.5)
+                    )
                     .disabled(true)
 
                 Button(action: onCreateNote) {
                     Image(systemName: "plus.circle.fill")
-                        .font(.title)
-                        .foregroundColor(isDisabled ? .gray : .accentColor)
-                        .scaleEffect(isPressed ? 0.9 : 1.0)
-                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPressed)
+                        .font(.system(size: 28, weight: .regular))
+                        .foregroundColor(isDisabled ? DS.textSubtle : DS.primary)
+                        .scaleEffect(isPressed ? 0.92 : 1.0)
+                        .animation(.easeInOut(duration: 0.15), value: isPressed)
                 }
                 .disabled(isDisabled)
                 .buttonStyle(.plain)
@@ -32,13 +39,13 @@ struct BottomComposerView: View {
                         isPressed = true
                     }
                 } onRelease: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    withAnimation(.easeInOut(duration: 0.15)) {
                         isPressed = false
                     }
                 }
             }
-            .padding()
-            .background(Color(.systemBackground))
+            .padding(DS.cardPadding)
+            .background(DS.surfaceCard)
         }
     }
 }
