@@ -169,8 +169,8 @@ extension View {
 
     /// List 背景处理。
     ///
-    /// iOS 26+ 不隐藏 `scrollContentBackground`，让 List 与系统 Liquid Glass
-    /// toolbar 协作；iOS 26 以下隐藏默认背景并使用 DS.bg。
+    /// iOS 26+ 避免把自定义背景延伸到 navigation bar 下方，保留系统
+    /// toolbar 的 Liquid Glass 折射空间；iOS 26 以下隐藏默认背景并铺满 DS.bg。
     @ViewBuilder
     func dsListBackground() -> some View {
         if #available(iOS 26.0, *) {
@@ -179,6 +179,32 @@ extension View {
         } else {
             self.scrollContentBackground(.hidden)
                 .background(DS.bg.ignoresSafeArea())
+        }
+    }
+
+    /// 系统导航栏 / toolbar 背景策略。
+    ///
+    /// iOS 26+ 必须让系统管理 navigation bar 背景，不能强制显示旧式实色 /
+    /// material bar，否则系统会退回接近 iOS 18 的 toolbar 观感。这里显式隐藏
+    /// SwiftUI toolbar 背景，交给 iOS 26 的 Liquid Glass toolbar 渲染。
+    /// iOS 26 以下保留浅色实体栏，延续原有设计。
+    @ViewBuilder
+    func dsLiquidGlassToolbar() -> some View {
+        if #available(iOS 26.0, *) {
+            self.toolbarBackground(.hidden, for: .navigationBar)
+        } else {
+            self.toolbarBackground(DS.surfaceCard, for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
+        }
+    }
+
+    /// iOS 26+ 为 toolbar 内按钮使用系统 Liquid Glass button style；旧系统保持默认。
+    @ViewBuilder
+    func dsToolbarButtonStyle() -> some View {
+        if #available(iOS 26.0, *) {
+            self.buttonStyle(.glass)
+        } else {
+            self
         }
     }
 }

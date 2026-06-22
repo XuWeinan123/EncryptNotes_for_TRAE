@@ -103,11 +103,13 @@ struct SettingsView: View {
             .listSectionSpacing(DS.s3)
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
+            .dsLiquidGlassToolbar()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") {
                         dismiss()
                     }
+                    .dsToolbarButtonStyle()
                 }
             }
             .fileExporter(
