@@ -55,11 +55,13 @@ struct NoteEditorView: View {
             .dsCanvasBackground()
             .navigationTitle(isEditing ? "编辑笔记" : "新建笔记")
             .navigationBarTitleDisplayMode(.inline)
+            .dsLiquidGlassToolbar()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {
                         dismiss()
                     }
+                    .dsToolbarButtonStyle()
                     .disabled(isSaving)
                 }
 
@@ -70,6 +72,7 @@ struct NoteEditorView: View {
                         Button("保存") {
                             saveNote()
                         }
+                        .dsToolbarButtonStyle()
                         .disabled(noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }

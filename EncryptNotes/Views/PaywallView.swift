@@ -94,11 +94,13 @@ struct PaywallView: View {
             }
             .dsCanvasBackground()
             .navigationBarTitleDisplayMode(.inline)
+            .dsLiquidGlassToolbar()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("关闭") {
                         dismiss()
                     }
+                    .dsToolbarButtonStyle()
                 }
             }
             .alert("购买失败", isPresented: $showError) {
