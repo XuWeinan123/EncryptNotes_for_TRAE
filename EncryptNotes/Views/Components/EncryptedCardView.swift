@@ -1,5 +1,6 @@
 import SwiftUI
 
+/// 未解密加密笔记的卡片：上锁 icon + 密文乱码 + 柔和模糊。
 struct EncryptedCardView: View {
     let info: EncryptedNoteInfo
 
@@ -12,7 +13,7 @@ struct EncryptedCardView: View {
                     .font(.system(size: 14, weight: .regular))
                     .foregroundColor(DS.textSecondary)
 
-                Text("已加密")
+                Text("加密笔记")
                     .font(DS.body())
                     .foregroundColor(DS.textSecondary)
 
@@ -23,13 +24,15 @@ struct EncryptedCardView: View {
                     .foregroundColor(DS.textSubtle)
             }
 
+            // 密文乱码，适度模糊降低压迫感
             Text(info.ciphertextPreview)
                 .font(DS.mono())
                 .foregroundColor(DS.textSubtle)
                 .lineLimit(2)
+                .opacity(0.7)
 
             HStack(spacing: DS.s1) {
-                Text("已加密")
+                Text("导入密钥后查看")
                     .font(DS.caption())
                     .foregroundColor(DS.textSubtle)
 

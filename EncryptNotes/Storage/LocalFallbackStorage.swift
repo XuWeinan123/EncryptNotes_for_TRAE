@@ -99,24 +99,6 @@ final class LocalFallbackStorage: VaultStorage {
         try data.write(to: url, options: .atomic)
     }
 
-    func deleteNoteFile(at url: URL) throws {
-        guard fileManager.fileExists(atPath: url.path) else {
-            throw StorageError.fileNotFound
-        }
-
-        guard let container = containerURL else {
-            throw StorageError.directoryCreationFailed
-        }
-
-        let trashURL = container.appendingPathComponent("trash").appendingPathComponent(url.lastPathComponent)
-
-        do {
-            try fileManager.moveItem(at: url, to: trashURL)
-        } catch {
-            try fileManager.removeItem(at: url)
-        }
-    }
-
     func createConflictCopy(for url: URL) throws -> URL {
         guard let container = containerURL else {
             throw StorageError.directoryCreationFailed
@@ -169,23 +151,5 @@ final class LocalFallbackStorage: VaultStorage {
     func savePlainNoteFile(_ file: PlainNoteFile, at url: URL) throws {
         let data = try JSONEncoder.default.encode(file)
         try data.write(to: url, options: .atomic)
-    }
-
-    func deletePlainNoteFile(at url: URL) throws {
-        guard fileManager.fileExists(atPath: url.path) else {
-            throw StorageError.fileNotFound
-        }
-
-        guard let container = containerURL else {
-            throw StorageError.directoryCreationFailed
-        }
-
-        let trashURL = container.appendingPathComponent("trash").appendingPathComponent(url.lastPathComponent)
-
-        do {
-            try fileManager.moveItem(at: url, to: trashURL)
-        } catch {
-            try fileManager.removeItem(at: url)
-        }
     }
 }

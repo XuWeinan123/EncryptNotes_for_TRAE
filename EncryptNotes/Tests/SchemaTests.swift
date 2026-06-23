@@ -143,6 +143,109 @@ final class SchemaTests: XCTestCase {
         XCTAssertTrue(filtered.contains { $0.lastPathComponent == "plain2.bkwplain.json" })
     }
 
+    // MARK: - 回收站元数据
+
+    func testPlainNoteFileTrashMetadata() throws {
+        let deletedAt = Date(timeIntervalSince1970: 1000000)
+        let purgeAfter = Date(timeIntervalSince1970: 1000000 + 30 * 86400)
+        let location = NoteLocation.root
+
+        let file = PlainNoteFile(
+            noteId: "trash-plain",
+            vaultId: "v",
+            createdAt: Date(timeIntervalSince1970: 500000),
+            updatedAt: Date(timeIntervalSince1970: 600000),
+            body: "回收站明文笔记",
+            deletedAt: deletedAt,
+            purgeAfter: purgeAfter,
+            originalLocation: location
+        )
+
+        let data = try JSONEncoder.default.encode(file)
+        let decoded = try JSONDecoder.default.decode(PlainNoteFile.self, from: data)
+
+        XCTAssertEqual(decoded.deletedAt, deletedAt)
+        XCTAssertEqual(decoded.purgeAfter, purgeAfter)
+        XCTAssertEqual(decoded.originalLocation, location)
+    }
+
+    func testEncryptedNoteFileTrashMetadata() throws {
+        let deletedAt = Date(timeIntervalSince1970: 1000000)
+        let purgeAfter = Date(timeIntervalSince1970: 1000000 + 30 * 86400)
+        let location = NoteLocation.root
+
+        let file = EncryptedNoteFile(
+            version: 1,
+            app: "BieKanWo",
+            type: "encrypted_note",
+            noteId: "trash-enc",
+            vaultId: "v",
+            createdAt: Date(timeIntervalSince1970: 500000),
+            updatedAt: Date(timeIntervalSince1970: 600000),
+            encryption: EncryptedNoteFile.EncryptionMetadata(
+                algorithm: "AES-GCM",
+                keyVersion: 1,
+                nonce: "base64nonce"
+            ),
+            payload: EncryptedNoteFile.EncryptionPayload(
+                ciphertext: "base64ciphertext",
+                tag: "base64tag"
+            ),
+            deletedAt: deletedAt,
+            purgeAfter: purgeAfter,
+            originalLocation: location
+        )
+
+        let data = try JSONEncoder.default.encode(file)
+        let decoded = try JSONDecoder.default.decode(EncryptedNoteFile.self, from: data)
+
+        XCTAssertEqual(decoded.deletedAt, deletedAt)
+        XCTAssertEqual(decoded.purgeAfter, purgeAfter)
+        XCTAssertEqual(decoded.originalLocation, location)
+    }
+
+    func testNoteLocationCoding() throws {
+        let location = NoteLocation.root
+        let data = try JSONEncoder.default.encode(location)
+        let decoded = try JSONDecoder.default.decode(NoteLocation.self, from: data)
+
+        XCTAssertEqual(decoded.type, "root")
+        XCTAssertNil(decoded.folderId)
+        XCTAssertNil(decoded.relativePath)
+    }
+
+    // MARK: - 安全验收：加密笔记外层 JSON 不含正文
+
+    func testEncryptedNoteFileOuterJSONExcludesPlaintext() throws {
+        let secretBody = "这是一段私密内容 #敏感"
+        let file = EncryptedNoteFile(
+            version: 1,
+            app: "BieKanWo",
+            type: "encrypted_note",
+            noteId: "secret-id",
+            vaultId: "v",
+            createdAt: Date(timeIntervalSince1970: 500000),
+            updatedAt: Date(timeIntervalSince1970: 600000),
+            encryption: EncryptedNoteFile.EncryptionMetadata(
+                algorithm: "AES-GCM",
+                keyVersion: 1,
+                nonce: "base64nonce"
+            ),
+            payload: EncryptedNoteFile.EncryptionPayload(
+                ciphertext: "base64ciphertext",
+                tag: "base64tag"
+            )
+        )
+
+        let data = try JSONEncoder.default.encode(file)
+        let jsonString = String(data: data, encoding: .utf8) ?? ""
+
+        // 外层 JSON 不得出现正文、标签、摘要
+        XCTAssertFalse(jsonString.contains(secretBody), "外层 JSON 不得包含正文")
+        XCTAssertFalse(jsonString.contains("敏感"), "外层 JSON 不得包含标签内容")
+        XCTAssertFalse(jsonString.contains("#"), "外层 JSON 不得包含 # 符号")
+    }
+
     // MARK: - NoteObfuscator
 
     func testNoteObfuscatorProducesGarbledOutput() {

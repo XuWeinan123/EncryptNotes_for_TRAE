@@ -1,8 +1,8 @@
 import SwiftUI
 
+/// 可读笔记卡片（明文笔记或已解密加密笔记）。
 struct NoteCardView: View {
     let note: Note
-    var isPlain: Bool = false
 
     @State private var isPressed = false
 
@@ -23,26 +23,27 @@ struct NoteCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.s3) {
-            // 时间戳 + 小锁标志（仅明文笔记显示）
+            // 时间戳 + 加密状态 icon
             HStack(spacing: DS.s1) {
                 Text(DateFormatters.formatDisplayDateTime(note.updatedAt).replacingOccurrences(of: ".", with: "-"))
                     .font(DS.caption())
                     .foregroundColor(DS.textSubtle)
 
-                if isPlain {
+                if note.isEncrypted {
                     Image(systemName: "lock.open.fill")
                         .font(.system(size: 12, weight: .regular))
                         .foregroundColor(DS.primary)
                 }
+                Spacer()
             }
 
-            // 标题 - text-emphasize
+            // 标题
             Text(title)
                 .font(DS.bodyLg())
                 .foregroundColor(DS.textEmphasize)
                 .lineLimit(1)
 
-            // 预览行 - text-body，#tags 用叶绿色
+            // 预览行，#tags 用叶绿色
             if !previewLines.isEmpty {
                 VStack(alignment: .leading, spacing: DS.s2) {
                     ForEach(Array(previewLines.enumerated()), id: \.offset) { _, line in
@@ -75,7 +76,7 @@ struct NoteCardView: View {
 
     /// 将 `#tags` 渲染为叶绿色，其余文字保持正文色。
     private func tagAwareText(_ source: String) -> Text {
-        let pattern = #"#[^\s#]+"#
+        let pattern = TagParser.pattern
         guard let regex = try? NSRegularExpression(pattern: pattern) else {
             return Text(source)
                 .font(DS.body())

@@ -1,11 +1,10 @@
 import Foundation
 
-/// 未导入密钥时创建的明文笔记文件。
+/// 明文笔记文件 `.bkwplain.json`。
 ///
-/// 当 Vault 处于 `.locked` 状态（本机没有密钥）时，用户仍可以添加笔记。
-/// 这些笔记以明文形式存储在 `.bkwplain.json` 文件中，并带有小锁标志：
-/// - 未导入密钥文件时：小锁为锁定状态，笔记内容显示为乱码。
-/// - 导入密钥文件后：小锁为解锁状态，笔记内容正常显示。
+/// 内容真实明文落盘，适合普通内容；敏感内容应使用加密笔记。
+/// `deleted_at` / `purge_after` / `original_location` 用于回收站与未来文件夹恢复，
+/// 主列表中的笔记这三个字段为 nil。
 struct PlainNoteFile: Codable {
     let version: Int
     let app: String
@@ -15,6 +14,9 @@ struct PlainNoteFile: Codable {
     let createdAt: Date
     let updatedAt: Date
     let body: String
+    let deletedAt: Date?
+    let purgeAfter: Date?
+    let originalLocation: NoteLocation?
 
     enum CodingKeys: String, CodingKey {
         case version, app, type, body
@@ -22,6 +24,9 @@ struct PlainNoteFile: Codable {
         case vaultId = "vault_id"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case deletedAt = "deleted_at"
+        case purgeAfter = "purge_after"
+        case originalLocation = "original_location"
     }
 
     init(
@@ -32,7 +37,10 @@ struct PlainNoteFile: Codable {
         vaultId: String,
         createdAt: Date,
         updatedAt: Date,
-        body: String
+        body: String,
+        deletedAt: Date? = nil,
+        purgeAfter: Date? = nil,
+        originalLocation: NoteLocation? = nil
     ) {
         self.version = version
         self.app = app
@@ -42,6 +50,9 @@ struct PlainNoteFile: Codable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.body = body
+        self.deletedAt = deletedAt
+        self.purgeAfter = purgeAfter
+        self.originalLocation = originalLocation
     }
 
     func toNote() -> Note {
@@ -50,7 +61,8 @@ struct PlainNoteFile: Codable {
             vaultId: vaultId,
             body: body,
             createdAt: createdAt,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            isEncrypted: false
         )
     }
 }

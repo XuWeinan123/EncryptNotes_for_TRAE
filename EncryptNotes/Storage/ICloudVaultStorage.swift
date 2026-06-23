@@ -99,24 +99,6 @@ final class ICloudVaultStorage: VaultStorage {
         try atomicWrite(data: data, to: url)
     }
 
-    func deleteNoteFile(at url: URL) throws {
-        guard fileManager.fileExists(atPath: url.path) else {
-            throw StorageError.fileNotFound
-        }
-
-        guard let container = containerURL else {
-            throw StorageError.iCloudUnavailable
-        }
-
-        let trashURL = container.appendingPathComponent("trash").appendingPathComponent(url.lastPathComponent)
-
-        do {
-            try fileManager.moveItem(at: url, to: trashURL)
-        } catch {
-            try fileManager.removeItem(at: url)
-        }
-    }
-
     func createConflictCopy(for url: URL) throws -> URL {
         guard let container = containerURL else {
             throw StorageError.iCloudUnavailable
@@ -169,24 +151,6 @@ final class ICloudVaultStorage: VaultStorage {
     func savePlainNoteFile(_ file: PlainNoteFile, at url: URL) throws {
         let data = try JSONEncoder.default.encode(file)
         try atomicWrite(data: data, to: url)
-    }
-
-    func deletePlainNoteFile(at url: URL) throws {
-        guard fileManager.fileExists(atPath: url.path) else {
-            throw StorageError.fileNotFound
-        }
-
-        guard let container = containerURL else {
-            throw StorageError.iCloudUnavailable
-        }
-
-        let trashURL = container.appendingPathComponent("trash").appendingPathComponent(url.lastPathComponent)
-
-        do {
-            try fileManager.moveItem(at: url, to: trashURL)
-        } catch {
-            try fileManager.removeItem(at: url)
-        }
     }
 
     private func atomicWrite(data: Data, to url: URL) throws {
