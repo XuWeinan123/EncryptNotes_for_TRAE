@@ -15,6 +15,8 @@ struct HomeView: View {
     @State private var showDeleteConfirmation = false
     @State private var isFloatPressed = false
     @State private var isSearching = false
+    @State private var exportedKeyURL: URL?
+    @State private var showShareSheet = false
     @FocusState private var searchFocused: Bool
 
     var body: some View {
@@ -56,6 +58,17 @@ struct HomeView: View {
             TrashView()
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let url = exportedKeyURL {
+                ShareSheet(items: [url])
+            }
+        }
+        .alert("保存密钥文件", isPresented: $vaultStore.needsKeyExport) {
+            Button("立即保存") { exportKeyFile() }
+            Button("稍后", role: .cancel) { vaultStore.needsKeyExport = false }
+        } message: {
+            Text("密钥已经创建并加载。\n请导出并妥善保存密钥文件。丢失密钥后，加密笔记将无法恢复。")
         }
         .alert("删除笔记", isPresented: $showDeleteConfirmation) {
             Button("取消", role: .cancel) { noteToDelete = nil }
@@ -309,6 +322,16 @@ struct HomeView: View {
                         Label("删除", systemImage: "trash")
                     }
                 }
+        }
+    }
+
+    private func exportKeyFile() {
+        do {
+            exportedKeyURL = try vaultStore.exportKeyFile()
+            vaultStore.needsKeyExport = false
+            showShareSheet = true
+        } catch {
+            vaultStore.lastError = "导出密钥失败：\(error.localizedDescription)"
         }
     }
 }
