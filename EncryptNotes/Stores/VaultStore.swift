@@ -166,8 +166,6 @@ final class VaultStore: ObservableObject {
 
     private func createNewVault() async {
         let vaultId = UUID().uuidString
-        let key = keyManager.generateKey()
-        let keyMaterial = keyManager.keyToBase64(key)
         let now = Date()
 
         let manifest = VaultManifest(
@@ -182,16 +180,15 @@ final class VaultStore: ObservableObject {
 
         do {
             try storage.saveManifest(manifest)
-            try keychainStore.saveKey(keyMaterial, forVaultId: vaultId)
 
             currentVaultId = vaultId
-            currentKey = key
+            currentKey = nil
             decryptedNotes = []
             plainNotes = []
             lockedEncryptedNotes = []
-            // 首次创建 vault 后引导用户导出密钥文件
-            needsKeyExport = true
-            settings.preferredNoteMode = .encrypted
+            trashNotes = []
+            needsKeyExport = false
+            settings.preferredNoteMode = .plain
         } catch {
             state = .error(message: error.localizedDescription)
         }
@@ -200,6 +197,17 @@ final class VaultStore: ObservableObject {
     /// 加载所有笔记：明文笔记 + 加密笔记（按密钥是否加载决定解密或展示为乱码）。
     private func loadAllNotes() async {
         do {
+            if let vaultId = currentVaultId,
+               let keyMaterial = try? keychainStore.loadKey(forVaultId: vaultId),
+               let loadedKey = try? keyManager.keyFromBase64(keyMaterial) {
+                currentKey = loadedKey
+            } else {
+                currentKey = nil
+                if settings.preferredNoteMode == .encrypted {
+                    settings.preferredNoteMode = .plain
+                }
+            }
+
             // 明文笔记
             plainNotes = try loadPlainNotesFromDisk()
 
@@ -207,17 +215,18 @@ final class VaultStore: ObservableObject {
             let noteURLs = try storage.listNoteFiles()
             if let key = currentKey {
                 var decrypted: [Note] = []
+                var locked: [EncryptedNoteInfo] = []
                 for url in noteURLs {
                     let file = try storage.loadNoteFile(at: url)
                     if let note = try? cryptoService.decryptNote(file: file, using: key) {
                         decrypted.append(note)
                     } else {
                         // 单条解密失败时降级为乱码卡片，不阻断整体加载
-                        lockedEncryptedNotes.append(makeLockedInfo(from: file, url: url))
+                        locked.append(makeLockedInfo(from: file, url: url))
                     }
                 }
                 decryptedNotes = decrypted
-                lockedEncryptedNotes = []
+                lockedEncryptedNotes = locked
             } else {
                 decryptedNotes = []
                 lockedEncryptedNotes = try noteURLs.map { url in
