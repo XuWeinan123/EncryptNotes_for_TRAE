@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// 统一首页：始终显示笔记列表，密钥状态只影响加密笔记的显示方式。
 struct HomeView: View {
@@ -13,10 +14,11 @@ struct HomeView: View {
     @State private var selectedNote: Note?
     @State private var noteToDelete: NoteListItem?
     @State private var showDeleteConfirmation = false
-    @State private var isFloatPressed = false
     @State private var isSearching = false
+    @State private var isFloatPressed = false
     @State private var exportedKeyURL: URL?
     @State private var showShareSheet = false
+    @State private var showKeyImporter = false
     @FocusState private var searchFocused: Bool
 
     var body: some View {
@@ -63,6 +65,13 @@ struct HomeView: View {
             if let url = exportedKeyURL {
                 ShareSheet(items: [url])
             }
+        }
+        .fileImporter(
+            isPresented: $showKeyImporter,
+            allowedContentTypes: [UTType(filenameExtension: "bkwkey") ?? .json],
+            allowsMultipleSelection: false
+        ) { result in
+            handleKeyImport(result)
         }
         .alert("保存密钥文件", isPresented: $vaultStore.needsKeyExport) {
             Button("立即保存") { exportKeyFile() }
@@ -111,8 +120,7 @@ struct HomeView: View {
     private var mainContent: some View {
         switch vaultStore.state {
         case .loading:
-            ProgressView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            loadingSkeleton
                 .dsCanvasBackground()
 
         case .error(let message):
@@ -122,20 +130,9 @@ struct HomeView: View {
 
         case .ready:
             NavigationStack {
-                ZStack(alignment: .bottom) {
+                ZStack {
                     DS.bg.ignoresSafeArea()
-
-                    if vaultStore.filteredNotes.isEmpty {
-                        emptyState
-                    } else {
-                        noteList
-                    }
-
-                    if isSearching {
-                        searchOverlay
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    }
-
+                    homeFeed
                     floatingButton
                 }
                 .navigationBarTitleDisplayMode(.inline)
@@ -179,6 +176,34 @@ struct HomeView: View {
         }
     }
 
+    private var loadingSkeleton: some View {
+        ScrollView {
+            LazyVStack(spacing: DS.memoGap) {
+                ForEach(0..<3, id: \.self) { _ in
+                    SWShimmer {
+                        VStack(alignment: .leading, spacing: DS.s3) {
+                            RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
+                                .fill(DS.surfaceSunken)
+                                .frame(width: 120, height: 14)
+                            RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
+                                .fill(DS.surfaceSunken)
+                                .frame(height: 20)
+                            RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
+                                .fill(DS.surfaceSunken)
+                                .frame(width: 220, height: 14)
+                        }
+                        .padding(DS.cardPadding)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .dsCardSurface()
+                    }
+                }
+            }
+            .padding(DS.cardPadding)
+            .frame(maxWidth: DS.contentMax)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
     private var sidebarOverlay: some View {
         ZStack(alignment: .leading) {
             Color.black.opacity(0.3)
@@ -202,12 +227,7 @@ struct HomeView: View {
 
     private var searchOverlay: some View {
         HStack(spacing: DS.s2) {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(DS.textSubtle)
-
-            TextField("搜索笔记", text: $vaultStore.searchText)
-                .font(DS.body())
-                .textFieldStyle(.plain)
+            SWSearchBar(text: $vaultStore.searchText, placeholder: "搜索笔记")
                 .focused($searchFocused)
 
             Button("取消") {
@@ -220,65 +240,101 @@ struct HomeView: View {
             .font(DS.body())
             .foregroundColor(DS.textSecondary)
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, DS.s3)
-        .dsInputSurface(cornerRadius: 18)
-        .padding(.horizontal, DS.cardPadding)
-        .padding(.top, DS.s2)
-    }
-
-    private var floatingButton: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.2)) { showNewNoteEditor = true }
-        } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 24, weight: .regular))
-                .foregroundColor(DS.onPrimary)
-                .frame(width: 56, height: 56)
-                .background(DS.primary)
-                .clipShape(Circle())
-                .shadow(color: DS.floatShadow.color,
-                        radius: DS.floatShadow.radius,
-                        x: DS.floatShadow.x,
-                        y: DS.floatShadow.y)
-                .scaleEffect(isFloatPressed ? 0.92 : 1.0)
-        }
-        .buttonStyle(.plain)
-        .pressEvents {
-            withAnimation(.easeInOut(duration: 0.1)) { isFloatPressed = true }
-        } onRelease: {
-            withAnimation(.easeInOut(duration: 0.15)) { isFloatPressed = false }
-        }
-        .padding(.bottom, DS.s8)
     }
 
     private var emptyState: some View {
         VStack(spacing: DS.s4) {
             Spacer()
-            Image(systemName: "note.text")
+            Image(systemName: vaultStore.lockedNoteCount > 0 && !vaultStore.isKeyLoaded ? "lock.doc" : "note.text")
                 .font(.system(size: 44, weight: .regular))
                 .foregroundColor(DS.textSubtle)
-            Text(isSearching && !vaultStore.searchText.isEmpty ? "未找到匹配笔记" : "暂无笔记")
+            Text(emptyTitle)
                 .font(DS.title())
                 .foregroundColor(DS.textSecondary)
-            if let tag = vaultStore.selectedTag {
-                Text("没有包含 \(tag) 的可读笔记")
-                    .font(DS.body())
-                    .foregroundColor(DS.textSubtle)
-            } else if !(isSearching && !vaultStore.searchText.isEmpty) {
-                Text("点击下方按钮创建第一条笔记")
-                    .font(DS.body())
-                    .foregroundColor(DS.textSubtle)
+            Text(emptyMessage)
+                .font(DS.body())
+                .foregroundColor(DS.textSubtle)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, DS.s6)
+            if !vaultStore.isKeyLoaded && vaultStore.lockedNoteCount > 0 {
+                Button("导入密钥文件") {
+                    showKeyImporter = true
+                }
+                .font(DS.body())
+                .foregroundColor(DS.primaryDeep)
+                .padding(.horizontal, DS.s4)
+                .padding(.vertical, DS.s2)
+                .background(DS.primaryContainer)
+                .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
             }
             Spacer()
         }
     }
 
-    private var noteList: some View {
+    private var emptyTitle: String {
+        if isSearching && !vaultStore.searchText.isEmpty { return "未找到匹配笔记" }
+        if let tag = vaultStore.selectedTag { return "没有 \(tag)" }
+        if vaultStore.lockedNoteCount > 0 && !vaultStore.isKeyLoaded { return "有笔记待解锁" }
+        return "暂无笔记"
+    }
+
+    private var emptyMessage: String {
+        if isSearching && !vaultStore.searchText.isEmpty { return "换个关键词试试。" }
+        if let tag = vaultStore.selectedTag {
+            return "没有包含 \(tag) 的可读笔记。"
+        }
+        if vaultStore.lockedNoteCount > 0 && !vaultStore.isKeyLoaded {
+            return "导入密钥文件后，加密笔记会在本机解密显示。"
+        }
+        return "点击右下角按钮创建第一条笔记。"
+    }
+
+    private var floatingButton: some View {
+        VStack {
+            Spacer()
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { showNewNoteEditor = true }
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 24, weight: .regular))
+                    .foregroundColor(DS.onFloat)
+                    .frame(width: 56, height: 56)
+                    .background(DS.primary)
+                    .clipShape(Circle())
+                    .shadow(color: DS.floatShadow.color,
+                            radius: DS.floatShadow.radius,
+                            x: DS.floatShadow.x,
+                            y: DS.floatShadow.y)
+                    .scaleEffect(isFloatPressed ? 0.92 : 1.0)
+            }
+            .buttonStyle(.plain)
+            .pressEvents {
+                withAnimation(.easeInOut(duration: 0.1)) { isFloatPressed = true }
+            } onRelease: {
+                withAnimation(.easeInOut(duration: 0.15)) { isFloatPressed = false }
+            }
+            .padding(.bottom, DS.s8)
+        }
+    }
+
+    private var homeFeed: some View {
         ScrollView {
-            LazyVStack(spacing: DS.memoGap) {
-                ForEach(vaultStore.filteredNotes) { item in
-                    noteRow(item)
+            VStack(spacing: DS.memoGap) {
+                if isSearching {
+                    searchOverlay
+                }
+
+                privacyStatusCard
+
+                if vaultStore.filteredNotes.isEmpty {
+                    emptyState
+                        .frame(minHeight: 360)
+                } else {
+                    LazyVStack(spacing: DS.memoGap) {
+                        ForEach(vaultStore.filteredNotes) { item in
+                            noteRow(item)
+                        }
+                    }
                 }
             }
             .padding(.horizontal, DS.cardPadding)
@@ -288,6 +344,64 @@ struct HomeView: View {
             .frame(maxWidth: .infinity)
         }
         .animation(.easeInOut(duration: 0.2), value: vaultStore.filteredNotes)
+    }
+
+    private var privacyStatusCard: some View {
+        VStack(alignment: .leading, spacing: DS.s3) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: DS.s1) {
+                    Text(vaultStore.isKeyLoaded ? "密钥已加载" : "密钥未加载")
+                        .font(DS.title())
+                        .foregroundColor(DS.textEmphasize)
+                    Text(vaultStore.isKeyLoaded ? "加密笔记只在本机解密显示。" : "加密笔记会保持乱码，直到导入密钥文件。")
+                        .font(DS.caption())
+                        .foregroundColor(DS.textSecondary)
+                }
+                Spacer()
+                SWStatusBadge(
+                    vaultStore.isKeyLoaded ? "可查看" : "待导入",
+                    systemImage: vaultStore.isKeyLoaded ? "lock.open.fill" : "lock.fill",
+                    style: vaultStore.isKeyLoaded ? .success : .warning
+                )
+            }
+
+            HStack(spacing: DS.s2) {
+                SWStatusBadge("可读 \(vaultStore.readableNoteCount)", systemImage: "doc.text", style: .neutral)
+                SWStatusBadge("加密 \(vaultStore.encryptedNoteCount)", systemImage: "lock.fill", style: .neutral)
+                if vaultStore.lockedNoteCount > 0 {
+                    SWStatusBadge("待解锁 \(vaultStore.lockedNoteCount)", systemImage: "exclamationmark.lock", style: .warning)
+                }
+            }
+
+            if !vaultStore.isKeyLoaded {
+                HStack(spacing: DS.s2) {
+                    Button("导入密钥文件") {
+                        showKeyImporter = true
+                    }
+                    .font(DS.body())
+                    .foregroundColor(DS.onPrimary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, DS.s2)
+                    .background(DS.primary)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+
+                    Button("创建密钥") {
+                        Task {
+                            do { try await vaultStore.createKey() }
+                            catch { vaultStore.lastError = "创建密钥失败：\(error.localizedDescription)" }
+                        }
+                    }
+                    .font(DS.body())
+                    .foregroundColor(DS.textBody)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, DS.s2)
+                    .background(DS.surfaceSunken)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+                }
+            }
+        }
+        .padding(DS.cardPadding)
+        .dsCardSurface(cornerRadius: DS.rMd)
     }
 
     @ViewBuilder
@@ -332,6 +446,22 @@ struct HomeView: View {
             showShareSheet = true
         } catch {
             vaultStore.lastError = "导出密钥失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func handleKeyImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            Task {
+                do {
+                    _ = try await vaultStore.importKeyFile(from: url)
+                } catch {
+                    vaultStore.lastError = "导入密钥失败：\(error.localizedDescription)"
+                }
+            }
+        case .failure:
+            break
         }
     }
 }

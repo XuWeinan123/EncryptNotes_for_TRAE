@@ -9,13 +9,7 @@ struct EncryptedCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DS.s2) {
             HStack {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(DS.textSecondary)
-
-                Text("加密笔记")
-                    .font(DS.body())
-                    .foregroundColor(DS.textSecondary)
+                SWStatusBadge("待解锁", systemImage: "lock.fill", style: .warning)
 
                 Spacer()
 
@@ -48,11 +42,8 @@ struct EncryptedCardView: View {
         .padding(DS.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .dsCardSurface()
-        .shadow(color: DS.cardShadow.color,
-                radius: isPressed ? 1 : 0,
-                x: 0,
-                y: isPressed ? -1 : 0)
-        .scaleEffect(isPressed ? 0.97 : 1.0)
+        .opacity(isPressed ? 0.92 : 1.0)
+        .scaleEffect(isPressed ? 0.985 : 1.0)
         .animation(.easeInOut(duration: 0.15), value: isPressed)
         .pressEvents {
             withAnimation(.easeInOut(duration: 0.1)) {

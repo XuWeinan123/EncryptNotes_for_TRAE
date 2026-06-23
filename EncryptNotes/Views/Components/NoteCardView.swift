@@ -29,19 +29,19 @@ struct NoteCardView: View {
                     .font(DS.caption())
                     .foregroundColor(DS.textSubtle)
 
-                if note.isEncrypted {
-                    Image(systemName: "lock.open.fill")
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundColor(DS.primary)
-                }
                 Spacer()
+                SWStatusBadge(
+                    note.isEncrypted ? "加密" : "明文",
+                    systemImage: note.isEncrypted ? "lock.open.fill" : "doc.text",
+                    style: note.isEncrypted ? .success : .neutral
+                )
             }
 
             // 标题
             Text(title)
                 .font(DS.bodyLg())
                 .foregroundColor(DS.textEmphasize)
-                .lineLimit(1)
+                .lineLimit(2)
 
             // 预览行，#tags 用叶绿色
             if !previewLines.isEmpty {
@@ -57,11 +57,8 @@ struct NoteCardView: View {
         .padding(.horizontal, DS.cardPadding)
         .padding(.vertical, DS.cardPadding)
         .dsCardSurface()
-        .shadow(color: DS.cardShadow.color,
-                radius: isPressed ? 1 : 0,
-                x: 0,
-                y: isPressed ? -1 : 0)
-        .scaleEffect(isPressed ? 0.97 : 1.0)
+        .opacity(isPressed ? 0.92 : 1.0)
+        .scaleEffect(isPressed ? 0.985 : 1.0)
         .animation(.easeInOut(duration: 0.15), value: isPressed)
         .pressEvents {
             withAnimation(.easeInOut(duration: 0.1)) {

@@ -45,6 +45,8 @@ enum DS {
     static let line = Color.black.opacity(0.08)
     /// 主按钮文字。
     static let onPrimary = Color(hex: 0x121212)
+    /// 浮动按钮图标。
+    static let onFloat = Color.white
 
     /// 深色模式画布。
     static let darkBg = Color(hex: 0x121212)

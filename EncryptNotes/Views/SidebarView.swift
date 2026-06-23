@@ -107,9 +107,13 @@ struct SidebarView: View {
     private var keyCard: some View {
         VStack(alignment: .leading, spacing: DS.s3) {
             if vaultStore.isKeyLoaded {
-                Text("密钥已加载")
-                    .font(DS.title())
-                    .foregroundColor(DS.textEmphasize)
+                HStack {
+                    Text("密钥已加载")
+                        .font(DS.title())
+                        .foregroundColor(DS.textEmphasize)
+                    Spacer()
+                    SWStatusBadge("可查看", systemImage: "lock.open.fill", style: .success)
+                }
                 Text("加密笔记已在本机解密显示。")
                     .font(DS.caption())
                     .foregroundColor(DS.textSecondary)
@@ -141,9 +145,13 @@ struct SidebarView: View {
                     }
                 }
             } else {
-                Text("未加载密钥")
-                    .font(DS.title())
-                    .foregroundColor(DS.textEmphasize)
+                HStack {
+                    Text("未加载密钥")
+                        .font(DS.title())
+                        .foregroundColor(DS.textEmphasize)
+                    Spacer()
+                    SWStatusBadge("待导入", systemImage: "lock.fill", style: .warning)
+                }
                 Text("加密笔记将以乱码显示。")
                     .font(DS.caption())
                     .foregroundColor(DS.textSecondary)
@@ -191,6 +199,12 @@ struct SidebarView: View {
                 Text("重置密钥会删除所有加密笔记，明文笔记会保留。")
                     .font(DS.caption())
                     .foregroundColor(DS.textSubtle)
+            }
+            HStack(spacing: DS.s2) {
+                SWStatusBadge("可读 \(vaultStore.readableNoteCount)", systemImage: "doc.text", style: .neutral)
+                if vaultStore.lockedNoteCount > 0 {
+                    SWStatusBadge("待解锁 \(vaultStore.lockedNoteCount)", systemImage: "exclamationmark.lock", style: .warning)
+                }
             }
         }
         .padding(DS.cardPadding)

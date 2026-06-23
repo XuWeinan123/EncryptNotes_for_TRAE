@@ -3,6 +3,8 @@ import SwiftUI
 /// 回收站笔记卡片：明文/已解密加密/未解密加密三种态。
 struct TrashCardView: View {
     let trashNote: TrashNote
+    var onRestore: (() -> Void)?
+    var onPurge: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.s2) {
@@ -38,6 +40,28 @@ struct TrashCardView: View {
             Text("删除于 \(DateFormatters.formatDisplayDateTime(trashNote.deletedAt).replacingOccurrences(of: ".", with: "-"))")
                 .font(DS.caption())
                 .foregroundColor(DS.textSubtle)
+
+            HStack(spacing: DS.s2) {
+                Button("恢复") {
+                    onRestore?()
+                }
+                .font(DS.body())
+                .foregroundColor(DS.primaryDeep)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, DS.s2)
+                .background(DS.primaryContainer)
+                .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+
+                Button("永久删除") {
+                    onPurge?()
+                }
+                .font(DS.body())
+                .foregroundColor(DS.destructive)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, DS.s2)
+                .background(DS.destructive.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+            }
         }
         .padding(DS.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)

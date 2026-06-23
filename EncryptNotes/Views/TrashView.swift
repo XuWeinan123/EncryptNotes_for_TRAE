@@ -111,7 +111,11 @@ struct TrashView: View {
         ScrollView {
             LazyVStack(spacing: DS.memoGap) {
                 ForEach(vaultStore.trashNotes) { trashNote in
-                    TrashCardView(trashNote: trashNote)
+                    TrashCardView(
+                        trashNote: trashNote,
+                        onRestore: { noteToRestore = trashNote },
+                        onPurge: { noteToPurge = trashNote }
+                    )
                         .contextMenu {
                             Button {
                                 noteToRestore = trashNote

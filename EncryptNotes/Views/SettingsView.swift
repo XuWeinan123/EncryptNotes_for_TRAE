@@ -17,17 +17,19 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            ScrollView {
                 noteSection
                 keySection
                 privacySection
                 dataSection
                 aboutSection
             }
+            .padding(DS.cardPadding)
+            .frame(maxWidth: DS.contentMax)
+            .frame(maxWidth: .infinity)
             .font(DS.bodyLg())
             .foregroundColor(DS.textBody)
-            .dsListBackground()
-            .listSectionSpacing(DS.s3)
+            .dsCanvasBackground()
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
             .dsLiquidGlassToolbar()
@@ -85,33 +87,24 @@ struct SettingsView: View {
     // MARK: - 1. 笔记
 
     private var noteSection: some View {
-        Section {
-            HStack {
-                Text("默认新建模式")
-                Spacer()
-                Text(vaultStore.isKeyLoaded && settings.preferredNoteMode == .encrypted ? "加密" : "明文")
-                    .foregroundColor(DS.textSecondary)
-            }
-            Text("新建笔记会记住你上一次选择的模式。\n如果未加载密钥，将默认创建明文笔记。")
-                .font(DS.caption())
-                .foregroundColor(DS.textSecondary)
-            Text("输入 #标签 并用空格、换行或正文结尾结束，即可创建标签。")
-                .font(DS.caption())
-                .foregroundColor(DS.textSecondary)
-        } header: {
-            Text("笔记")
+        settingsCard(title: "笔记", systemImage: "note.text") {
+            settingValueRow("默认新建模式", value: vaultStore.isKeyLoaded && settings.preferredNoteMode == .encrypted ? "加密" : "明文")
+            helperText("新建笔记会记住你上一次选择的模式。未加载密钥时，将默认创建明文笔记。")
+            helperText("输入 #标签 并用空格、换行或正文结尾结束，即可创建标签。")
         }
     }
 
     // MARK: - 2. 密钥与加密
 
     private var keySection: some View {
-        Section {
+        settingsCard(title: "密钥与加密", systemImage: "lock") {
             HStack {
-                Text("密钥状态")
-                Spacer()
-                Text(vaultStore.isKeyLoaded ? "已加载" : "未加载")
-                    .foregroundColor(DS.textSecondary)
+                settingValueRow("密钥状态", value: vaultStore.isKeyLoaded ? "已加载" : "未加载")
+                SWStatusBadge(
+                    vaultStore.isKeyLoaded ? "可查看" : "待导入",
+                    systemImage: vaultStore.isKeyLoaded ? "lock.open.fill" : "lock.fill",
+                    style: vaultStore.isKeyLoaded ? .success : .warning
+                )
             }
 
             if vaultStore.isKeyLoaded {
@@ -148,21 +141,15 @@ struct SettingsView: View {
                     .foregroundColor(DS.destructive)
             }
 
-            Text("明文笔记会直接保存到 iCloud 文件中。\n加密笔记会先在本机加密，再保存到 iCloud。")
-                .font(DS.caption())
-                .foregroundColor(DS.textSecondary)
-            Text("密钥文件只会在本机读取，不会上传。")
-                .font(DS.caption())
-                .foregroundColor(DS.textSecondary)
-        } header: {
-            Text("密钥与加密")
+            helperText("明文笔记会直接保存到 iCloud 文件中。加密笔记会先在本机加密，再保存到 iCloud。")
+            helperText("密钥文件只会在本机读取，不会上传。")
         }
     }
 
     // MARK: - 3. 隐私保护
 
     private var privacySection: some View {
-        Section {
+        settingsCard(title: "隐私保护", systemImage: "hand.raised") {
             Toggle(isOn: $settings.hideContentOnBackground) {
                 Text("进入后台时隐藏内容")
             }
@@ -172,15 +159,13 @@ struct SettingsView: View {
             Text("自动卸载密钥不会删除笔记，只会让加密笔记回到乱码状态。")
                 .font(DS.caption())
                 .foregroundColor(DS.textSecondary)
-        } header: {
-            Text("隐私保护")
         }
     }
 
     // MARK: - 4. 数据
 
     private var dataSection: some View {
-        Section {
+        settingsCard(title: "数据", systemImage: "tray") {
             Button {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     isPresented = false
@@ -204,42 +189,51 @@ struct SettingsView: View {
             } label: {
                 Text("清理 30 天前删除的笔记")
             }
-            Button(role: .destructive) {
-                showResetFirstConfirmation = true
-            } label: {
-                Text("重置密钥")
-                    .foregroundColor(DS.destructive)
-            }
-        } header: {
-            Text("数据")
         }
     }
 
     // MARK: - 5. 关于
 
     private var aboutSection: some View {
-        Section {
-            HStack {
-                Text("应用名称")
-                Spacer()
-                Text("别看我")
-                    .foregroundColor(DS.textSecondary)
-            }
-            HStack {
-                Text("当前版本")
-                Spacer()
-                Text("v0.2")
-                    .foregroundColor(DS.textSecondary)
-            }
-            Text("iCloud 同步：笔记文件保存在 iCloud Drive 中，可在多设备间同步。")
-                .font(DS.caption())
-                .foregroundColor(DS.textSecondary)
-            Text("明文笔记不会加密，适合普通内容；敏感内容建议使用加密笔记。")
-                .font(DS.caption())
-                .foregroundColor(DS.textSecondary)
-        } header: {
-            Text("关于")
+        settingsCard(title: "关于", systemImage: "info.circle") {
+            settingValueRow("应用名称", value: "别看我")
+            settingValueRow("当前版本", value: "v0.2")
+            helperText("iCloud 同步：笔记文件保存在 iCloud Drive 中，可在多设备间同步。")
+            helperText("明文笔记不会加密，适合普通内容；敏感内容建议使用加密笔记。")
         }
+    }
+
+    private func settingsCard<Content: View>(
+        title: String,
+        systemImage: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: DS.s3) {
+            Label(title, systemImage: systemImage)
+                .font(DS.title())
+                .foregroundColor(DS.textEmphasize)
+            content()
+        }
+        .padding(DS.cardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .dsCardSurface(cornerRadius: DS.rMd)
+        .padding(.bottom, DS.s3)
+    }
+
+    private func settingValueRow(_ title: String, value: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text(value)
+                .foregroundColor(DS.textSecondary)
+        }
+    }
+
+    private func helperText(_ text: String) -> some View {
+        Text(text)
+            .font(DS.caption())
+            .foregroundColor(DS.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: - Helpers

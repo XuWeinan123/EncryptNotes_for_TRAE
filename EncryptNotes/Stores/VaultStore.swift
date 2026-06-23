@@ -142,6 +142,11 @@ final class VaultStore: ObservableObject {
     /// 回收站笔记数量（含未解密加密笔记）。
     var trashCount: Int { trashNotes.count }
 
+    var readableNoteCount: Int { plainNotes.count + decryptedNotes.count }
+    var encryptedNoteCount: Int { decryptedNotes.count + lockedEncryptedNotes.count }
+    var lockedNoteCount: Int { lockedEncryptedNotes.count }
+    var totalNoteCount: Int { readableNoteCount + lockedEncryptedNotes.count }
+
     // MARK: - Initialize
 
     func initialize() async {
@@ -796,24 +801,20 @@ final class VaultStore: ObservableObject {
 
     /// 清理过期（超过 30 天）的回收站笔记。
     func purgeExpiredTrash() async {
-        do {
-            let now = Date()
-            let encURLs = (try? storage.listTrashNoteFiles()) ?? []
-            for url in encURLs {
-                if let file = try? storage.loadNoteFile(at: url),
-                   let purgeAfter = file.purgeAfter, purgeAfter <= now {
-                    try? storage.permanentlyDeleteFile(at: url)
-                }
+        let now = Date()
+        let encURLs = (try? storage.listTrashNoteFiles()) ?? []
+        for url in encURLs {
+            if let file = try? storage.loadNoteFile(at: url),
+               let purgeAfter = file.purgeAfter, purgeAfter <= now {
+                try? storage.permanentlyDeleteFile(at: url)
             }
-            let plainURLs = (try? storage.listTrashPlainNoteFiles()) ?? []
-            for url in plainURLs {
-                if let file = try? storage.loadPlainNoteFile(at: url),
-                   let purgeAfter = file.purgeAfter, purgeAfter <= now {
-                    try? storage.permanentlyDeleteFile(at: url)
-                }
+        }
+        let plainURLs = (try? storage.listTrashPlainNoteFiles()) ?? []
+        for url in plainURLs {
+            if let file = try? storage.loadPlainNoteFile(at: url),
+               let purgeAfter = file.purgeAfter, purgeAfter <= now {
+                try? storage.permanentlyDeleteFile(at: url)
             }
-        } catch {
-            // 清理失败不阻断主流程
         }
     }
 
@@ -835,7 +836,7 @@ final class VaultStore: ObservableObject {
 }
 
 /// 首页列表项：可读笔记或未解密加密笔记。
-enum NoteListItem: Identifiable {
+enum NoteListItem: Identifiable, Equatable {
     case readable(Note)
     case locked(EncryptedNoteInfo)
 

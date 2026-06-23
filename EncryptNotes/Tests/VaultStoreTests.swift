@@ -123,6 +123,31 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertEqual(readable.first?.id, "plain-1")
     }
 
+    @MainActor
+    func testNoteCountDerivedState() {
+        let store = VaultStore(storage: LocalFallbackStorage.shared)
+        let plain = Note(id: "p1", vaultId: "v", body: "明文", isEncrypted: false)
+        let encrypted = Note(id: "e1", vaultId: "v", body: "加密", isEncrypted: true)
+        let locked = EncryptedNoteInfo(
+            id: "l1",
+            url: URL(fileURLWithPath: "/tmp/l1.bkwenc.json"),
+            ciphertextPreview: "cipher",
+            fileSize: 12,
+            updatedAt: Date()
+        )
+        store.configureForTesting(
+            vaultId: "v",
+            decryptedNotes: [encrypted],
+            plainNotes: [plain],
+            lockedEncryptedNotes: [locked]
+        )
+
+        XCTAssertEqual(store.readableNoteCount, 2)
+        XCTAssertEqual(store.encryptedNoteCount, 2)
+        XCTAssertEqual(store.lockedNoteCount, 1)
+        XCTAssertEqual(store.totalNoteCount, 3)
+    }
+
     // MARK: - 回收站
 
     @MainActor
@@ -157,6 +182,7 @@ final class VaultStoreTests: XCTestCase {
         let store = VaultStore(storage: LocalFallbackStorage.shared)
         let storage = LocalFallbackStorage.shared
         try await storage.initializeVault()
+        try? storage.emptyTrash()
 
         let note = Note(id: "empty-trash", vaultId: "v", body: "x", isEncrypted: false)
         store.configureForTesting(vaultId: "v", plainNotes: [note])

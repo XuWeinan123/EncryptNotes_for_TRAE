@@ -8,6 +8,7 @@ enum NoteEditorMode {
 
 struct NoteEditorView: View {
     let mode: NoteEditorMode
+    let initialBody: String
     let onSave: (String, Bool) async throws -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -28,6 +29,16 @@ struct NoteEditorView: View {
         return false
     }
 
+    init(
+        mode: NoteEditorMode,
+        initialBody: String = "",
+        onSave: @escaping (String, Bool) async throws -> Void
+    ) {
+        self.mode = mode
+        self.initialBody = initialBody
+        self.onSave = onSave
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -46,15 +57,13 @@ struct NoteEditorView: View {
 
                     if isEditing {
                         // 编辑时不提供明文 ↔ 加密转换
-                        HStack(spacing: DS.s1) {
-                            Image(systemName: isEncrypted ? "lock.open.fill" : "doc.text")
-                                .font(.system(size: 12))
-                            Text(isEncrypted ? "加密笔记" : "明文笔记")
-                                .font(DS.caption())
-                        }
-                        .foregroundColor(DS.textSubtle)
+                        SWStatusBadge(
+                            isEncrypted ? "加密笔记" : "明文笔记",
+                            systemImage: isEncrypted ? "lock.open.fill" : "doc.text",
+                            style: isEncrypted ? .success : .neutral
+                        )
                     } else {
-                        encryptedToggle
+                        modePicker
                     }
 
                     HStack(spacing: DS.s1) {
@@ -125,23 +134,35 @@ struct NoteEditorView: View {
         }
     }
 
-    private var encryptedToggle: some View {
-        Toggle(isOn: Binding(
-            get: { isEncrypted },
-            set: { newValue in handleEncryptedToggle(newValue) }
-        )) {
+    private var modePicker: some View {
+        VStack(alignment: .leading, spacing: DS.s2) {
             HStack(spacing: DS.s2) {
-                Image(systemName: isEncrypted ? "lock.fill" : "lock.open")
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(isEncrypted ? DS.primary : DS.textSecondary)
-                Text("加密笔记")
-                    .font(DS.bodyLg())
-                    .foregroundColor(DS.textBody)
+                SWTabButton(
+                    title: "明文",
+                    systemImage: "doc.text",
+                    isSelected: !isEncrypted
+                ) {
+                    handleEncryptedToggle(false)
+                }
+
+                SWTabButton(
+                    title: "加密",
+                    systemImage: vaultStore.isKeyLoaded ? "lock.fill" : "lock.slash",
+                    isSelected: isEncrypted,
+                    isEnabled: vaultStore.isKeyLoaded
+                ) {
+                    handleEncryptedToggle(true)
+                }
+            }
+
+            if !vaultStore.isKeyLoaded {
+                Text("导入密钥文件后，可保存加密笔记。密钥文件只会在本机读取，不会上传。")
+                    .font(DS.caption())
+                    .foregroundColor(DS.textSubtle)
             }
         }
-        .tint(DS.primary)
         .padding(.horizontal, DS.cardPadding)
-        .padding(.vertical, DS.s2)
+        .padding(.vertical, DS.s3)
         .dsInputSurface()
     }
 
@@ -150,6 +171,7 @@ struct NoteEditorView: View {
             noteBody = note.body
             isEncrypted = note.isEncrypted
         } else {
+            noteBody = initialBody
             // 新建模式：根据持久化偏好与密钥状态决定默认值
             if vaultStore.isKeyLoaded {
                 isEncrypted = settings.preferredNoteMode == .encrypted

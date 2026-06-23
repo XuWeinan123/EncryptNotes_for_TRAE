@@ -1,51 +1,99 @@
 import SwiftUI
 
 struct BottomComposerView: View {
-    let onCreateNote: () -> Void
-    let isDisabled: Bool
+    @Binding var draft: String
+    @Binding var isEncrypted: Bool
 
-    @State private var isPressed = false
+    let canEncrypt: Bool
+    let isSaving: Bool
+    let onSubmit: () -> Void
+    let onExpand: () -> Void
+
+    private var canSubmit: Bool {
+        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSaving
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Divider()
-                .overlay(DS.line)
+        VStack(alignment: .leading, spacing: DS.s3) {
+            modeControl
 
-            HStack(spacing: DS.s3) {
-                TextField("点击创建笔记...", text: .constant(""))
-                    .font(DS.body())
+            HStack(alignment: .bottom, spacing: DS.s2) {
+                TextField("快速记录...", text: $draft, axis: .vertical)
+                    .font(DS.bodyLg())
                     .foregroundColor(DS.textBody)
-                    .padding(.vertical, 10)
+                    .lineLimit(1...4)
+                    .textFieldStyle(.plain)
                     .padding(.horizontal, DS.s3)
-                    .background(DS.surfaceSunken)
-                    .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+                    .padding(.vertical, DS.s2)
+                    .background(DS.surfaceCard)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
+                        RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
                             .stroke(DS.line, lineWidth: 0.5)
                     )
-                    .disabled(true)
 
-                Button(action: onCreateNote) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 28, weight: .regular))
-                        .foregroundColor(isDisabled ? DS.textSubtle : DS.primary)
-                        .scaleEffect(isPressed ? 0.92 : 1.0)
-                        .animation(.easeInOut(duration: 0.15), value: isPressed)
+                Button(action: onExpand) {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(DS.textSecondary)
+                        .frame(width: 36, height: 36)
+                        .background(DS.surfaceSunken)
+                        .clipShape(Circle())
                 }
-                .disabled(isDisabled)
                 .buttonStyle(.plain)
-                .pressEvents {
-                    withAnimation(.easeInOut(duration: 0.1)) {
-                        isPressed = true
+
+                Button(action: onSubmit) {
+                    Group {
+                        if isSaving {
+                            ProgressView()
+                                .tint(DS.onPrimary)
+                        } else {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
                     }
-                } onRelease: {
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        isPressed = false
-                    }
+                    .foregroundColor(canSubmit ? DS.onPrimary : DS.textSubtle)
+                    .frame(width: 36, height: 36)
+                    .background(canSubmit ? DS.primary : DS.surfaceSunken)
+                    .clipShape(Circle())
                 }
+                .disabled(!canSubmit)
+                .buttonStyle(.plain)
             }
-            .padding(DS.cardPadding)
-            .background(DS.surfaceCard)
+
+            if !canEncrypt {
+                Text("导入密钥文件后，可将新笔记保存为加密笔记。")
+                    .font(DS.caption())
+                    .foregroundColor(DS.textSubtle)
+            }
+        }
+        .padding(DS.cardPadding)
+        .background(DS.surfaceRaised)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(DS.line)
+                .frame(height: 0.5)
+        }
+    }
+
+    private var modeControl: some View {
+        HStack(spacing: DS.s2) {
+            SWTabButton(
+                title: "明文",
+                systemImage: "doc.text",
+                isSelected: !isEncrypted
+            ) {
+                isEncrypted = false
+            }
+
+            SWTabButton(
+                title: "加密",
+                systemImage: canEncrypt ? "lock.fill" : "lock.slash",
+                isSelected: isEncrypted,
+                isEnabled: canEncrypt
+            ) {
+                if canEncrypt { isEncrypted = true }
+            }
         }
     }
 }
