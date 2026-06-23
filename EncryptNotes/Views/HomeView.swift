@@ -1,525 +1,189 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
+/// 统一首页：始终显示笔记列表，密钥状态只影响加密笔记的显示方式。
 struct HomeView: View {
     @StateObject private var vaultStore = VaultStore.shared
-    @StateObject private var purchaseStore = PurchaseStore.shared
+    @StateObject private var appLockStore = AppLockStore.shared
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var showKeyImporter = false
+    @State private var showSidebar = false
     @State private var showSettings = false
+    @State private var showTrash = false
     @State private var showNewNoteEditor = false
     @State private var selectedNote: Note?
-    @State private var showKeyExportGuide = false
-    @State private var exportedKeyURL: URL?
-    @State private var showShareSheet = false
+    @State private var noteToDelete: NoteListItem?
+    @State private var showDeleteConfirmation = false
+    @State private var isFloatPressed = false
+    @State private var isSearching = false
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         ZStack {
             mainContent
-                .animation(.easeInOut(duration: 0.3), value: vaultStore.state)
 
-            if showPrivacyScreen {
+            if appLockStore.showPrivacyScreen {
                 PrivacyScreenView()
                     .transition(.opacity)
             }
+
+            if showSidebar {
+                sidebarOverlay
+            }
         }
         .onChange(of: scenePhase) { _, newPhase in
-            withAnimation(.easeInOut(duration: 0.2)) {
-                handleScenePhaseChange(newPhase)
-            }
-        }
-        .onChange(of: vaultStore.needsKeyExport) { _, needsExport in
-            if needsExport {
-                showKeyExportGuide = true
-            }
+            appLockStore.handleScenePhaseChange(newPhase)
         }
         .sheet(isPresented: $showNewNoteEditor) {
-            NoteEditorView(mode: .create) { body in
-                try await vaultStore.createNote(body: body)
+            NoteEditorView(mode: .create) { body, isEncrypted in
+                try await vaultStore.createNote(body: body, isEncrypted: isEncrypted)
             }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
         .sheet(item: $selectedNote) { note in
-            NoteEditorView(mode: .edit(note)) { body in
+            NoteEditorView(mode: .edit(note)) { body, _ in
                 try await vaultStore.updateNote(note, body: body)
             }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
-        .fileImporter(
-            isPresented: $showKeyImporter,
-            allowedContentTypes: [UTType(filenameExtension: "bkwkey") ?? .json],
-            allowsMultipleSelection: false
-        ) { result in
-            handleKeyImport(result)
+        .sheet(isPresented: $showSettings) {
+            SettingsView(isPresented: $showSettings, showTrash: $showTrash)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
-        .alert("保存密钥文件", isPresented: $showKeyExportGuide) {
-            Button("立即保存") {
-                exportKeyFile()
-            }
-            Button("稍后", role: .cancel) {
-                vaultStore.needsKeyExport = false
+        .sheet(isPresented: $showTrash) {
+            TrashView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .alert("删除笔记", isPresented: $showDeleteConfirmation) {
+            Button("取消", role: .cancel) { noteToDelete = nil }
+            Button("删除", role: .destructive) {
+                if let item = noteToDelete {
+                    Task {
+                        do {
+                            switch item {
+                            case .readable(let note):
+                                try await vaultStore.deleteNote(note)
+                            case .locked(let info):
+                                try await vaultStore.deleteLockedNote(info)
+                            }
+                        } catch {
+                            vaultStore.lastError = "删除失败：\(error.localizedDescription)"
+                        }
+                    }
+                }
+                noteToDelete = nil
             }
         } message: {
-            Text("请保存你的密钥文件（.bkwkey）。没有密钥文件，换设备或重装应用后将无法解密笔记。")
-        }
-        .sheet(isPresented: $showShareSheet) {
-            if let url = exportedKeyURL {
-                ShareSheet(items: [url])
-            }
+            Text("删除后笔记将进入回收站，30 天后自动永久删除。")
         }
         .alert("错误", isPresented: Binding(
             get: { vaultStore.lastError != nil },
             set: { if !$0 { vaultStore.lastError = nil } }
         )) {
-            Button("确定") {
-                vaultStore.lastError = nil
-            }
+            Button("确定") { vaultStore.lastError = nil }
         } message: {
             Text(vaultStore.lastError ?? "")
         }
         .task {
-            await vaultStore.initialize()
+            if case .loading = vaultStore.state {
+                await vaultStore.initialize()
+            }
         }
     }
 
     @ViewBuilder
     private var mainContent: some View {
         switch vaultStore.state {
-        case .noVault:
+        case .loading:
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .dsCanvasBackground()
-                .onAppear {
-                    Task {
-                        await vaultStore.initialize()
-                    }
-                }
-
-        case .locked:
-            LockedHomeView(showKeyImporter: $showKeyImporter, showNewNoteEditor: $showNewNoteEditor)
-
-        case .unlocking(let progress):
-            UnlockingView(progress: progress)
-
-        case .unlocked:
-            UnlockedHomeView(
-                showSettings: $showSettings,
-                showNewNoteEditor: $showNewNoteEditor,
-                selectedNote: $selectedNote
-            )
 
         case .error(let message):
             ErrorView(message: message) {
-                Task {
-                    await vaultStore.initialize()
-                }
+                Task { await vaultStore.initialize() }
             }
-        }
-    }
 
-    @State private var showPrivacyScreen = false
+        case .ready:
+            NavigationStack {
+                ZStack(alignment: .bottom) {
+                    DS.bg.ignoresSafeArea()
 
-    private func handleScenePhaseChange(_ phase: ScenePhase) {
-        switch phase {
-        case .active:
-            showPrivacyScreen = false
-        case .inactive, .background:
-            // 仅显示隐私屏幕保护内容，不清空内存中的 key。
-            // 用户手动点击「锁定 App」时才会真正 unload key。
-            showPrivacyScreen = true
-        @unknown default:
-            break
-        }
-    }
-
-    private func handleKeyImport(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            guard let url = urls.first else { return }
-            Task {
-                do {
-                    _ = try await vaultStore.importKeyFile(from: url)
-                } catch {
-                    vaultStore.lastError = "导入密钥失败：\(error.localizedDescription)"
-                }
-            }
-        case .failure:
-            break
-        }
-    }
-
-    private func exportKeyFile() {
-        do {
-            exportedKeyURL = try vaultStore.exportKeyFile()
-            vaultStore.needsKeyExport = false
-            // 使用系统分享导出
-            showShareSheet = true
-        } catch {
-            vaultStore.lastError = "导出密钥失败：\(error.localizedDescription)"
-        }
-    }
-}
-
-struct LockedHomeView: View {
-    @Binding var showKeyImporter: Bool
-    @Binding var showNewNoteEditor: Bool
-    @StateObject private var vaultStore = VaultStore.shared
-    @StateObject private var purchaseStore = PurchaseStore.shared
-    @State private var showResetConfirmation = false
-    @State private var showFinalResetConfirmation = false
-    @State private var isResettingVault = false
-    @State private var isFloatPressed = false
-    @State private var showPaywall = false
-
-    var body: some View {
-        ZStack(alignment: .bottom) {
-            ScrollView {
-                VStack(spacing: DS.s6) {
-                    VStack(spacing: DS.s2) {
-                        Image(systemName: "lock.fill")
-                            .font(.system(size: 48, weight: .regular))
-                            .foregroundColor(DS.textSecondary)
-                            .padding(.bottom, DS.s2)
-
-                        Text("这台设备还没有密钥")
-                            .font(DS.title())
-                            .foregroundColor(DS.textEmphasize)
-
-                        Text("导入密钥文件后，笔记将在本机解密显示。未导入前也可添加笔记，内容会以乱码显示。")
-                            .font(DS.body())
-                            .foregroundColor(DS.textSecondary)
-                            .multilineTextAlignment(.center)
+                    if vaultStore.filteredNotes.isEmpty {
+                        emptyState
+                    } else {
+                        noteList
                     }
-                    .padding(.top, DS.s8)
-                    .padding(.horizontal, DS.s6)
 
-                    Button {
-                        showKeyImporter = true
-                    } label: {
-                        Text("导入密钥文件")
-                            .font(DS.body())
-                            .foregroundColor(DS.onPrimary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(DS.primary)
-                            .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+                    if isSearching {
+                        searchOverlay
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 40)
 
-                    Text("密钥文件只会在本机读取，不会上传。")
-                        .font(DS.caption())
-                        .foregroundColor(DS.textSubtle)
-
-                    VStack(spacing: DS.s2) {
-                        Text("忘记密钥？")
-                            .font(DS.caption())
-                            .foregroundColor(DS.textSecondary)
-
-                        Button(role: .destructive) {
-                            showResetConfirmation = true
-                        } label: {
-                            Label("清空数据重来", systemImage: "trash")
-                                .font(DS.body())
-                                .foregroundColor(DS.destructive)
-                                .frame(maxWidth: .infinity)
-                        }
-                        .disabled(isResettingVault)
-
-                        Text("会删除当前加密文件并生成新密钥，让 App 重新进入可用状态。")
-                            .font(DS.caption())
-                            .foregroundColor(DS.textSubtle)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(.top, DS.s2)
-                    .padding(.horizontal, DS.s6)
-
-                    lockedNoteList
-                    plainNoteList
+                    floatingButton
                 }
-                .frame(maxWidth: DS.contentMax)
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, 120)
-            }
-            .dsCanvasBackground()
-            .alert("清空加密文件？", isPresented: $showResetConfirmation) {
-                Button("取消", role: .cancel) {}
-                Button("继续", role: .destructive) {
-                    showFinalResetConfirmation = true
-                }
-            } message: {
-                Text("如果你忘记了密钥，可以清空当前加密笔记文件并创建新的加密空间。此操作不可撤销。")
-            }
-            .alert("最终确认", isPresented: $showFinalResetConfirmation) {
-                Button("取消", role: .cancel) {}
-                Button("清空并重置", role: .destructive) {
-                    Task {
-                        isResettingVault = true
-                        defer { isResettingVault = false }
-
-                        do {
-                            try await vaultStore.resetVault()
-                        } catch {
-                            vaultStore.lastError = "重置失败：\(error.localizedDescription)"
-                        }
-                    }
-                }
-            } message: {
-                Text("确定要永久删除所有加密笔记文件，并在这台设备上生成新的密钥吗？")
-            }
-            .sheet(isPresented: $showPaywall) {
-                PaywallView()
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-            }
-
-            // 浮动 + 按钮：未导入密钥时也可添加笔记
-            Button {
-                createNote()
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 24, weight: .regular))
-                    .foregroundColor(DS.onPrimary)
-                    .frame(width: 56, height: 56)
-                    .background(DS.primary)
-                    .clipShape(Circle())
-                    .shadow(color: DS.floatShadow.color,
-                            radius: DS.floatShadow.radius,
-                            x: DS.floatShadow.x,
-                            y: DS.floatShadow.y)
-                    .scaleEffect(isFloatPressed ? 0.92 : 1.0)
-            }
-            .buttonStyle(.plain)
-            .pressEvents {
-                withAnimation(.easeInOut(duration: 0.1)) {
-                    isFloatPressed = true
-                }
-            } onRelease: {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isFloatPressed = false
-                }
-            }
-            .padding(.bottom, DS.s8)
-        }
-        .animation(.easeInOut(duration: 0.2), value: vaultStore.plainNotes.count)
-    }
-
-    private func createNote() {
-        let totalCount = vaultStore.notes.count + vaultStore.plainNotes.count
-        if !purchaseStore.isPro && totalCount >= 20 {
-            showPaywall = true
-        } else {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                showNewNoteEditor = true
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var lockedNoteList: some View {
-        if case .locked(let files) = vaultStore.state, !files.isEmpty {
-            VStack(alignment: .leading, spacing: DS.s3) {
-                Text("已加密笔记")
-                    .font(DS.title())
-                    .foregroundColor(DS.textEmphasize)
-                    .padding(.horizontal, DS.cardPadding)
-
-                LazyVStack(spacing: DS.memoGap) {
-                    ForEach(files) { file in
-                        EncryptedCardView(info: file)
-                    }
-                }
-                .padding(.horizontal, DS.cardPadding)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var plainNoteList: some View {
-        if !vaultStore.plainNotes.isEmpty {
-            VStack(alignment: .leading, spacing: DS.s3) {
-                Text("待加密笔记")
-                    .font(DS.title())
-                    .foregroundColor(DS.textEmphasize)
-                    .padding(.horizontal, DS.cardPadding)
-
-                LazyVStack(spacing: DS.memoGap) {
-                    ForEach(vaultStore.plainNotes) { note in
-                        PlainNoteLockedCardView(note: note)
-                    }
-                }
-                .padding(.horizontal, DS.cardPadding)
-            }
-        }
-    }
-}
-
-struct UnlockingView: View {
-    let progress: UnlockProgress
-
-    var body: some View {
-        VStack(spacing: DS.s6) {
-            Spacer()
-
-            ProgressView()
-                .scaleEffect(1.5)
-
-            VStack(spacing: DS.s2) {
-                Text("正在本机解析密钥")
-                    .font(DS.title())
-                    .foregroundColor(DS.textEmphasize)
-
-                Text("密钥文件不会上传。")
-                    .font(DS.body())
-                    .foregroundColor(DS.textSecondary)
-
-                Text("正在解密笔记 \(progress.current) / \(progress.total)")
-                    .font(DS.body())
-                    .foregroundColor(DS.textSecondary)
-            }
-
-            Spacer()
-        }
-        .dsCanvasBackground()
-    }
-}
-
-struct UnlockedHomeView: View {
-    @StateObject private var vaultStore = VaultStore.shared
-    @StateObject private var purchaseStore = PurchaseStore.shared
-    @Binding var showSettings: Bool
-    @Binding var showNewNoteEditor: Bool
-    @Binding var selectedNote: Note?
-
-    @State private var noteToDelete: Note?
-    @State private var showDeleteConfirmation = false
-    @State private var showPaywall = false
-    @State private var isFloatPressed = false
-    @State private var isSearching = false
-    @FocusState private var searchFocused: Bool
-
-    var body: some View {
-        NavigationStack {
-            ZStack(alignment: .bottom) {
-                DS.bg.ignoresSafeArea()
-
-                if vaultStore.filteredNotes.isEmpty {
-                    emptyState
-                        .transition(.scale(scale: 0.9).combined(with: .opacity))
-                } else {
-                    noteList
-                        .transition(.opacity)
-                }
-
-                if isSearching {
-                    searchOverlay
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                }
-
-                // FloatButton: 唯一允许绿色光晕的元素
-                Button {
-                    createNote()
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 24, weight: .regular))
-                        .foregroundColor(DS.onPrimary)
-                        .frame(width: 56, height: 56)
-                        .background(DS.primary)
-                        .clipShape(Circle())
-                        .shadow(color: DS.floatShadow.color,
-                                radius: DS.floatShadow.radius,
-                                x: DS.floatShadow.x,
-                                y: DS.floatShadow.y)
-                        .scaleEffect(isFloatPressed ? 0.92 : 1.0)
-                }
-                .buttonStyle(.plain)
-                .pressEvents {
-                    withAnimation(.easeInOut(duration: 0.1)) {
-                        isFloatPressed = true
-                    }
-                } onRelease: {
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        isFloatPressed = false
-                    }
-                }
-                .padding(.bottom, DS.s8)
-
-                if showSettings {
-                    Color.black.opacity(0.3)
-                        .ignoresSafeArea()
-                        .onTapGesture {
+                .navigationBarTitleDisplayMode(.inline)
+                .dsLiquidGlassToolbar()
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
                             withAnimation(.easeInOut(duration: 0.3)) {
-                                showSettings = false
+                                showSidebar.toggle()
                             }
+                        } label: {
+                            Image(systemName: "line.3.horizontal")
                         }
-                        .transition(.opacity)
-
-                    SettingsView(isPresented: $showSettings)
-                        .frame(width: DS.sidebarWidth)
-                        .frame(maxHeight: .infinity)
-                        .background(DS.bg)
-                        .shadow(color: DS.popoverShadow.color,
-                                radius: DS.popoverShadow.radius,
-                                x: DS.popoverShadow.x,
-                                y: DS.popoverShadow.y)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                        .transition(.move(edge: .leading))
-                }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .dsLiquidGlassToolbar()
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            showSettings.toggle()
-                        }
-                    } label: {
-                        Image(systemName: showSettings ? "xmark" : "line.3.horizontal")
+                        .disabled(isSearching)
                     }
-                }
-
-                ToolbarItem(placement: .principal) {
-                    HStack(spacing: DS.s1) {
-                        Text("flomo")
+                    ToolbarItem(placement: .principal) {
+                        Text("别看我")
                             .font(DS.page())
                             .foregroundColor(DS.textEmphasize)
-                            .textCase(.lowercase)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(DS.textSecondary)
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) { isSearching = true }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                searchFocused = true
+                            }
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                        }
+                        .disabled(showSidebar)
                     }
                 }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isSearching = true
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            searchFocused = true
-                        }
-                    } label: {
-                        Image(systemName: "magnifyingglass")
-                    }
-                    .disabled(showSettings)
+                .onChange(of: isSearching) { _, newValue in
+                    if !newValue { vaultStore.searchText = "" }
+                }
+                .onChange(of: vaultStore.selectedTag) { _, _ in
+                    withAnimation(.easeInOut(duration: 0.2)) {}
                 }
             }
-            .onChange(of: isSearching) { _, newValue in
-                if !newValue {
-                    vaultStore.searchText = ""
-                }
-            }
+            .animation(.easeInOut(duration: 0.2), value: vaultStore.filteredNotes.count)
         }
-        .animation(.easeInOut(duration: 0.2), value: vaultStore.filteredNotes.count)
-        .sheet(isPresented: $showPaywall) {
-            PaywallView()
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
+    }
+
+    private var sidebarOverlay: some View {
+        ZStack(alignment: .leading) {
+            Color.black.opacity(0.3)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.3)) { showSidebar = false }
+                }
+                .transition(.opacity)
+
+            SidebarView(isPresented: $showSidebar, showSettings: $showSettings, showTrash: $showTrash)
+                .frame(width: DS.sidebarWidth)
+                .frame(maxHeight: .infinity)
+                .background(DS.bg)
+                .shadow(color: DS.popoverShadow.color,
+                        radius: DS.popoverShadow.radius,
+                        x: DS.popoverShadow.x,
+                        y: DS.popoverShadow.y)
+                .transition(.move(edge: .leading))
         }
     }
 
@@ -550,15 +214,29 @@ struct UnlockedHomeView: View {
         .padding(.top, DS.s2)
     }
 
-    private func createNote() {
-        let totalCount = vaultStore.notes.count + vaultStore.plainNotes.count
-        if !purchaseStore.isPro && totalCount >= 20 {
-            showPaywall = true
-        } else {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                showNewNoteEditor = true
-            }
+    private var floatingButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { showNewNoteEditor = true }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 24, weight: .regular))
+                .foregroundColor(DS.onPrimary)
+                .frame(width: 56, height: 56)
+                .background(DS.primary)
+                .clipShape(Circle())
+                .shadow(color: DS.floatShadow.color,
+                        radius: DS.floatShadow.radius,
+                        x: DS.floatShadow.x,
+                        y: DS.floatShadow.y)
+                .scaleEffect(isFloatPressed ? 0.92 : 1.0)
         }
+        .buttonStyle(.plain)
+        .pressEvents {
+            withAnimation(.easeInOut(duration: 0.1)) { isFloatPressed = true }
+        } onRelease: {
+            withAnimation(.easeInOut(duration: 0.15)) { isFloatPressed = false }
+        }
+        .padding(.bottom, DS.s8)
     }
 
     private var emptyState: some View {
@@ -570,7 +248,11 @@ struct UnlockedHomeView: View {
             Text(isSearching && !vaultStore.searchText.isEmpty ? "未找到匹配笔记" : "暂无笔记")
                 .font(DS.title())
                 .foregroundColor(DS.textSecondary)
-            if !(isSearching && !vaultStore.searchText.isEmpty) {
+            if let tag = vaultStore.selectedTag {
+                Text("没有包含 \(tag) 的可读笔记")
+                    .font(DS.body())
+                    .foregroundColor(DS.textSubtle)
+            } else if !(isSearching && !vaultStore.searchText.isEmpty) {
                 Text("点击下方按钮创建第一条笔记")
                     .font(DS.body())
                     .foregroundColor(DS.textSubtle)
@@ -582,33 +264,8 @@ struct UnlockedHomeView: View {
     private var noteList: some View {
         ScrollView {
             LazyVStack(spacing: DS.memoGap) {
-                ForEach(vaultStore.filteredNotes) { note in
-                    NoteCardView(note: note, isPlain: vaultStore.plainNoteIds.contains(note.id))
-                        .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                selectedNote = note
-                            }
-                        }
-                        .contextMenu {
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    selectedNote = note
-                                }
-                            } label: {
-                                Label("编辑", systemImage: "pencil")
-                            }
-
-                            Button(role: .destructive) {
-                                noteToDelete = note
-                                showDeleteConfirmation = true
-                            } label: {
-                                Label("删除", systemImage: "trash")
-                            }
-                        }
-                        .transition(.asymmetric(
-                            insertion: .opacity,
-                            removal: .opacity
-                        ))
+                ForEach(vaultStore.filteredNotes) { item in
+                    noteRow(item)
                 }
             }
             .padding(.horizontal, DS.cardPadding)
@@ -618,22 +275,40 @@ struct UnlockedHomeView: View {
             .frame(maxWidth: .infinity)
         }
         .animation(.easeInOut(duration: 0.2), value: vaultStore.filteredNotes)
-        .alert("删除笔记", isPresented: $showDeleteConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("删除", role: .destructive) {
-                if let note = noteToDelete {
-                    Task {
-                        do {
-                            try await vaultStore.deleteNote(note)
-                        } catch {
-                            vaultStore.lastError = "删除失败：\(error.localizedDescription)"
-                        }
+    }
+
+    @ViewBuilder
+    private func noteRow(_ item: NoteListItem) -> some View {
+        switch item {
+        case .readable(let note):
+            NoteCardView(note: note)
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.2)) { selectedNote = note }
+                }
+                .contextMenu {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { selectedNote = note }
+                    } label: {
+                        Label("编辑", systemImage: "pencil")
+                    }
+                    Button(role: .destructive) {
+                        noteToDelete = item
+                        showDeleteConfirmation = true
+                    } label: {
+                        Label("删除", systemImage: "trash")
                     }
                 }
-                noteToDelete = nil
-            }
-        } message: {
-            Text("确定要删除这条笔记吗？此操作不可撤销。")
+
+        case .locked(let info):
+            EncryptedCardView(info: info)
+                .contextMenu {
+                    Button(role: .destructive) {
+                        noteToDelete = item
+                        showDeleteConfirmation = true
+                    } label: {
+                        Label("删除", systemImage: "trash")
+                    }
+                }
         }
     }
 }
@@ -647,12 +322,10 @@ struct PrivacyScreenView: View {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 44, weight: .regular))
                     .foregroundColor(DS.textSecondary)
-                    .transition(.scale(scale: 0.5).combined(with: .opacity))
 
                 Text("别看我")
                     .font(DS.page())
                     .foregroundColor(DS.textEmphasize)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .ignoresSafeArea()
@@ -669,7 +342,7 @@ struct ErrorView: View {
 
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 44, weight: .regular))
-                .foregroundColor(DS.pro)
+                .foregroundColor(DS.destructive)
 
             Text("出错了")
                 .font(DS.title())
@@ -693,14 +366,4 @@ struct ErrorView: View {
         }
         .dsCanvasBackground()
     }
-}
-
-struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

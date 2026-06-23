@@ -1,194 +1,280 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// 设置页：笔记 / 密钥与加密 / 隐私保护 / 数据 / 关于。
 struct SettingsView: View {
     @Binding var isPresented: Bool
+    @Binding var showTrash: Bool
     @StateObject private var vaultStore = VaultStore.shared
-    @StateObject private var purchaseStore = PurchaseStore.shared
+    @StateObject private var settings = SettingsStore.shared
 
-    @State private var showKeyExporter = false
-    @State private var showResetConfirmation = false
-    @State private var showPaywall = false
+    @State private var showKeyImporter = false
+    @State private var showResetFirstConfirmation = false
+    @State private var showResetSecondConfirmation = false
+    @State private var showUnloadConfirmation = false
     @State private var exportedKeyURL: URL?
+    @State private var showShareSheet = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-
+        NavigationStack {
             List {
-                Section("状态") {
-                    HStack {
-                        Label("加密空间", systemImage: "lock.fill")
-                            .foregroundColor(DS.textBody)
-                        Spacer()
-                        Text(vaultStore.isUnlocked ? "已解锁" : "已锁定")
-                            .font(DS.body())
-                            .foregroundColor(DS.textSecondary)
-                    }
-
-                    HStack {
-                        Label("iCloud", systemImage: "icloud")
-                            .foregroundColor(DS.textBody)
-                        Spacer()
-                        Text(ICloudVaultStorage.shared.isAvailable ? "可用" : "不可用")
-                            .font(DS.body())
-                            .foregroundColor(DS.textSecondary)
-                    }
-                }
-
-                Section("密钥") {
-                    Button {
-                        exportKey()
-                    } label: {
-                        Label("导出密钥文件", systemImage: "square.and.arrow.up")
-                            .foregroundColor(DS.textBody)
-                    }
-                    .disabled(!vaultStore.isUnlocked)
-                }
-
-                Section("操作") {
-                    Button {
-                        vaultStore.lock()
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            isPresented = false
-                        }
-                    } label: {
-                        Label("锁定 App", systemImage: "lock")
-                            .foregroundColor(DS.textBody)
-                    }
-                    .disabled(!vaultStore.isUnlocked)
-
-                    Button(role: .destructive) {
-                        showResetConfirmation = true
-                    } label: {
-                        Label("重置加密空间", systemImage: "trash")
-                            .foregroundColor(DS.destructive)
-                    }
-                }
-
-                Section {
-                    HStack {
-                        Label("版本", systemImage: "info.circle")
-                            .foregroundColor(DS.textBody)
-                        Spacer()
-                        Text("v0.1")
-                            .font(DS.body())
-                            .foregroundColor(DS.textSecondary)
-                    }
-
-                    if purchaseStore.isPro {
-                        HStack {
-                            Label("PRO", systemImage: "star.fill")
-                                .foregroundColor(DS.pro)
-                            Spacer()
-                            Text("已激活")
-                                .font(DS.body())
-                                .foregroundColor(DS.textSecondary)
-                        }
-                    } else {
-                        Button {
-                            showPaywall = true
-                        } label: {
-                            HStack {
-                                Label("升级 PRO", systemImage: "star")
-                                    .foregroundColor(DS.pro)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(DS.textSubtle)
-                            }
-                        }
-                    }
-                }
+                noteSection
+                keySection
+                privacySection
+                dataSection
+                aboutSection
             }
             .font(DS.bodyLg())
             .foregroundColor(DS.textBody)
             .dsListBackground()
             .listSectionSpacing(DS.s3)
-        }
-        .background(DS.bg.ignoresSafeArea())
-        .fileExporter(
-            isPresented: $showKeyExporter,
-            document: exportedKeyURL.map { KeyFileDocument(url: $0) },
-            contentType: UTType(filenameExtension: "bkwkey") ?? .json,
-            defaultFilename: "my-vault-key.bkwkey"
-        ) { result in
-            switch result {
-            case .success:
-                break
-            case .failure:
-                break
-            }
-        }
-        .alert("重置加密空间", isPresented: $showResetConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("重置", role: .destructive) {
-                Task {
-                    do {
-                        try await vaultStore.resetVault()
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            isPresented = false
-                        }
-                    } catch {
-                        vaultStore.lastError = "重置失败：\(error.localizedDescription)"
+            .navigationTitle("设置")
+            .navigationBarTitleDisplayMode(.inline)
+            .dsLiquidGlassToolbar()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") {
+                        withAnimation(.easeInOut(duration: 0.3)) { isPresented = false }
                     }
+                    .dsToolbarButtonStyle()
                 }
             }
-        } message: {
-            Text("重置后，当前 iCloud 中的加密笔记文件将被清空。\n如果你没有旧密钥文件，这些笔记将无法恢复。")
-        }
-        .sheet(isPresented: $showPaywall) {
-            PaywallView()
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-                .interactiveDismissDisabled()
+            .fileImporter(
+                isPresented: $showKeyImporter,
+                allowedContentTypes: [UTType(filenameExtension: "bkwkey") ?? .json],
+                allowsMultipleSelection: false
+            ) { result in
+                handleKeyImport(result)
+            }
+            .sheet(isPresented: $showShareSheet) {
+                if let url = exportedKeyURL {
+                    ShareSheet(items: [url])
+                }
+            }
+            .alert("卸载本机密钥", isPresented: $showUnloadConfirmation) {
+                Button("取消", role: .cancel) {}
+                Button("继续卸载", role: .destructive) {
+                    Task {
+                        do { try await vaultStore.unloadKey() }
+                        catch { vaultStore.lastError = "卸载密钥失败：\(error.localizedDescription)" }
+                    }
+                }
+            } message: {
+                Text("卸载后，这台设备将无法查看加密笔记内容。\n你可以稍后重新导入密钥恢复查看。\n建议先导出并保存密钥文件。")
+            }
+            .alert("重置密钥", isPresented: $showResetFirstConfirmation) {
+                Button("取消", role: .cancel) {}
+                Button("继续", role: .destructive) { showResetSecondConfirmation = true }
+            } message: {
+                Text("重置密钥将删除所有加密笔记，包括回收站中的加密笔记。\n明文笔记会保留。\n如果你还需要旧加密笔记，请先确认自己保存了旧密钥文件。")
+            }
+            .alert("最终确认", isPresented: $showResetSecondConfirmation) {
+                Button("取消", role: .cancel) {}
+                Button("重置密钥", role: .destructive) {
+                    Task {
+                        do { try await vaultStore.resetKey() }
+                        catch { vaultStore.lastError = "重置密钥失败：\(error.localizedDescription)" }
+                    }
+                }
+            } message: {
+                Text("确定要删除所有加密笔记并生成新密钥吗？此操作不可撤销。")
+            }
         }
     }
 
-    private var header: some View {
-        HStack {
-            Text("设置")
-                .font(DS.page())
-                .foregroundColor(DS.textEmphasize)
-            Spacer()
+    // MARK: - 1. 笔记
+
+    private var noteSection: some View {
+        Section {
+            HStack {
+                Text("默认新建模式")
+                Spacer()
+                Text(vaultStore.isKeyLoaded && settings.preferredNoteMode == .encrypted ? "加密" : "明文")
+                    .foregroundColor(DS.textSecondary)
+            }
+            Text("新建笔记会记住你上一次选择的模式。\n如果未加载密钥，将默认创建明文笔记。")
+                .font(DS.caption())
+                .foregroundColor(DS.textSecondary)
+            Text("输入 #标签 并用空格、换行或正文结尾结束，即可创建标签。")
+                .font(DS.caption())
+                .foregroundColor(DS.textSecondary)
+        } header: {
+            Text("笔记")
+        }
+    }
+
+    // MARK: - 2. 密钥与加密
+
+    private var keySection: some View {
+        Section {
+            HStack {
+                Text("密钥状态")
+                Spacer()
+                Text(vaultStore.isKeyLoaded ? "已加载" : "未加载")
+                    .foregroundColor(DS.textSecondary)
+            }
+
+            if vaultStore.isKeyLoaded {
+                Button {
+                    exportKeyFile()
+                } label: {
+                    Label("导出密钥", systemImage: "square.and.arrow.up")
+                }
+                Button {
+                    showUnloadConfirmation = true
+                } label: {
+                    Label("卸载本机密钥", systemImage: "lock.slash")
+                }
+            } else {
+                Button {
+                    Task {
+                        do { try await vaultStore.createKey() }
+                        catch { vaultStore.lastError = "创建密钥失败：\(error.localizedDescription)" }
+                    }
+                } label: {
+                    Label("创建密钥", systemImage: "key.fill")
+                }
+                Button {
+                    showKeyImporter = true
+                } label: {
+                    Label("导入密钥文件", systemImage: "square.and.arrow.down")
+                }
+            }
+
+            Button(role: .destructive) {
+                showResetFirstConfirmation = true
+            } label: {
+                Label("重置密钥", systemImage: "trash")
+                    .foregroundColor(DS.destructive)
+            }
+
+            Text("明文笔记会直接保存到 iCloud 文件中。\n加密笔记会先在本机加密，再保存到 iCloud。")
+                .font(DS.caption())
+                .foregroundColor(DS.textSecondary)
+            Text("密钥文件只会在本机读取，不会上传。")
+                .font(DS.caption())
+                .foregroundColor(DS.textSecondary)
+        } header: {
+            Text("密钥与加密")
+        }
+    }
+
+    // MARK: - 3. 隐私保护
+
+    private var privacySection: some View {
+        Section {
+            Toggle(isOn: $settings.hideContentOnBackground) {
+                Text("进入后台时隐藏内容")
+            }
+            Toggle(isOn: $settings.autoUnloadKeyOnForeground) {
+                Text("重新打开 App 时自动卸载密钥")
+            }
+            Text("自动卸载密钥不会删除笔记，只会让加密笔记回到乱码状态。")
+                .font(DS.caption())
+                .foregroundColor(DS.textSecondary)
+        } header: {
+            Text("隐私保护")
+        }
+    }
+
+    // MARK: - 4. 数据
+
+    private var dataSection: some View {
+        Section {
             Button {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     isPresented = false
+                    showTrash = true
                 }
             } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(DS.textSecondary)
+                HStack {
+                    Text("回收站")
+                    Spacer()
+                    if vaultStore.trashCount > 0 {
+                        Text("\(vaultStore.trashCount)")
+                            .foregroundColor(DS.textSecondary)
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(DS.textSubtle)
+                }
             }
+            Button {
+                Task { await vaultStore.purgeExpiredTrash() }
+            } label: {
+                Text("清理 30 天前删除的笔记")
+            }
+            Button(role: .destructive) {
+                showResetFirstConfirmation = true
+            } label: {
+                Text("重置密钥")
+                    .foregroundColor(DS.destructive)
+            }
+        } header: {
+            Text("数据")
         }
-        .padding(.horizontal, DS.cardPadding)
-        .padding(.vertical, DS.s3)
     }
 
-    private func exportKey() {
+    // MARK: - 5. 关于
+
+    private var aboutSection: some View {
+        Section {
+            HStack {
+                Text("应用名称")
+                Spacer()
+                Text("别看我")
+                    .foregroundColor(DS.textSecondary)
+            }
+            HStack {
+                Text("当前版本")
+                Spacer()
+                Text("v0.2")
+                    .foregroundColor(DS.textSecondary)
+            }
+            Text("iCloud 同步：笔记文件保存在 iCloud Drive 中，可在多设备间同步。")
+                .font(DS.caption())
+                .foregroundColor(DS.textSecondary)
+            Text("明文笔记不会加密，适合普通内容；敏感内容建议使用加密笔记。")
+                .font(DS.caption())
+                .foregroundColor(DS.textSecondary)
+        } header: {
+            Text("关于")
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func exportKeyFile() {
         do {
             exportedKeyURL = try vaultStore.exportKeyFile()
-            showKeyExporter = true
+            vaultStore.needsKeyExport = false
+            showShareSheet = true
         } catch {
-            // Handle error
+            vaultStore.lastError = "导出密钥失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func handleKeyImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            Task {
+                do { _ = try await vaultStore.importKeyFile(from: url) }
+                catch { vaultStore.lastError = "导入密钥失败：\(error.localizedDescription)" }
+            }
+        case .failure:
+            break
         }
     }
 }
 
-struct KeyFileDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [UTType(filenameExtension: "bkwkey") ?? .json] }
+/// 系统分享 sheet 包装。
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
 
-    let url: URL
-
-    init(url: URL) {
-        self.url = url
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
 
-    init(configuration: ReadConfiguration) throws {
-        throw CocoaError(.fileReadCorruptFile)
-    }
-
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        try FileWrapper(url: url)
-    }
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

@@ -2,14 +2,15 @@ import Foundation
 import SwiftUI
 import Combine
 
+/// 监听 scenePhase，控制隐私遮罩与可选的自动卸载密钥。
 @MainActor
 final class AppLockStore: ObservableObject {
     static let shared = AppLockStore()
 
-    @Published var isLocked: Bool = false
     @Published var showPrivacyScreen: Bool = false
 
     private let vaultStore: VaultStore
+    private let settings = SettingsStore.shared
 
     private init() {
         self.vaultStore = VaultStore.shared
@@ -19,18 +20,18 @@ final class AppLockStore: ObservableObject {
         switch phase {
         case .active:
             showPrivacyScreen = false
+            Task { await vaultStore.handleEnterForeground() }
         case .inactive:
-            showPrivacyScreen = true
+            if settings.hideContentOnBackground {
+                showPrivacyScreen = true
+            }
         case .background:
-            showPrivacyScreen = true
-            vaultStore.lock()
-            isLocked = true
+            if settings.hideContentOnBackground {
+                showPrivacyScreen = true
+            }
+            vaultStore.handleEnterBackground()
         @unknown default:
             break
         }
-    }
-
-    func unlock() {
-        isLocked = false
     }
 }
