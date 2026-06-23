@@ -34,12 +34,6 @@ struct HomeView: View {
                 showKeyExportGuide = true
             }
         }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-                .presentationBackgroundInteraction(.enabled)
-        }
         .sheet(isPresented: $showNewNoteEditor) {
             NoteEditorView(mode: .create) { body in
                 try await vaultStore.createNote(body: body)
@@ -453,15 +447,39 @@ struct UnlockedHomeView: View {
                     }
                 }
                 .padding(.bottom, DS.s8)
+
+                if showSettings {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                showSettings = false
+                            }
+                        }
+                        .transition(.opacity)
+
+                    SettingsView(isPresented: $showSettings)
+                        .frame(width: DS.sidebarWidth)
+                        .frame(maxHeight: .infinity)
+                        .background(DS.bg)
+                        .shadow(color: DS.popoverShadow.color,
+                                radius: DS.popoverShadow.radius,
+                                x: DS.popoverShadow.x,
+                                y: DS.popoverShadow.y)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                        .transition(.move(edge: .leading))
+                }
             }
             .navigationBarTitleDisplayMode(.inline)
             .dsLiquidGlassToolbar()
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        showSettings = true
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            showSettings.toggle()
+                        }
                     } label: {
-                        Image(systemName: "line.3.horizontal")
+                        Image(systemName: showSettings ? "xmark" : "line.3.horizontal")
                     }
                 }
 
@@ -488,6 +506,7 @@ struct UnlockedHomeView: View {
                     } label: {
                         Image(systemName: "magnifyingglass")
                     }
+                    .disabled(showSettings)
                 }
             }
             .onChange(of: isSearching) { _, newValue in
@@ -497,12 +516,6 @@ struct UnlockedHomeView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: vaultStore.filteredNotes.count)
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-                .presentationBackgroundInteraction(.enabled)
-        }
         .sheet(isPresented: $showPaywall) {
             PaywallView()
                 .presentationDetents([.large])
