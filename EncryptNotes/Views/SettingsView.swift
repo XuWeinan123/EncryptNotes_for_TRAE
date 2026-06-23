@@ -2,9 +2,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct SettingsView: View {
+    @Binding var isPresented: Bool
     @StateObject private var vaultStore = VaultStore.shared
     @StateObject private var purchaseStore = PurchaseStore.shared
-    @Environment(\.dismiss) private var dismiss
 
     @State private var showKeyExporter = false
     @State private var showResetConfirmation = false
@@ -12,7 +12,9 @@ struct SettingsView: View {
     @State private var exportedKeyURL: URL?
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            header
+
             List {
                 Section("状态") {
                     HStack {
@@ -47,7 +49,9 @@ struct SettingsView: View {
                 Section("操作") {
                     Button {
                         vaultStore.lock()
-                        dismiss()
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            isPresented = false
+                        }
                     } label: {
                         Label("锁定 App", systemImage: "lock")
                             .foregroundColor(DS.textBody)
@@ -101,54 +105,64 @@ struct SettingsView: View {
             .foregroundColor(DS.textBody)
             .dsListBackground()
             .listSectionSpacing(DS.s3)
-            .navigationTitle("设置")
-            .navigationBarTitleDisplayMode(.inline)
-            .dsLiquidGlassToolbar()
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
-                        dismiss()
-                    }
-                    .dsToolbarButtonStyle()
-                }
-            }
-            .fileExporter(
-                isPresented: $showKeyExporter,
-                document: exportedKeyURL.map { KeyFileDocument(url: $0) },
-                contentType: UTType(filenameExtension: "bkwkey") ?? .json,
-                defaultFilename: "my-vault-key.bkwkey"
-            ) { result in
-                switch result {
-                case .success:
-                    break
-                case .failure:
-                    break
-                }
-            }
-            .alert("重置加密空间", isPresented: $showResetConfirmation) {
-                Button("取消", role: .cancel) {}
-                Button("重置", role: .destructive) {
-                    Task {
-                        do {
-                            try await vaultStore.resetVault()
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                dismiss()
-                            }
-                        } catch {
-                            vaultStore.lastError = "重置失败：\(error.localizedDescription)"
-                        }
-                    }
-                }
-            } message: {
-                Text("重置后，当前 iCloud 中的加密笔记文件将被清空。\n如果你没有旧密钥文件，这些笔记将无法恢复。")
-            }
-            .sheet(isPresented: $showPaywall) {
-                PaywallView()
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-                    .interactiveDismissDisabled()
+        }
+        .background(DS.bg.ignoresSafeArea())
+        .fileExporter(
+            isPresented: $showKeyExporter,
+            document: exportedKeyURL.map { KeyFileDocument(url: $0) },
+            contentType: UTType(filenameExtension: "bkwkey") ?? .json,
+            defaultFilename: "my-vault-key.bkwkey"
+        ) { result in
+            switch result {
+            case .success:
+                break
+            case .failure:
+                break
             }
         }
+        .alert("重置加密空间", isPresented: $showResetConfirmation) {
+            Button("取消", role: .cancel) {}
+            Button("重置", role: .destructive) {
+                Task {
+                    do {
+                        try await vaultStore.resetVault()
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            isPresented = false
+                        }
+                    } catch {
+                        vaultStore.lastError = "重置失败：\(error.localizedDescription)"
+                    }
+                }
+            }
+        } message: {
+            Text("重置后，当前 iCloud 中的加密笔记文件将被清空。\n如果你没有旧密钥文件，这些笔记将无法恢复。")
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .interactiveDismissDisabled()
+        }
+    }
+
+    private var header: some View {
+        HStack {
+            Text("设置")
+                .font(DS.page())
+                .foregroundColor(DS.textEmphasize)
+            Spacer()
+            Button {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isPresented = false
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(DS.textSecondary)
+            }
+        }
+        .padding(.horizontal, DS.cardPadding)
+        .padding(.vertical, DS.s3)
     }
 
     private func exportKey() {
