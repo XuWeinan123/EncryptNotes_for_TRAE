@@ -7,14 +7,17 @@ struct EncryptedCardView: View {
     @State private var isPressed = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.s2) {
-            HStack {
-                SWStatusBadge("待解锁", systemImage: "lock.fill", style: .warning)
+        VStack(alignment: .leading, spacing: DS.memoGap) {
+            HStack(spacing: DS.s2) {
+                Text(timestampText)
+                    .font(DS.caption())
+                    .foregroundColor(DS.textSubtle)
+                    .lineLimit(1)
 
                 Spacer()
 
-                Text(DateFormatters.formatDisplayDate(info.updatedAt))
-                    .font(DS.caption())
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(DS.textSubtle)
             }
 
@@ -22,7 +25,7 @@ struct EncryptedCardView: View {
             Text(info.ciphertextPreview)
                 .font(DS.mono())
                 .foregroundColor(DS.textSubtle)
-                .lineLimit(2)
+                .lineLimit(3)
                 .opacity(0.7)
 
             HStack(spacing: DS.s1) {
@@ -41,7 +44,7 @@ struct EncryptedCardView: View {
         }
         .padding(DS.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .dsCardSurface()
+        .dsCardSurface(cornerRadius: DS.rLg, shadow: false)
         .opacity(isPressed ? 0.92 : 1.0)
         .scaleEffect(isPressed ? 0.985 : 1.0)
         .animation(.easeInOut(duration: 0.15), value: isPressed)
@@ -54,6 +57,12 @@ struct EncryptedCardView: View {
                 isPressed = false
             }
         }
+    }
+
+    private var timestampText: String {
+        let timestamp = DateFormatters.formatDisplayDateTime(info.updatedAt)
+            .replacingOccurrences(of: ".", with: "-")
+        return "\(timestamp) · 加密"
     }
 
     private func formatFileSize(_ bytes: Int) -> String {
