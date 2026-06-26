@@ -47,8 +47,26 @@ protocol VaultStorage {
     // MARK: - 冲突与永久删除
 
     func createConflictCopy(for url: URL) throws -> URL
+    func createPlainConflictCopy(for url: URL) throws -> URL
     /// 永久删除指定文件（不进入回收站）。
     func permanentlyDeleteFile(at url: URL) throws
+}
+
+extension VaultStorage {
+    func createPlainConflictCopy(for url: URL) throws -> URL {
+        guard let container = containerURL else {
+            throw StorageError.iCloudUnavailable
+        }
+
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let filename = url.deletingPathExtension().lastPathComponent
+        let conflictFilename = "\(filename)-conflict-\(timestamp).bkwplain.json"
+        let conflictURL = container.appendingPathComponent("notes").appendingPathComponent(conflictFilename)
+
+        let fm = FileManager.default
+        try fm.copyItem(at: url, to: conflictURL)
+        return conflictURL
+    }
 }
 
 extension VaultStorage {

@@ -172,18 +172,37 @@ extension View {
     /// 系统导航栏 / toolbar 背景策略。
     @ViewBuilder
     func dsLiquidGlassToolbar() -> some View {
+        #if os(iOS)
         if #available(iOS 26.0, *) {
-            // ponytail: default iOS 26 toolbar supplies Liquid Glass; no custom background.
             self
         } else {
             self.toolbarBackground(DS.surfaceCard, for: .navigationBar)
                 .toolbarBackground(.visible, for: .navigationBar)
         }
+        #else
+        self
+        #endif
     }
 
     /// toolbar item 按钮走系统默认样式，避免覆盖 iOS 26 自动分组的 glass surface。
     @ViewBuilder
     func dsToolbarButtonStyle() -> some View {
         self
+    }
+
+    /// macOS 便利贴窗口样式。
+    @ViewBuilder
+    func dsStickyNoteWindow() -> some View {
+        self
+            .background(DS.surfaceCard)
+            .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
+                    .stroke(DS.line, lineWidth: 0.5)
+            )
+            .shadow(color: DS.popoverShadow.color,
+                    radius: DS.popoverShadow.radius,
+                    x: DS.popoverShadow.x,
+                    y: DS.popoverShadow.y)
     }
 }
