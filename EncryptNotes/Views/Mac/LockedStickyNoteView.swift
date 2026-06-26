@@ -94,8 +94,9 @@ struct LockedStickyNoteView: View {
     }
 
     private func togglePin() {
-        windowStore.togglePin(for: noteInfo.id)
-        StickyNoteWindowManager.shared.updateWindowLevel(for: noteInfo.id, isPinned: !isPinned)
+        let newPinned = !isPinned
+        windowStore.setPinned(newPinned, for: noteInfo.id)
+        StickyNoteWindowManager.shared.updateWindowLevel(for: noteInfo.id, isPinned: newPinned)
     }
 
     private func loadKeyFile() {

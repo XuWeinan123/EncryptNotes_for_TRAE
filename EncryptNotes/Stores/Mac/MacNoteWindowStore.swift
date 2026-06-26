@@ -69,6 +69,13 @@ final class MacNoteWindowStore: ObservableObject {
         saveWindowState(for: noteId)
     }
 
+    func setPinned(_ isPinned: Bool, for noteId: String) {
+        guard var state = windowStates[noteId] else { return }
+        state.isPinned = isPinned
+        windowStates[noteId] = state
+        saveWindowState(for: noteId)
+    }
+
     func updateFrame(for noteId: String, frame: MacWindowFrame) {
         guard var state = windowStates[noteId] else { return }
         state.frame = frame

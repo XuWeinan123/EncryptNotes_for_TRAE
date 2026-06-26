@@ -10,6 +10,20 @@ final class StickyNoteWindowManager: NSObject {
 
     private override init() {
         super.init()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(applicationDidBecomeActive),
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
+    }
+
+    @objc private func applicationDidBecomeActive() {
+        for (noteId, window) in noteWindows {
+            if let state = MacNoteWindowStore.shared.windowState(for: noteId) {
+                window.level = state.isPinned ? .floating : .normal
+            }
+        }
     }
 
     func showNote(_ note: Note) {
@@ -37,6 +51,7 @@ final class StickyNoteWindowManager: NSObject {
         window.titlebarAppearsTransparent = true
         window.contentView = hostingView
         window.isReleasedWhenClosed = false
+        window.hidesOnDeactivate = false
         window.delegate = self
         window.level = isPinned ? .floating : .normal
         window.identifier = NSUserInterfaceItemIdentifier(rawValue: note.id)
@@ -75,6 +90,7 @@ final class StickyNoteWindowManager: NSObject {
         window.titlebarAppearsTransparent = true
         window.contentView = hostingView
         window.isReleasedWhenClosed = false
+        window.hidesOnDeactivate = false
         window.delegate = self
         window.level = isPinned ? .floating : .normal
         window.identifier = NSUserInterfaceItemIdentifier(rawValue: info.id)
@@ -156,6 +172,14 @@ extension StickyNoteWindowManager: NSWindowDelegate {
               let id = window.identifier?.rawValue else { return }
         if let state = MacNoteWindowStore.shared.windowState(for: id) {
             window.level = state.isPinned ? .floating : .normal
+        }
+    }
+
+    func windowDidResignKey(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              let id = window.identifier?.rawValue else { return }
+        if let state = MacNoteWindowStore.shared.windowState(for: id), state.isPinned {
+            window.level = .floating
         }
     }
 }

@@ -5,7 +5,6 @@ import Combine
 
 struct StickyNoteEditorView: View {
     @StateObject private var viewModel: StickyNoteEditorViewModel
-    @ObservedObject private var windowStore = MacNoteWindowStore.shared
     @ObservedObject private var syncStore = SyncStatusStore.shared
     @Environment(\.dismiss) private var dismiss
 
@@ -59,9 +58,6 @@ struct StickyNoteEditorView: View {
             .padding(.bottom, DS.s2)
         }
         .dsStickyNoteWindow()
-        .onAppear {
-            viewModel.isPinned = windowStore.windowState(for: viewModel.note.id)?.isPinned ?? true
-        }
         .alert(isPresented: $viewModel.showingDeleteConfirmation) {
             Alert(
                 title: Text("删除这条笔记？"),
@@ -87,7 +83,7 @@ struct StickyNoteEditorView: View {
 final class StickyNoteEditorViewModel: ObservableObject {
     @Published var note: Note
     @Published var text: String
-    @Published var isPinned: Bool = true
+    @Published var isPinned: Bool
     @Published var showingDeleteConfirmation = false
     @Published var lastSavedText: String = ""
 
@@ -100,6 +96,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
     init(note: Note) {
         self.note = note
         self.text = note.body
+        self.isPinned = windowStore.windowState(for: note.id)?.isPinned ?? true
         updateLastSavedText()
 
         $text
@@ -112,7 +109,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
         $isPinned
             .sink { [weak self] newValue in
                 guard let self = self else { return }
-                self.windowStore.togglePin(for: self.note.id)
+                self.windowStore.setPinned(newValue, for: self.note.id)
                 StickyNoteWindowManager.shared.updateWindowLevel(for: self.note.id, isPinned: newValue)
             }
             .store(in: &cancellables)
@@ -196,6 +193,19 @@ extension Notification.Name {
     static let macWindowWillClose = Notification.Name("macWindowWillClose")
 }
 
+private class AutoFocusTextView: NSTextView {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let window = self.window else { return }
+            if window.firstResponder != self {
+                window.makeFirstResponder(self)
+            }
+        }
+    }
+}
+
 struct MacTextView: NSViewRepresentable {
     @Binding var text: String
     var onCommit: () -> Void
@@ -210,7 +220,7 @@ struct MacTextView: NSViewRepresentable {
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = false
 
-        let textView = NSTextView()
+        let textView = AutoFocusTextView()
         textView.delegate = context.coordinator
         textView.isEditable = true
         textView.isSelectable = true
