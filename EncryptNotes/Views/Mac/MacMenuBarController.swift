@@ -145,11 +145,8 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
     @objc private func handleNewPlainNote() {
         Task {
             do {
-                let noteId = UUID().uuidString
-                try await vaultStore.createNote(body: "", isEncrypted: false)
-                if let note = vaultStore.plainNotes.first(where: { $0.id == noteId }) ?? vaultStore.readableNotes.first(where: { $0.id == noteId }) {
-                    openStickyNote(for: note)
-                }
+                let note = try await vaultStore.createNote(body: "", isEncrypted: false)
+                openStickyNote(for: note)
             } catch {
                 showError(message: error.localizedDescription)
             }
@@ -175,11 +172,8 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
 
         Task {
             do {
-                let noteId = UUID().uuidString
-                try await vaultStore.createNote(body: "", isEncrypted: true)
-                if let note = vaultStore.decryptedNotes.first(where: { $0.id == noteId }) ?? vaultStore.readableNotes.first(where: { $0.id == noteId }) {
-                    openStickyNote(for: note)
-                }
+                let note = try await vaultStore.createNote(body: "", isEncrypted: true)
+                openStickyNote(for: note)
             } catch {
                 showError(message: error.localizedDescription)
             }
@@ -210,11 +204,8 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
 
                         Task {
                             do {
-                                let noteId = UUID().uuidString
-                                try await vaultStore.createNote(body: "", isEncrypted: true)
-                                if let note = vaultStore.decryptedNotes.first(where: { $0.id == noteId }) ?? vaultStore.readableNotes.first(where: { $0.id == noteId }) {
-                                    self.openStickyNote(for: note)
-                                }
+                                let note = try await vaultStore.createNote(body: "", isEncrypted: true)
+                                self.openStickyNote(for: note)
                             } catch {
                                 self.showError(message: error.localizedDescription)
                             }

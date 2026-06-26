@@ -19,8 +19,9 @@ final class StickyNoteWindowManager: NSObject {
             return
         }
 
+        MacNoteWindowStore.shared.openWindow(for: note.id, isEncrypted: note.isEncrypted)
         let windowState = MacNoteWindowStore.shared.windowState(for: note.id)
-        let frame = windowState?.frame ?? MacWindowFrame(x: 200, y: 200, width: 280, height: 320)
+        let frame = windowState?.frame ?? defaultWindowFrame()
         let isPinned = windowState?.isPinned ?? true
 
         let editorView = StickyNoteEditorView(note: note)
@@ -44,7 +45,6 @@ final class StickyNoteWindowManager: NSObject {
         window.tabbingMode = .disallowed
 
         noteWindows[note.id] = window
-        MacNoteWindowStore.shared.openWindow(for: note.id, isEncrypted: note.isEncrypted)
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -57,6 +57,7 @@ final class StickyNoteWindowManager: NSObject {
             return
         }
 
+        MacNoteWindowStore.shared.openWindow(for: info.id)
         let windowState = MacNoteWindowStore.shared.windowState(for: info.id)
         let frame = windowState?.frame ?? MacWindowFrame(x: 200, y: 200, width: 280, height: 200)
         let isPinned = windowState?.isPinned ?? true
@@ -81,7 +82,6 @@ final class StickyNoteWindowManager: NSObject {
         window.tabbingMode = .disallowed
 
         noteWindows[info.id] = window
-        MacNoteWindowStore.shared.openWindow(for: info.id)
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -116,6 +116,15 @@ final class StickyNoteWindowManager: NSObject {
                 height: Double(frame.size.height)
             )
         )
+    }
+
+    private func defaultWindowFrame() -> MacWindowFrame {
+        let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let width: Double = 280
+        let height: Double = 320
+        let x = screen.midX - width / 2
+        let y = screen.midY - height / 2
+        return MacWindowFrame(x: x, y: y, width: width, height: height)
     }
 }
 
