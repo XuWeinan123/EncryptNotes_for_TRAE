@@ -24,7 +24,9 @@ struct SettingsView: View {
                 dataSection
                 aboutSection
             }
-            .padding(DS.cardPadding)
+            .padding(.horizontal, DS.s3)
+            .padding(.top, DS.s3)
+            .padding(.bottom, DS.s6)
             .frame(maxWidth: DS.contentMax)
             .frame(maxWidth: .infinity)
             .font(DS.bodyLg())
@@ -216,8 +218,8 @@ struct SettingsView: View {
         }
         .padding(DS.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .dsCardSurface(cornerRadius: DS.rMd)
-        .padding(.bottom, DS.s3)
+        .dsCardSurface(cornerRadius: DS.rLg)
+        .padding(.bottom, DS.s2)
     }
 
     private func settingValueRow(_ title: String, value: String) -> some View {

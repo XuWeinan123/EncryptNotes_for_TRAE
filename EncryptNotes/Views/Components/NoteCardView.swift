@@ -6,57 +6,29 @@ struct NoteCardView: View {
 
     @State private var isPressed = false
 
-    private var lines: [String] {
-        note.body
-            .split(whereSeparator: \.isNewline)
-            .map(String.init)
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    }
-
-    private var title: String {
-        lines.first ?? "无标题笔记"
-    }
-
-    private var previewLines: [String] {
-        Array(lines.dropFirst().prefix(5))
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.s3) {
-            // 时间戳 + 加密状态 icon
-            HStack(spacing: DS.s1) {
-                Text(DateFormatters.formatDisplayDateTime(note.updatedAt).replacingOccurrences(of: ".", with: "-"))
+        VStack(alignment: .leading, spacing: DS.memoGap) {
+            HStack(spacing: DS.s2) {
+                Text(timestampText)
                     .font(DS.caption())
                     .foregroundColor(DS.textSubtle)
+                    .lineLimit(1)
 
                 Spacer()
-                SWStatusBadge(
-                    note.isEncrypted ? "加密" : "明文",
-                    systemImage: note.isEncrypted ? "lock.open.fill" : "doc.text",
-                    style: note.isEncrypted ? .success : .neutral
-                )
+
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(DS.textSubtle)
             }
 
-            // 标题
-            Text(title)
-                .font(DS.bodyLg())
-                .foregroundColor(DS.textEmphasize)
-                .lineLimit(2)
-
-            // 预览行，#tags 用叶绿色
-            if !previewLines.isEmpty {
-                VStack(alignment: .leading, spacing: DS.s2) {
-                    ForEach(Array(previewLines.enumerated()), id: \.offset) { _, line in
-                        tagAwareText(line)
-                            .lineLimit(1)
-                    }
-                }
-            }
+            tagAwareText(note.body)
+                .lineLimit(8)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, DS.cardPadding)
         .padding(.vertical, DS.cardPadding)
-        .dsCardSurface()
+        .dsCardSurface(cornerRadius: DS.rLg, shadow: false)
         .opacity(isPressed ? 0.92 : 1.0)
         .scaleEffect(isPressed ? 0.985 : 1.0)
         .animation(.easeInOut(duration: 0.15), value: isPressed)
@@ -69,6 +41,12 @@ struct NoteCardView: View {
                 isPressed = false
             }
         }
+    }
+
+    private var timestampText: String {
+        let timestamp = DateFormatters.formatDisplayDateTime(note.updatedAt)
+            .replacingOccurrences(of: ".", with: "-")
+        return note.isEncrypted ? "\(timestamp) · 加密" : timestamp
     }
 
     /// 将 `#tags` 渲染为叶绿色，其余文字保持正文色。

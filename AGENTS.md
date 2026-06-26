@@ -119,16 +119,23 @@ iCloud Drive / 别看我 /
 
 ## 构建与测试
 
-工程无 SPM/CocoaPods 依赖，直接用 Xcode 或 `xcodebuild`。CI 环境无 TTY，命令需非交互。
+工程无 SPM/CocoaPods 依赖。当前本地开发与验证统一使用 Xcode beta：
+
+- Xcode 路径：`/Applications/Xcode-beta.app/Contents/Developer`
+- 运行 / 测试模拟器：优先使用 `iPhone 17`，不要默认使用 `iPhone 17 Pro` 或旧的 `iPhone 15`。
+- 使用 XcodeBuildMCP 时，先设置 session defaults：project `EncryptNotes.xcodeproj`、scheme `EncryptNotes`、simulator `iPhone 17`、`DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer`。
+- 若直接运行 `xcodebuild`，命令前加 `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer`。CI 环境无 TTY，命令需非交互。
 
 ```bash
 # 构建
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
 xcodebuild -project EncryptNotes.xcodeproj -scheme EncryptNotes \
-  -destination 'generic/platform=iOS Simulator' build
+  -destination 'platform=iOS Simulator,name=iPhone 17' build
 
 # 跑单元测试（EncryptNotesTests target）
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
 xcodebuild -project EncryptNotes.xcodeproj -scheme EncryptNotes \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test
+  -destination 'platform=iOS Simulator,name=iPhone 17' test
 
 # Xcode Cloud 已配置（见 EncryptNotes.xcodeproj/xcshareddata/xcodecloud/manifest.json）
 ```
@@ -147,8 +154,12 @@ xcodebuild -project EncryptNotes.xcodeproj -scheme EncryptNotes \
 - 错误类型用 `enum … : Error, LocalizedError`，提供 `errorDescription`。
 - Codable 的 snake_case 字段通过 `CodingKeys` 显式映射，不要全局改 key decoding 策略。
 - SwiftUI 视图优先用 `DS.*` token 与 `dsCardSurface()` / `dsInputSurface()` / `dsCanvasBackground()` / `dsLiquidGlassToolbar()` 修饰器。
+- Figma 设计稿是 flomo Design Library Copy：`https://www.figma.com/design/Tvq9bNPX2M0SksYFiEvaW7/flomo_%F0%9F%8D%80-Design-Library--Copy-?node-id=55349-28392&t=e1YsEKLZj2TiAOuv-4`。实现时只还原当前 App 已有功能可承载的设计元素（圆角、配色、阴影、间距、字号、卡片结构），不要为了贴设计稿新增账号、附件、图片、录音、API、插件等未实现功能。
+- 设计 token 改动必须同步维护 `EncryptNotes/DesignSystem.swift` 和根目录 `DESIGN.md`，避免代码与文档漂移。
+- 颜色 token 必须同时维护亮色与暗色。暗色值从 Figma Dark 组实际渲染值获取，并在 `DS` 中实现为随系统外观切换的动态 `Color`；不要只改亮色常量。
+- iOS 26 及之后的 toolbar / navigation bar 使用系统组件与 `dsLiquidGlassToolbar()`，不要为了视觉相似手写仿 toolbar 背景、毛玻璃或自定义导航栏。
 - 中文 UI 文案，简短第二人称；代码注释中文。
-- 浮动按钮是唯一允许绿色光晕的元素（`DS.floatShadow`）。
+- 浮动按钮按 Figma 当前样式使用 52px、12px 圆角、轻黑色投影；不要再使用绿色光晕。
 
 ## 修改检查清单
 

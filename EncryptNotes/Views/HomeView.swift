@@ -14,12 +14,14 @@ struct HomeView: View {
     @State private var selectedNote: Note?
     @State private var noteToDelete: NoteListItem?
     @State private var showDeleteConfirmation = false
-    @State private var isSearching = false
     @State private var isFloatPressed = false
     @State private var exportedKeyURL: URL?
     @State private var showShareSheet = false
     @State private var showKeyImporter = false
-    @FocusState private var searchFocused: Bool
+
+    private var isSearchActive: Bool {
+        !vaultStore.searchText.isEmpty
+    }
 
     var body: some View {
         ZStack {
@@ -41,8 +43,9 @@ struct HomeView: View {
             NoteEditorView(mode: .create) { body, isEncrypted in
                 try await vaultStore.createNote(body: body, isEncrypted: isEncrypted)
             }
-            .presentationDetents([.large])
+            .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+            .presentationCornerRadius(DS.s6)
         }
         .sheet(item: $selectedNote) { note in
             NoteEditorView(mode: .edit(note)) { body, _ in
@@ -50,6 +53,7 @@ struct HomeView: View {
             }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
+            .presentationCornerRadius(DS.s6)
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(isPresented: $showSettings, showTrash: $showTrash)
@@ -146,28 +150,20 @@ struct HomeView: View {
                         } label: {
                             Image(systemName: "line.3.horizontal")
                         }
-                        .disabled(isSearching)
+                        .disabled(isSearchActive)
                     }
                     ToolbarItem(placement: .principal) {
                         Text("别看我")
                             .font(DS.page())
                             .foregroundColor(DS.textEmphasize)
                     }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) { isSearching = true }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                searchFocused = true
-                            }
-                        } label: {
-                            Image(systemName: "magnifyingglass")
-                        }
-                        .disabled(showSidebar)
-                    }
                 }
-                .onChange(of: isSearching) { _, newValue in
-                    if !newValue { vaultStore.searchText = "" }
-                }
+                .searchable(
+                    text: $vaultStore.searchText,
+                    placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "搜索笔记"
+                )
+                .autocorrectionDisabled()
                 .onChange(of: vaultStore.selectedTag) { _, _ in
                     withAnimation(.easeInOut(duration: 0.2)) {}
                 }
@@ -225,23 +221,6 @@ struct HomeView: View {
         }
     }
 
-    private var searchOverlay: some View {
-        HStack(spacing: DS.s2) {
-            SWSearchBar(text: $vaultStore.searchText, placeholder: "搜索笔记")
-                .focused($searchFocused)
-
-            Button("取消") {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isSearching = false
-                    vaultStore.searchText = ""
-                    searchFocused = false
-                }
-            }
-            .font(DS.body())
-            .foregroundColor(DS.textSecondary)
-        }
-    }
-
     private var emptyState: some View {
         VStack(spacing: DS.s4) {
             Spacer()
@@ -272,14 +251,14 @@ struct HomeView: View {
     }
 
     private var emptyTitle: String {
-        if isSearching && !vaultStore.searchText.isEmpty { return "未找到匹配笔记" }
+        if isSearchActive && !vaultStore.searchText.isEmpty { return "未找到匹配笔记" }
         if let tag = vaultStore.selectedTag { return "没有 \(tag)" }
         if vaultStore.lockedNoteCount > 0 && !vaultStore.isKeyLoaded { return "有笔记待解锁" }
         return "暂无笔记"
     }
 
     private var emptyMessage: String {
-        if isSearching && !vaultStore.searchText.isEmpty { return "换个关键词试试。" }
+        if isSearchActive && !vaultStore.searchText.isEmpty { return "换个关键词试试。" }
         if let tag = vaultStore.selectedTag {
             return "没有包含 \(tag) 的可读笔记。"
         }
@@ -298,9 +277,9 @@ struct HomeView: View {
                 Image(systemName: "plus")
                     .font(.system(size: 24, weight: .regular))
                     .foregroundColor(DS.onFloat)
-                    .frame(width: 56, height: 56)
+                    .frame(width: 52, height: 52)
                     .background(DS.primary)
-                    .clipShape(Circle())
+                    .clipShape(RoundedRectangle(cornerRadius: DS.rLg, style: .continuous))
                     .shadow(color: DS.floatShadow.color,
                             radius: DS.floatShadow.radius,
                             x: DS.floatShadow.x,
@@ -318,13 +297,11 @@ struct HomeView: View {
     }
 
     private var homeFeed: some View {
-        ScrollView {
+        ScrollView(showsIndicators: false) {
             VStack(spacing: DS.memoGap) {
-                if isSearching {
-                    searchOverlay
+                if !vaultStore.isKeyLoaded || vaultStore.filteredNotes.isEmpty {
+                    privacyStatusCard
                 }
-
-                privacyStatusCard
 
                 if vaultStore.filteredNotes.isEmpty {
                     emptyState
@@ -337,7 +314,7 @@ struct HomeView: View {
                     }
                 }
             }
-            .padding(.horizontal, DS.cardPadding)
+            .padding(.horizontal, DS.s3)
             .padding(.top, DS.s3)
             .padding(.bottom, 120)
             .frame(maxWidth: DS.contentMax)
@@ -401,7 +378,7 @@ struct HomeView: View {
             }
         }
         .padding(DS.cardPadding)
-        .dsCardSurface(cornerRadius: DS.rMd)
+        .dsCardSurface(cornerRadius: DS.rLg)
     }
 
     @ViewBuilder
@@ -513,7 +490,7 @@ struct ErrorView: View {
                 .padding(.horizontal, DS.s6)
                 .padding(.vertical, 12)
                 .background(DS.primary)
-                .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: DS.rLg, style: .continuous))
 
             Spacer()
         }

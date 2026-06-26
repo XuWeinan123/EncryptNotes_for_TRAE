@@ -1,7 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// 侧边栏：应用名称 + 设置入口、密钥卡片、标签列表、回收站入口。
+/// 侧边栏：用户信息、统计、快捷入口、标签列表、回收站入口。
 struct SidebarView: View {
     @Binding var isPresented: Bool
     @Binding var showSettings: Bool
@@ -19,17 +19,21 @@ struct SidebarView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: DS.s6) {
+            VStack(alignment: .leading, spacing: DS.s4) {
                 header
-                keyCard
+                contributionSection
+                quickActions
+                keyActions
+                pinnedSection
                 tagSection
                 trashEntry
             }
-            .padding(.horizontal, DS.cardPadding)
-            .padding(.vertical, DS.s4)
+            .padding(.horizontal, DS.s3)
+            .padding(.top, DS.s3)
+            .padding(.bottom, DS.s8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DS.bg.ignoresSafeArea())
+        .background(DS.surfaceRaised.ignoresSafeArea())
         .fileImporter(
             isPresented: $showKeyImporter,
             allowedContentTypes: [UTType(filenameExtension: "bkwkey") ?? .json],
@@ -85,213 +89,277 @@ struct SidebarView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: DS.s2) {
             Text("别看我")
                 .font(DS.page())
                 .foregroundColor(DS.textEmphasize)
+
+            Text("PRO")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(DS.onPrimary)
+                .padding(.horizontal, DS.s1)
+                .padding(.vertical, 2)
+                .background(DS.textBody)
+                .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+
+            Circle()
+                .fill(DS.destructive)
+                .frame(width: 5, height: 5)
+
             Spacer()
+
+            headerButton(systemName: "bell") {}
+
             Button {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     isPresented = false
                     showSettings = true
                 }
             } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 18, weight: .regular))
-                    .foregroundColor(DS.textSecondary)
+                sidebarIcon("gearshape")
             }
+            .buttonStyle(.plain)
+        }
+        .frame(height: 36)
+    }
+
+    private var contributionSection: some View {
+        VStack(alignment: .leading, spacing: DS.s4) {
+            HStack(alignment: .top) {
+                sidebarMetric(value: "\(vaultStore.readableNoteCount)", title: "笔记")
+                Spacer()
+                sidebarMetric(value: "\(vaultStore.allTags.count)", title: "标签")
+                Spacer()
+                sidebarMetric(value: activeDaysText, title: "天")
+            }
+
+            ContributionGrid(seed: vaultStore.readableNoteCount + vaultStore.lockedNoteCount + vaultStore.allTags.count)
+        }
+        .padding(.horizontal, DS.s3)
+    }
+
+    private var activeDaysText: String {
+        let dates = Set(vaultStore.readableNotes.map { Calendar.current.startOfDay(for: $0.updatedAt) })
+        return "\(max(dates.count, vaultStore.readableNotes.isEmpty ? 0 : 1))"
+    }
+
+    @ViewBuilder
+    private var quickActions: some View {
+        VStack(spacing: 0) {
+            SidebarRow(
+                title: "全部笔记",
+                systemImage: "square.grid.2x2.fill",
+                isSelected: vaultStore.selectedTag == nil
+            ) {
+                vaultStore.selectedTag = nil
+                withAnimation(.easeInOut(duration: 0.3)) { isPresented = false }
+            }
+
+            SidebarRow(title: "微信输入", systemImage: "message.fill", isEnabled: false) {}
+            SidebarRow(title: "每日回顾", systemImage: "sparkles", isEnabled: false) {}
+            SidebarRow(title: "AI 洞察", systemImage: "circle.hexagongrid", isEnabled: false) {}
         }
     }
 
     @ViewBuilder
-    private var keyCard: some View {
-        VStack(alignment: .leading, spacing: DS.s3) {
+    private var keyActions: some View {
+        VStack(spacing: 0) {
             if vaultStore.isKeyLoaded {
-                HStack {
-                    Text("密钥已加载")
-                        .font(DS.title())
-                        .foregroundColor(DS.textEmphasize)
-                    Spacer()
-                    SWStatusBadge("可查看", systemImage: "lock.open.fill", style: .success)
+                SidebarRow(title: "导出密钥", systemImage: "square.and.arrow.up") {
+                    exportKeyFile()
                 }
-                Text("加密笔记已在本机解密显示。")
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSecondary)
-
-                VStack(spacing: DS.s2) {
-                    Button {
-                        exportKeyFile()
-                    } label: {
-                        Label("导出密钥", systemImage: "square.and.arrow.up")
-                            .font(DS.body())
-                            .foregroundColor(DS.textBody)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    Button {
-                        showUnloadConfirmation = true
-                    } label: {
-                        Label("卸载本机密钥", systemImage: "lock.slash")
-                            .font(DS.body())
-                            .foregroundColor(DS.textBody)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    Button {
-                        showResetFirstConfirmation = true
-                    } label: {
-                        Label("重置密钥", systemImage: "trash")
-                            .font(DS.body())
-                            .foregroundColor(DS.destructive)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                SidebarRow(title: "卸载本机密钥", systemImage: "lock.slash") {
+                    showUnloadConfirmation = true
                 }
             } else {
-                HStack {
-                    Text("未加载密钥")
-                        .font(DS.title())
-                        .foregroundColor(DS.textEmphasize)
-                    Spacer()
-                    SWStatusBadge("待导入", systemImage: "lock.fill", style: .warning)
-                }
-                Text("加密笔记将以乱码显示。")
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSecondary)
-
-                VStack(spacing: DS.s2) {
-                    Button {
-                        Task {
-                            do {
-                                try await vaultStore.createKey()
-                            } catch {
-                                vaultStore.lastError = "创建密钥失败：\(error.localizedDescription)"
-                            }
-                        }
-                    } label: {
-                        Label("创建密钥", systemImage: "key.fill")
-                            .font(DS.body())
-                            .foregroundColor(DS.onPrimary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(DS.primary)
-                            .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-
-                    Button {
-                        showKeyImporter = true
-                    } label: {
-                        Label("导入密钥文件", systemImage: "square.and.arrow.down")
-                            .font(DS.body())
-                            .foregroundColor(DS.textBody)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    Button {
-                        showResetFirstConfirmation = true
-                    } label: {
-                        Label("重置密钥", systemImage: "trash")
-                            .font(DS.body())
-                            .foregroundColor(DS.destructive)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                SidebarRow(title: "创建密钥", systemImage: "key.fill") {
+                    Task {
+                        do { try await vaultStore.createKey() }
+                        catch { vaultStore.lastError = "创建密钥失败：\(error.localizedDescription)" }
                     }
                 }
-                Text("密钥文件只会在本机读取，不会上传。")
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSubtle)
-                Text("重置密钥会删除所有加密笔记，明文笔记会保留。")
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSubtle)
+                SidebarRow(title: "导入密钥文件", systemImage: "square.and.arrow.down") {
+                    showKeyImporter = true
+                }
             }
-            HStack(spacing: DS.s2) {
-                SWStatusBadge("可读 \(vaultStore.readableNoteCount)", systemImage: "doc.text", style: .neutral)
-                if vaultStore.lockedNoteCount > 0 {
-                    SWStatusBadge("待解锁 \(vaultStore.lockedNoteCount)", systemImage: "exclamationmark.lock", style: .warning)
-                }
+            SidebarRow(title: "重置密钥", systemImage: "trash", role: .destructive) {
+                showResetFirstConfirmation = true
             }
         }
-        .padding(DS.cardPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .dsCardSurface()
+    }
+
+    private var pinnedSection: some View {
+        VStack(alignment: .leading, spacing: DS.s2) {
+            sectionTitle("置顶标签")
+            SidebarRow(title: "新人指南", leadingText: "📖", isEnabled: false) {}
+        }
     }
 
     @ViewBuilder
     private var tagSection: some View {
         VStack(alignment: .leading, spacing: DS.s2) {
-            Text("标签")
-                .font(DS.caption())
-                .foregroundColor(DS.textSecondary)
-
-            Button {
-                vaultStore.selectedTag = nil
-            } label: {
-                HStack {
-                    Text("全部")
-                        .font(DS.body())
-                        .foregroundColor(vaultStore.selectedTag == nil ? DS.primaryDeep : DS.textBody)
-                    Spacer()
-                    Text("\(vaultStore.readableNotes.count)")
-                        .font(DS.caption())
-                        .foregroundColor(DS.textSubtle)
-                }
-                .padding(.vertical, DS.s1)
-                .padding(.horizontal, DS.s2)
-                .background(vaultStore.selectedTag == nil ? DS.primaryContainer : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
-            }
-            .buttonStyle(.plain)
-
-            ForEach(vaultStore.allTags) { tagCount in
-                Button {
-                    vaultStore.selectedTag = vaultStore.selectedTag == tagCount.tag ? nil : tagCount.tag
-                } label: {
-                    HStack {
-                        Text(tagCount.tag)
-                            .font(DS.body())
-                            .foregroundColor(vaultStore.selectedTag == tagCount.tag ? DS.primaryDeep : DS.textBody)
-                        Spacer()
-                        Text("\(tagCount.count)")
-                            .font(DS.caption())
-                            .foregroundColor(DS.textSubtle)
-                    }
-                    .padding(.vertical, DS.s1)
-                    .padding(.horizontal, DS.s2)
-                    .background(vaultStore.selectedTag == tagCount.tag ? DS.primaryContainer : Color.clear)
-                    .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
-                }
-                .buttonStyle(.plain)
-            }
+            sectionTitle("全部标签")
 
             if vaultStore.allTags.isEmpty {
-                Text("暂无标签")
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSubtle)
-                    .padding(.vertical, DS.s1)
+                SidebarRow(title: "暂无标签", systemImage: "number", isEnabled: false) {}
+            } else {
+                ForEach(vaultStore.allTags) { tagCount in
+                    SidebarRow(
+                        title: tagCount.tag,
+                        systemImage: "number",
+                        accessory: "\(tagCount.count)",
+                        isSelected: vaultStore.selectedTag == tagCount.tag
+                    ) {
+                    vaultStore.selectedTag = vaultStore.selectedTag == tagCount.tag ? nil : tagCount.tag
+                    withAnimation(.easeInOut(duration: 0.3)) { isPresented = false }
+                    }
+                }
             }
         }
     }
 
     private var trashEntry: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                isPresented = false
-                showTrash = true
-            }
-        } label: {
-            HStack {
-                Image(systemName: "trash")
-                    .font(.system(size: 16, weight: .regular))
-                    .foregroundColor(DS.textSecondary)
-                Text("回收站")
-                    .font(DS.body())
-                    .foregroundColor(DS.textBody)
-                Spacer()
-                if vaultStore.trashCount > 0 {
-                    Text("\(vaultStore.trashCount)")
-                        .font(DS.caption())
-                        .foregroundColor(DS.textSubtle)
+        VStack(alignment: .leading, spacing: DS.s2) {
+            SidebarRow(
+                title: "回收站",
+                systemImage: "trash",
+                accessory: vaultStore.trashCount > 0 ? "\(vaultStore.trashCount)" : nil
+            ) {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isPresented = false
+                    showTrash = true
                 }
             }
-            .padding(.vertical, DS.s2)
+        }
+    }
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text)
+            .font(DS.caption())
+            .foregroundColor(DS.sidebarSectionTitle)
+            .frame(height: 12, alignment: .center)
+            .padding(.horizontal, DS.s3)
+    }
+
+    private func sidebarMetric(value: String, title: String) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(value)
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundColor(DS.sidebarMetric)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+
+            Text(title)
+                .font(DS.caption())
+                .foregroundColor(DS.sidebarMetric)
+        }
+        .frame(width: 56, alignment: .leading)
+    }
+
+    private func headerButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            sidebarIcon(systemName)
         }
         .buttonStyle(.plain)
+    }
+
+    private func sidebarIcon(_ systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 16, weight: .regular))
+            .foregroundColor(DS.textSubtle)
+            .frame(width: 24, height: 24)
+            .contentShape(Rectangle())
+    }
+
+    private struct SidebarRow: View {
+        let title: String
+        var systemImage: String?
+        var leadingText: String?
+        var accessory: String?
+        var isSelected = false
+        var isEnabled = true
+        var role: ButtonRole?
+        let action: () -> Void
+
+        var body: some View {
+            Button(role: role) {
+                if isEnabled { action() }
+            } label: {
+                HStack(spacing: DS.s2) {
+                    leadingView
+
+                    Text(title)
+                        .font(.system(size: 15, weight: isSelected ? .semibold : .regular))
+                        .foregroundColor(titleColor)
+                        .lineLimit(1)
+
+                    Spacer(minLength: DS.s2)
+
+                    if let accessory {
+                        Text(accessory)
+                            .font(DS.caption())
+                            .foregroundColor(isSelected ? DS.onPrimary.opacity(0.8) : DS.textSubtle)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(!isEnabled)
+            .frame(height: DS.sidebarRowHeight)
+            .padding(.horizontal, DS.s3)
+            .background(isSelected ? DS.primary : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: DS.sidebarRowRadius, style: .continuous))
+            .opacity(isEnabled ? 1.0 : 0.72)
+        }
+
+        @ViewBuilder
+        private var leadingView: some View {
+            if let leadingText {
+                Text(leadingText)
+                    .font(.system(size: 15, weight: .medium))
+                    .frame(width: 16, height: 16)
+            } else if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.system(size: 15, weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(iconColor)
+                    .frame(width: 16, height: 16)
+            }
+        }
+
+        private var titleColor: Color {
+            if role == .destructive { return DS.destructive }
+            return isSelected ? DS.onPrimary : DS.textEmphasize
+        }
+
+        private var iconColor: Color {
+            if role == .destructive { return DS.destructive }
+            return isSelected ? DS.onPrimary : DS.textEmphasize
+        }
+    }
+
+    private struct ContributionGrid: View {
+        let seed: Int
+        private let columns = Array(repeating: GridItem(.fixed(16), spacing: 8), count: 10)
+
+        var body: some View {
+            LazyVGrid(columns: columns, spacing: 8) {
+                ForEach(0..<60, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
+                        .fill(color(for: index))
+                        .frame(width: 16, height: 16)
+                }
+            }
+            .frame(width: 232, alignment: .leading)
+        }
+
+        private func color(for index: Int) -> Color {
+            let value = (index * 7 + seed * 3) % 11
+            switch value {
+            case 0...4: return DS.contribution0
+            case 5...6: return DS.contribution1
+            case 7...8: return DS.contribution2
+            default: return DS.contribution3
+            }
+        }
     }
 
     private func handleKeyImport(_ result: Result<[URL], Error>) {
