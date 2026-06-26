@@ -6,17 +6,19 @@
 
 《别看我》（EncryptNotes / Seal Notes）是一个 iPhone 优先的加密卡片笔记 App。核心闭环：用户在本地用 AES-GCM 加密笔记内容，每条笔记对应一个独立的加密 JSON 文件，通过 iCloud 同步；未导入密钥时只显示密文乱码，导入正确的 `.bkwkey` 密钥文件后在本机解密展示明文。Free 最多 20 条笔记，Pro 买断无限。
 
-- 平台：iOS 17.0+，SwiftUI，Swift 5.0
+- 平台：iOS 17.0+（iPhone 优先）、macOS（菜单栏便利贴模式），SwiftUI，Swift 5.0
 - Bundle ID：`com.biekanwo.EncryptNotes`
 - iCloud 容器：`iCloud.com.biekanwo.EncryptNotes`
 - DEVELOPMENT_TEAM：`BPP589VP97`
 - TARGETED_DEVICE_FAMILY：`1,2`（iPhone 优先，iPad 兼容运行但不专门优化）
-- v0.1 不做：账号系统、自建服务端、Android、Web、Mac 专门适配、富文本、附件、图片、语音、多人协作、服务端搜索/备份、订阅制（PRD 明确买断，注意下方 StoreKit 配置不一致问题）。
+- v0.1 不做：账号系统、自建服务端、Android、Web、富文本、附件、图片、语音、多人协作、服务端搜索/备份、订阅制（PRD 明确买断，注意下方 StoreKit 配置不一致问题）。macOS 以菜单栏便利贴模式支持，不做完整多窗口笔记管理。
 
 需求与设计依据见根目录三份文档：
 - [别看我_PRD_v0.1.md](file:///workspace/别看我_PRD_v0.1.md) — 产品范围与验收标准
 - [开发计划.md](file:///workspace/开发计划.md) — 模块拆分与开发顺序
 - [DESIGN.md](file:///workspace/DESIGN.md) — flomo 风格设计系统
+
+开发过程关键事件记录见 [MEMORY/](file:///workspace/MEMORY/) 目录（按日期命名），包含 macOS 版本初始化、bug 根因分析、重要架构决策等，改动相关功能前先查阅对应记录。
 
 ## 工程结构
 

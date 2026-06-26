@@ -1,28 +1,26 @@
 import Foundation
 import SwiftUI
 import Combine
-
-enum SyncStatus: Equatable {
-    case saved
-    case syncing
-    case failed(message: String)
-
-    var displayText: String {
-        switch self {
-        case .saved: return "已保存"
-        case .syncing: return "正在同步…"
-        case .failed: return "同步失败"
-        }
-    }
-}
+import Network
 
 @MainActor
 final class SyncStatusStore: ObservableObject {
     static let shared = SyncStatusStore()
 
     @Published private(set) var status: SyncStatus = .saved
+    @Published private(set) var isNetworkAvailable: Bool = true
 
-    private init() {}
+    private let pathMonitor = NWPathMonitor()
+    private let monitorQueue = DispatchQueue(label: "com.biekanwo.network-monitor")
+
+    private init() {
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor in
+                self?.isNetworkAvailable = path.status == .satisfied
+            }
+        }
+        pathMonitor.start(queue: monitorQueue)
+    }
 
     func setSyncing() {
         status = .syncing

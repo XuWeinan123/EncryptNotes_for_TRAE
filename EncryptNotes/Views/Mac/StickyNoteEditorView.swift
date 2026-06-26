@@ -6,7 +6,6 @@ import Combine
 struct StickyNoteEditorView: View {
     @StateObject private var viewModel: StickyNoteEditorViewModel
     @ObservedObject private var syncStore = SyncStatusStore.shared
-    @Environment(\.dismiss) private var dismiss
 
     init(note: Note) {
         _viewModel = StateObject(wrappedValue: StickyNoteEditorViewModel(note: note))
@@ -15,17 +14,27 @@ struct StickyNoteEditorView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: DS.s2) {
-                PlainStatusBadge(isEncrypted: viewModel.note.isEncrypted)
+                Button(action: {
+                    StickyNoteWindowManager.shared.closeWindow(for: viewModel.note.id)
+                }) {
+                    Image(systemName: "xmark")
+                        .foregroundColor(DS.textSecondary)
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 16, height: 16)
+                }
+                .buttonStyle(.plain)
+                .help("关闭")
 
                 Spacer()
 
-                Button(action: { viewModel.togglePin() }) {
-                    Image(systemName: viewModel.isPinned ? "pin.fill" : "pin")
-                        .foregroundColor(viewModel.isPinned ? DS.primary : DS.textSecondary)
+                Button(action: {}) {
+                    Image(systemName: viewModel.note.isEncrypted ? "lock.fill" : "lock.open.fill")
+                        .foregroundColor(viewModel.note.isEncrypted ? DS.primary : DS.textSecondary)
                         .font(.system(size: 12))
                 }
                 .buttonStyle(.plain)
-                .help(viewModel.isPinned ? "取消置顶" : "置顶")
+                .disabled(true)
+                .help(viewModel.note.isEncrypted ? "加密笔记" : "明文笔记")
 
                 Button(action: { viewModel.deleteNote() }) {
                     Image(systemName: "trash")
@@ -34,6 +43,14 @@ struct StickyNoteEditorView: View {
                 }
                 .buttonStyle(.plain)
                 .help("移到回收站")
+
+                Button(action: { viewModel.togglePin() }) {
+                    Image(systemName: viewModel.isPinned ? "pin.fill" : "pin")
+                        .foregroundColor(viewModel.isPinned ? DS.primary : DS.textSecondary)
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .help(viewModel.isPinned ? "取消置顶" : "置顶")
             }
             .padding(.horizontal, DS.s3)
             .padding(.top, DS.s2)
@@ -41,21 +58,22 @@ struct StickyNoteEditorView: View {
 
             MacTextView(text: $viewModel.text, onCommit: {})
                 .padding(.horizontal, DS.s3)
-                .padding(.bottom, DS.s3)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            HStack {
-                Text(syncStore.status.displayText)
-                    .font(DS.caption())
-                    .foregroundColor(syncStatusColor)
-
+            if !syncStore.isNetworkAvailable {
+                HStack {
+                    Spacer()
+                    Text("无网络")
+                        .font(DS.caption())
+                        .foregroundColor(DS.destructive)
+                }
+                .padding(.horizontal, DS.s3)
+                .padding(.top, DS.s1)
+                .padding(.bottom, DS.s2)
+            } else {
                 Spacer()
-
-                Text(viewModel.lastSavedText)
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSubtle)
+                    .frame(height: DS.s2)
             }
-            .padding(.horizontal, DS.s3)
-            .padding(.bottom, DS.s2)
         }
         .dsStickyNoteWindow()
         .alert(isPresented: $viewModel.showingDeleteConfirmation) {
@@ -69,14 +87,6 @@ struct StickyNoteEditorView: View {
             )
         }
     }
-
-    private var syncStatusColor: Color {
-        switch syncStore.status {
-        case .saved: return DS.textSecondary
-        case .syncing: return DS.link
-        case .failed: return DS.destructive
-        }
-    }
 }
 
 @MainActor
@@ -85,7 +95,6 @@ final class StickyNoteEditorViewModel: ObservableObject {
     @Published var text: String
     @Published var isPinned: Bool
     @Published var showingDeleteConfirmation = false
-    @Published var lastSavedText: String = ""
 
     private let vaultStore = VaultStore.shared
     private let windowStore = MacNoteWindowStore.shared
@@ -97,7 +106,6 @@ final class StickyNoteEditorViewModel: ObservableObject {
         self.note = note
         self.text = note.body
         self.isPinned = windowStore.windowState(for: note.id)?.isPinned ?? true
-        updateLastSavedText()
 
         $text
             .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
@@ -167,7 +175,6 @@ final class StickyNoteEditorViewModel: ObservableObject {
                 if let updatedNote = vaultStore.readableNotes.first(where: { $0.id == noteToUpdate.id }) {
                     note = updatedNote
                 }
-                updateLastSavedText()
                 syncStore.setSaved()
             } catch {
                 syncStore.setFailed(message: error.localizedDescription)
@@ -178,13 +185,6 @@ final class StickyNoteEditorViewModel: ObservableObject {
     func saveImmediately() {
         saveTask?.cancel()
         save()
-    }
-
-    private func updateLastSavedText() {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        lastSavedText = "已保存 \(formatter.string(from: note.updatedAt))"
     }
 }
 
@@ -214,11 +214,16 @@ struct MacTextView: NSViewRepresentable {
         Coordinator(self)
     }
 
-    func makeNSView(context: Context) -> NSScrollView {
+    func makeNSView(context: Context) -> NSView {
+        let container = NSView()
+
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = false
+        scrollView.scrollerStyle = .overlay
+        scrollView.autoresizesSubviews = true
+        scrollView.autoresizingMask = [.width, .height]
 
         let textView = AutoFocusTextView()
         textView.delegate = context.coordinator
@@ -244,11 +249,15 @@ struct MacTextView: NSViewRepresentable {
         context.coordinator.textView = textView
 
         scrollView.documentView = textView
-        return scrollView
+        scrollView.frame = container.bounds
+        container.addSubview(scrollView)
+
+        return container
     }
 
-    func updateNSView(_ nsView: NSScrollView, context: Context) {
-        guard let textView = nsView.documentView as? NSTextView else { return }
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let scrollView = nsView.subviews.first as? NSScrollView,
+              let textView = scrollView.documentView as? NSTextView else { return }
         if textView.string != text && !context.coordinator.isUpdating {
             context.coordinator.isUpdating = true
             textView.string = text
