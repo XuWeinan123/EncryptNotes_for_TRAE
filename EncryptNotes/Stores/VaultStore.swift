@@ -616,6 +616,11 @@ final class VaultStore: ObservableObject {
             guard let url = storage.plainNoteFileURL(for: note.id) else {
                 throw StorageError.iCloudUnavailable
             }
+
+            if let diskFile = try? storage.loadPlainNoteFile(at: url), diskFile.updatedAt > note.updatedAt {
+                _ = try storage.createPlainConflictCopy(for: url)
+            }
+
             try storage.savePlainNoteFile(plainFile, at: url)
 
             if let index = plainNotes.firstIndex(where: { $0.id == note.id }) {
