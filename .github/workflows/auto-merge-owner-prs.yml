@@ -1,0 +1,162 @@
+name: Auto merge owner PRs
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Merge XuWeinan123 PRs when conflict-free
+    if: >
+      github.event.pull_request.user.login == 'XuWeinan123' &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check pull request mergeability
+        id: mergeability
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          mergeable="unknown"
+          mergeable_state="unknown"
+
+          for attempt in {1..12}; do
+            payload="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}")"
+            mergeable="$(jq -r '.mergeable // "unknown"' <<<"${payload}")"
+            mergeable_state="$(jq -r '.mergeable_state // "unknown"' <<<"${payload}")"
+
+            echo "Attempt ${attempt}: mergeable=${mergeable}, mergeable_state=${mergeable_state}"
+
+            if [[ "${mergeable}" != "unknown" ]]; then
+              break
+            fi
+
+            sleep 5
+          done
+
+          {
+            echo "mergeable=${mergeable}"
+            echo "mergeable_state=${mergeable_state}"
+          } >> "${GITHUB_OUTPUT}"
+
+          if [[ "${mergeable}" == "true" ]]; then
+            echo "can_merge=true" >> "${GITHUB_OUTPUT}"
+            echo "has_conflict=false" >> "${GITHUB_OUTPUT}"
+          elif [[ "${mergeable}" == "false" || "${mergeable_state}" == "dirty" ]]; then
+            echo "can_merge=false" >> "${GITHUB_OUTPUT}"
+            echo "has_conflict=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "can_merge=false" >> "${GITHUB_OUTPUT}"
+            echo "has_conflict=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Merge pull request and delete branch
+        if: steps.mergeability.outputs.can_merge == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          gh pr merge "${PR_NUMBER}" \
+            --repo "${REPO}" \
+            --merge \
+            --delete-branch
+
+      - name: Send conflict email
+        if: steps.mergeability.outputs.has_conflict == 'true'
+        env:
+          SMTP_HOST: ${{ secrets.AUTO_MERGE_SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.AUTO_MERGE_SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.AUTO_MERGE_SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.AUTO_MERGE_SMTP_PASSWORD }}
+          MAIL_FROM: ${{ secrets.AUTO_MERGE_MAIL_FROM }}
+          MAIL_TO: ${{ secrets.AUTO_MERGE_MAIL_TO }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          MERGEABLE_STATE: ${{ steps.mergeability.outputs.mergeable_state }}
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import os
+          import smtplib
+          import ssl
+          from email.message import EmailMessage
+
+          required = [
+              "SMTP_HOST",
+              "SMTP_PORT",
+              "SMTP_USERNAME",
+              "SMTP_PASSWORD",
+              "MAIL_FROM",
+              "MAIL_TO",
+          ]
+          missing = [key for key in required if not os.environ.get(key)]
+          if missing:
+              raise SystemExit(
+                  "Missing repository secrets for conflict email: "
+                  + ", ".join(missing)
+              )
+
+          pr_number = os.environ["PR_NUMBER"]
+          pr_title = os.environ["PR_TITLE"]
+          pr_url = os.environ["PR_URL"]
+          pr_author = os.environ["PR_AUTHOR"]
+          base_ref = os.environ["BASE_REF"]
+          head_ref = os.environ["HEAD_REF"]
+          mergeable_state = os.environ["MERGEABLE_STATE"]
+
+          message = EmailMessage()
+          message["Subject"] = f"[EncryptNotes] PR #{pr_number} has merge conflicts"
+          message["From"] = os.environ["MAIL_FROM"]
+          message["To"] = os.environ["MAIL_TO"]
+          message.set_content(
+              "\n".join(
+                  [
+                      f"PR #{pr_number} was not auto-merged because GitHub reported a merge conflict.",
+                      "",
+                      f"Title: {pr_title}",
+                      f"Author: {pr_author}",
+                      f"Branch: {head_ref} -> {base_ref}",
+                      f"Mergeable state: {mergeable_state}",
+                      f"URL: {pr_url}",
+                  ]
+              )
+          )
+
+          host = os.environ["SMTP_HOST"]
+          port = int(os.environ["SMTP_PORT"])
+          username = os.environ["SMTP_USERNAME"]
+          password = os.environ["SMTP_PASSWORD"]
+
+          if port == 465:
+              context = ssl.create_default_context()
+              with smtplib.SMTP_SSL(host, port, context=context, timeout=30) as smtp:
+                  smtp.login(username, password)
+                  smtp.send_message(message)
+          else:
+              with smtplib.SMTP(host, port, timeout=30) as smtp:
+                  smtp.ehlo()
+                  smtp.starttls(context=ssl.create_default_context())
+                  smtp.login(username, password)
+                  smtp.send_message(message)
+          PY
