@@ -36,6 +36,11 @@ struct StickyNoteEditorView: View {
                 .disabled(true)
                 .help(viewModel.note.isEncrypted ? "加密笔记" : "明文笔记")
 
+                Rectangle()
+                    .fill(DS.line)
+                    .frame(width: 0.5, height: 14)
+                    .padding(.horizontal, DS.s1)
+
                 Button(action: { viewModel.deleteNote() }) {
                     Image(systemName: "trash")
                         .foregroundColor(DS.textSecondary)
@@ -52,9 +57,11 @@ struct StickyNoteEditorView: View {
                 .buttonStyle(.plain)
                 .help(viewModel.isPinned ? "取消置顶" : "置顶")
             }
-            .padding(.horizontal, DS.s3)
-            .padding(.top, DS.s2)
+            .padding(.horizontal, DS.s4)
+            .padding(.top, DS.s3)
             .padding(.bottom, DS.s1)
+            .frame(minHeight: 40)
+            .background(MacWindowDragRegion())
 
             MacTextView(text: $viewModel.text, onCommit: {})
                 .padding(.horizontal, DS.s3)

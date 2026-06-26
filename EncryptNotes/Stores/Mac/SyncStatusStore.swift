@@ -3,6 +3,12 @@ import SwiftUI
 import Combine
 import Network
 
+enum SyncStatus {
+    case syncing
+    case saved
+    case failed(message: String)
+}
+
 @MainActor
 final class SyncStatusStore: ObservableObject {
     static let shared = SyncStatusStore()
@@ -15,8 +21,9 @@ final class SyncStatusStore: ObservableObject {
 
     private init() {
         pathMonitor.pathUpdateHandler = { [weak self] path in
+            let isAvailable = path.status == .satisfied
             Task { @MainActor in
-                self?.isNetworkAvailable = path.status == .satisfied
+                self?.isNetworkAvailable = isAvailable
             }
         }
         pathMonitor.start(queue: monitorQueue)

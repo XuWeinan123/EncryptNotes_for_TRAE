@@ -37,6 +37,11 @@ struct LockedStickyNoteView: View {
                 .disabled(true)
                 .help("加密笔记")
 
+                Rectangle()
+                    .fill(DS.line)
+                    .frame(width: 0.5, height: 14)
+                    .padding(.horizontal, DS.s1)
+
                 Button(action: { showingDeleteConfirmation = true }) {
                     Image(systemName: "trash")
                         .foregroundColor(DS.textSecondary)
@@ -53,9 +58,11 @@ struct LockedStickyNoteView: View {
                 .buttonStyle(.plain)
                 .help(isPinned ? "取消置顶" : "置顶")
             }
-            .padding(.horizontal, DS.s3)
-            .padding(.top, DS.s2)
+            .padding(.horizontal, DS.s4)
+            .padding(.top, DS.s3)
             .padding(.bottom, DS.s1)
+            .frame(minHeight: 40)
+            .background(MacWindowDragRegion())
 
             VStack(spacing: DS.s3) {
                 Spacer()

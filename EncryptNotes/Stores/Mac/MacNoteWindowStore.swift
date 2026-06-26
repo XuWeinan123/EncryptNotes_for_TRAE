@@ -20,12 +20,14 @@ struct MacNoteWindowState: Codable, Equatable {
 @MainActor
 final class MacNoteWindowStore: ObservableObject {
     static let shared = MacNoteWindowStore()
+    static let defaultWindowSize = CGSize(width: 400, height: 250)
 
     @Published private(set) var openWindows: Set<String> = []
     @Published private(set) var windowStates: [String: MacNoteWindowState] = [:]
 
     private let defaults: UserDefaults
     private let windowStateKeyPrefix = "mac.windowState."
+    private let lastWindowSizeKey = "mac.lastStickyNoteWindowSize"
 
     private init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -80,6 +82,7 @@ final class MacNoteWindowStore: ObservableObject {
         guard var state = windowStates[noteId] else { return }
         state.frame = frame
         windowStates[noteId] = state
+        saveLastWindowSize(width: frame.width, height: frame.height)
         saveWindowState(for: noteId)
     }
 
@@ -89,11 +92,34 @@ final class MacNoteWindowStore: ObservableObject {
 
     private func defaultWindowFrame() -> MacWindowFrame {
         let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let width: Double = 280
-        let height: Double = 320
+        let size = lastWindowSize()
+        let width = size.width
+        let height = size.height
         let x = screen.midX - width / 2
         let y = screen.midY - height / 2
         return MacWindowFrame(x: x, y: y, width: width, height: height)
+    }
+
+    private func lastWindowSize() -> (width: Double, height: Double) {
+        guard let data = defaults.data(forKey: lastWindowSizeKey),
+              let frame = try? JSONDecoder.decode(MacWindowFrame.self, from: data) else {
+            return (
+                width: Double(Self.defaultWindowSize.width),
+                height: Double(Self.defaultWindowSize.height)
+            )
+        }
+
+        return (
+            width: max(200, frame.width),
+            height: max(200, frame.height)
+        )
+    }
+
+    private func saveLastWindowSize(width: Double, height: Double) {
+        let size = MacWindowFrame(x: 0, y: 0, width: width, height: height)
+        if let data = try? JSONEncoder.encode(size) {
+            defaults.set(data, forKey: lastWindowSizeKey)
+        }
     }
 
     private func saveWindowState(for noteId: String) {

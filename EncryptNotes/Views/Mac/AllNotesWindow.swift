@@ -5,18 +5,32 @@ struct AllNotesView: View {
     @ObservedObject private var vaultStore = VaultStore.shared
     @State private var searchText = ""
     @State private var selectedTag: String?
+    @State private var showingClearEmptyConfirmation = false
+    @State private var isClearingEmptyNotes = false
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(DS.textSubtle)
-                TextField("搜索笔记…", text: $searchText)
-                    .textFieldStyle(.plain)
+            HStack(spacing: DS.s2) {
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(DS.textSubtle)
+                    TextField("搜索笔记…", text: $searchText)
+                        .textFieldStyle(.plain)
+                }
+                .padding(DS.s2)
+                .background(DS.surfaceSunken)
+                .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+
+                Button(action: { showingClearEmptyConfirmation = true }) {
+                    Image(systemName: "trash")
+                    Text("清空空笔记")
+                }
+                .font(DS.caption())
+                .foregroundColor(emptyNotes.isEmpty ? DS.textSubtle : DS.destructive)
+                .buttonStyle(.plain)
+                .disabled(emptyNotes.isEmpty || isClearingEmptyNotes)
+                .help(emptyNotes.isEmpty ? "没有空笔记" : "将空笔记移到回收站")
             }
-            .padding(DS.s2)
-            .background(DS.surfaceSunken)
-            .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
             .padding(DS.s3)
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -53,6 +67,16 @@ struct AllNotesView: View {
             .listStyle(.plain)
         }
         .background(DS.bg)
+        .alert(isPresented: $showingClearEmptyConfirmation) {
+            Alert(
+                title: Text("清空空笔记？"),
+                message: Text("将 \(emptyNotes.count) 条空笔记移到回收站，可以恢复。"),
+                primaryButton: .destructive(Text("清空")) {
+                    clearEmptyNotes()
+                },
+                secondaryButton: .cancel()
+            )
+        }
     }
 
     private var filteredNotes: [NoteListItem] {
@@ -77,6 +101,10 @@ struct AllNotesView: View {
         }
 
         return result
+    }
+
+    private var emptyNotes: [Note] {
+        vaultStore.readableNotes.filter { isEmptyNote($0) }
     }
 
     private func tagChip(name: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
@@ -154,6 +182,10 @@ struct AllNotesView: View {
         return String(trimmed.components(separatedBy: .newlines).first { !$0.isEmpty } ?? "(空笔记)")
     }
 
+    private func isEmptyNote(_ note: Note) -> Bool {
+        note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private func timeString(from date: Date) -> String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
@@ -177,6 +209,20 @@ struct AllNotesView: View {
             case .locked(let info):
                 try? await vaultStore.deleteLockedNote(info)
             }
+        }
+    }
+
+    private func clearEmptyNotes() {
+        let notesToDelete = emptyNotes
+        guard !notesToDelete.isEmpty else { return }
+
+        isClearingEmptyNotes = true
+        Task {
+            for note in notesToDelete {
+                StickyNoteWindowManager.shared.closeWindow(for: note.id)
+                try? await vaultStore.deleteNote(note)
+            }
+            isClearingEmptyNotes = false
         }
     }
 }

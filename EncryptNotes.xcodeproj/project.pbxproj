@@ -38,7 +38,6 @@
 				Views/Mac/LockedStickyNoteView.swift,
 				Views/Mac/MacMenuBarController.swift,
 				Views/Mac/MacSettingsView.swift,
-				Views/Mac/PlainStatusBadge.swift,
 				Views/Mac/StickyNoteEditorView.swift,
 				Views/Mac/StickyNoteWindow.swift,
 				Views/Mac/TrashWindow.swift,
