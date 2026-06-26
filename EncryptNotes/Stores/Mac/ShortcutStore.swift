@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import AppKit
 import Carbon
+import Combine
 
 @MainActor
 final class ShortcutStore: ObservableObject {
@@ -22,17 +23,17 @@ final class ShortcutStore: ObservableObject {
         self.defaults = defaults
 
         if let plainData = defaults.data(forKey: plainKey),
-           let plain = try? JSONDecoder().decode(ShortcutData.self, from: plainData) {
+           let plain = try? JSONDecoder.decode(ShortcutData.self, from: plainData) {
             self.newPlainNoteKey = (plain.keyCode, plain.modifiers)
         } else {
-            self.newPlainNoteKey = (keyCode: 45, modifiers: UInt32(optionKey | commandKey))
+            self.newPlainNoteKey = (keyCode: 45, modifiers: UInt32(optionKey | cmdKey))
         }
 
         if let encryptedData = defaults.data(forKey: encryptedKey),
-           let encrypted = try? JSONDecoder().decode(ShortcutData.self, from: encryptedData) {
+           let encrypted = try? JSONDecoder.decode(ShortcutData.self, from: encryptedData) {
             self.newEncryptedNoteKey = (encrypted.keyCode, encrypted.modifiers)
         } else {
-            self.newEncryptedNoteKey = (keyCode: 45, modifiers: UInt32(optionKey | shiftKey | commandKey))
+            self.newEncryptedNoteKey = (keyCode: 45, modifiers: UInt32(optionKey | shiftKey | cmdKey))
         }
 
         registerHotKeys()
@@ -41,8 +42,8 @@ final class ShortcutStore: ObservableObject {
     func registerHotKeys() {
         unregisterHotKeys()
 
-        var hotKeyID1 = EventHotKeyID(signature: OSType(0x424B5731), id: 1)
-        var hotKeyID2 = EventHotKeyID(signature: OSType(0x424B5732), id: 2)
+        let hotKeyID1 = EventHotKeyID(signature: OSType(0x424B5731), id: 1)
+        let hotKeyID2 = EventHotKeyID(signature: OSType(0x424B5732), id: 2)
 
         RegisterEventHotKey(
             newPlainNoteKey.keyCode,
@@ -83,14 +84,14 @@ final class ShortcutStore: ObservableObject {
 
     func setNewPlainNoteShortcut(keyCode: UInt32, modifiers: UInt32) {
         newPlainNoteKey = (keyCode, modifiers)
-        let data = try? JSONEncoder().encode(ShortcutData(keyCode: keyCode, modifiers: modifiers))
+        let data = try? JSONEncoder.encode(ShortcutData(keyCode: keyCode, modifiers: modifiers))
         defaults.set(data, forKey: plainKey)
         registerHotKeys()
     }
 
     func setNewEncryptedNoteShortcut(keyCode: UInt32, modifiers: UInt32) {
         newEncryptedNoteKey = (keyCode, modifiers)
-        let data = try? JSONEncoder().encode(ShortcutData(keyCode: keyCode, modifiers: modifiers))
+        let data = try? JSONEncoder.encode(ShortcutData(keyCode: keyCode, modifiers: modifiers))
         defaults.set(data, forKey: encryptedKey)
         registerHotKeys()
     }
@@ -100,7 +101,7 @@ final class ShortcutStore: ObservableObject {
         if modifiers & UInt32(controlKey) != 0 { parts.append("⌃") }
         if modifiers & UInt32(optionKey) != 0 { parts.append("⌥") }
         if modifiers & UInt32(shiftKey) != 0 { parts.append("⇧") }
-        if modifiers & UInt32(commandKey) != 0 { parts.append("⌘") }
+        if modifiers & UInt32(cmdKey) != 0 { parts.append("⌘") }
 
         let keyString: String
         switch keyCode {

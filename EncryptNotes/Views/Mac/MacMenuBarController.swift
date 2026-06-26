@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 @MainActor
 final class MacMenuBarController: NSObject, NSMenuDelegate {

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct MacSettingsView: View {
     @ObservedObject private var shortcutStore = ShortcutStore.shared

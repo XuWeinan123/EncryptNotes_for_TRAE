@@ -19,17 +19,48 @@
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* EncryptNotes.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EncryptNotes.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000121 /* EncryptNotesTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EncryptNotesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000122 /* EncryptNotesMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EncryptNotesMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
 		000000000000000000000040 /* Exceptions for "EncryptNotes" folder in "EncryptNotes" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				App/Mac/EncryptNotesMacApp.swift,
+				App/Mac/MacAppDelegate.swift,
+				Stores/Mac/MacNoteWindowStore.swift,
+				Stores/Mac/ShortcutStore.swift,
+				Stores/Mac/SyncStatusStore.swift,
 				Tests/CryptoServiceTests.swift,
 				Tests/SchemaTests.swift,
 				Tests/VaultStoreTests.swift,
+				Views/Mac/AllNotesWindow.swift,
+				Views/Mac/LockedStickyNoteView.swift,
+				Views/Mac/MacMenuBarController.swift,
+				Views/Mac/MacSettingsView.swift,
+				Views/Mac/PlainStatusBadge.swift,
+				Views/Mac/StickyNoteEditorView.swift,
+				Views/Mac/StickyNoteWindow.swift,
+				Views/Mac/TrashWindow.swift,
 			);
 			target = 000000000000000100000000 /* EncryptNotes */;
+		};
+		000000000000000000000041 /* Exceptions for "EncryptNotes" folder in "EncryptNotesMac" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				App/EncryptNotesApp.swift,
+				ContentView.swift,
+				Info-Mac.plist,
+				Tests/CryptoServiceTests.swift,
+				Tests/SchemaTests.swift,
+				Tests/VaultStoreTests.swift,
+				Views/HomeView.swift,
+				Views/NoteEditorView.swift,
+				Views/SettingsView.swift,
+				Views/SidebarView.swift,
+				Views/TrashView.swift,
+			);
+			target = 000000000000000500000000 /* EncryptNotesMac */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -38,6 +69,7 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				000000000000000000000040 /* Exceptions for "EncryptNotes" folder in "EncryptNotes" target */,
+				000000000000000000000041 /* Exceptions for "EncryptNotes" folder in "EncryptNotesMac" target */,
 			);
 			path = EncryptNotes;
 			sourceTree = "<group>";
@@ -60,6 +92,11 @@
 			files = (
 			);
 		};
+		000000000000000530000000 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -77,6 +114,7 @@
 			children = (
 				000000000000000000000120 /* EncryptNotes.app */,
 				000000000000000000000121 /* EncryptNotesTests.xctest */,
+				000000000000000000000122 /* EncryptNotesMac.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -123,6 +161,24 @@
 			productReference = 000000000000000000000121 /* EncryptNotesTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		000000000000000500000000 /* EncryptNotesMac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 000000000000000510000000 /* Build configuration list for PBXNativeTarget "EncryptNotesMac" */;
+			buildPhases = (
+				000000000000000520000000 /* Sources */,
+				000000000000000530000000 /* Frameworks */,
+				000000000000000540000000 /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				000000000000000000000010 /* EncryptNotes */,
+			);
+			name = EncryptNotesMac;
+			productName = EncryptNotesMac;
+			productReference = 000000000000000000000122 /* EncryptNotesMac.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -139,6 +195,9 @@
 					000000000000000200000000 = {
 						CreatedOnToolsVersion = 26.3;
 						TestTargetID = 000000000000000100000000;
+					};
+					000000000000000500000000 = {
+						CreatedOnToolsVersion = 26.3;
 					};
 				};
 			};
@@ -158,6 +217,7 @@
 			targets = (
 				000000000000000100000000 /* EncryptNotes */,
 				000000000000000200000000 /* EncryptNotesTests */,
+				000000000000000500000000 /* EncryptNotesMac */,
 			);
 		};
 /* End PBXProject section */
@@ -173,6 +233,11 @@
 			files = (
 			);
 		};
+		000000000000000540000000 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -182,6 +247,11 @@
 			);
 		};
 		000000000000000220000000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
+		000000000000000520000000 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
 			);
@@ -467,6 +537,68 @@
 			};
 			name = Release;
 		};
+		000000000000000511000000 /* Debug configuration for PBXNativeTarget "EncryptNotesMac" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = EncryptNotes/EncryptNotesMac.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BPP589VP97;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readwrite;
+				INFOPLIST_FILE = EncryptNotes/Info-Mac.plist;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.biekanwo.EncryptNotesMac;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		000000000000000512000000 /* Release configuration for PBXNativeTarget "EncryptNotesMac" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = EncryptNotes/EncryptNotesMac.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BPP589VP97;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readwrite;
+				INFOPLIST_FILE = EncryptNotes/Info-Mac.plist;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.biekanwo.EncryptNotesMac;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -491,6 +623,14 @@
 			buildConfigurations = (
 				000000000000000211000000 /* Debug configuration for PBXNativeTarget "EncryptNotesTests" */,
 				000000000000000212000000 /* Release configuration for PBXNativeTarget "EncryptNotesTests" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		000000000000000510000000 /* Build configuration list for PBXNativeTarget "EncryptNotesMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				000000000000000511000000 /* Debug configuration for PBXNativeTarget "EncryptNotesMac" */,
+				000000000000000512000000 /* Release configuration for PBXNativeTarget "EncryptNotesMac" */,
 			);
 			defaultConfigurationName = Release;
 		};

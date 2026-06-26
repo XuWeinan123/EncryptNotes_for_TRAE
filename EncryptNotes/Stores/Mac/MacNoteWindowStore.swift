@@ -91,7 +91,7 @@ final class MacNoteWindowStore: ObservableObject {
 
     private func saveWindowState(for noteId: String) {
         guard let state = windowStates[noteId] else { return }
-        if let data = try? JSONEncoder().encode(state) {
+        if let data = try? JSONEncoder.encode(state) {
             defaults.set(data, forKey: windowStateKeyPrefix + noteId)
         }
     }
@@ -101,7 +101,7 @@ final class MacNoteWindowStore: ObservableObject {
         for (key, value) in defaults.dictionaryRepresentation() {
             guard key.hasPrefix(prefix),
                   let data = value as? Data,
-                  let state = try? JSONDecoder().decode(MacNoteWindowState.self, from: data) else {
+                  let state = try? JSONDecoder.decode(MacNoteWindowState.self, from: data) else {
                 continue
             }
             windowStates[state.noteId] = state
