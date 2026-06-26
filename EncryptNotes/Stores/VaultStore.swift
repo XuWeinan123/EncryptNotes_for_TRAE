@@ -518,8 +518,9 @@ final class VaultStore: ObservableObject {
 
     // MARK: - Note CRUD
 
-    /// 创建笔记。`isEncrypted = true` 时创建加密笔记，否则创建明文笔记。
-    func createNote(body: String, isEncrypted: Bool) async throws {
+    /// 创建笔记。`isEncrypted = true` 时创建加密笔记，否则创建明文笔记。返回创建好的 Note。
+    @discardableResult
+    func createNote(body: String, isEncrypted: Bool) async throws -> Note {
         guard let vaultId = currentVaultId else { throw VaultError.notReady }
 
         let noteId = UUID().uuidString
@@ -543,6 +544,7 @@ final class VaultStore: ObservableObject {
 
             let note = Note(from: payload, noteId: noteId, vaultId: vaultId)
             decryptedNotes.insert(note, at: 0)
+            return note
         } else {
             let plainFile = PlainNoteFile(
                 noteId: noteId,
@@ -565,6 +567,7 @@ final class VaultStore: ObservableObject {
                 isEncrypted: false
             )
             plainNotes.insert(note, at: 0)
+            return note
         }
     }
 

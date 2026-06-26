@@ -12,7 +12,7 @@ final class ShortcutStore: ObservableObject {
 
     private var plainHotKeyRef: EventHotKeyRef?
     private var encryptedHotKeyRef: EventHotKeyRef?
-    private var hotKeyID = EventHotKeyID()
+    private var eventHandlerRef: EventHandlerRef?
     private let defaults: UserDefaults
 
     private let plainKey = "mac.shortcut.newPlain"
@@ -63,20 +63,7 @@ final class ShortcutStore: ObservableObject {
         )
 
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        InstallEventHandler(GetApplicationEventTarget(), { (_, eventRef, _) -> OSStatus in
-            guard let eventRef = eventRef else { return noErr }
-            var hkID = EventHotKeyID()
-            GetEventParameter(eventRef, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &hkID)
-
-            Task { @MainActor in
-                if hkID.id == 1 {
-                    NotificationCenter.default.post(name: .macNewPlainNote, object: nil)
-                } else if hkID.id == 2 {
-                    NotificationCenter.default.post(name: .macNewEncryptedNote, object: nil)
-                }
-            }
-            return noErr
-        }, 1, &eventType, nil, nil)
+        InstallEventHandler(GetApplicationEventTarget(), hotKeyEventHandler, 1, &eventType, nil, &eventHandlerRef)
     }
 
     func unregisterHotKeys() {
@@ -87,6 +74,10 @@ final class ShortcutStore: ObservableObject {
         if let ref = encryptedHotKeyRef {
             UnregisterEventHotKey(ref)
             encryptedHotKeyRef = nil
+        }
+        if let handlerRef = eventHandlerRef {
+            RemoveEventHandler(handlerRef)
+            eventHandlerRef = nil
         }
     }
 
@@ -158,6 +149,22 @@ final class ShortcutStore: ObservableObject {
         let keyCode: UInt32
         let modifiers: UInt32
     }
+}
+
+private let hotKeyEventHandler: EventHandlerUPP = { (_, eventRef, _) -> OSStatus in
+    guard let eventRef = eventRef else { return noErr }
+    var hkID = EventHotKeyID()
+    GetEventParameter(eventRef, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &hkID)
+
+    let hotKeyID = hkID.id
+    DispatchQueue.main.async {
+        if hotKeyID == 1 {
+            NotificationCenter.default.post(name: .macNewPlainNote, object: nil)
+        } else if hotKeyID == 2 {
+            NotificationCenter.default.post(name: .macNewEncryptedNote, object: nil)
+        }
+    }
+    return noErr
 }
 
 extension Notification.Name {
