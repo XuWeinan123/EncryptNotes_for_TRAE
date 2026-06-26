@@ -21,7 +21,7 @@ final class StickyNoteWindowManager: NSObject {
     @objc private func applicationDidBecomeActive() {
         for (noteId, window) in noteWindows {
             if let state = MacNoteWindowStore.shared.windowState(for: noteId) {
-                window.level = state.isPinned ? .floating : .normal
+                applyWindowLevel(window, isPinned: state.isPinned)
             }
         }
     }
@@ -41,7 +41,7 @@ final class StickyNoteWindowManager: NSObject {
         let editorView = StickyNoteEditorView(note: note)
         let hostingView = NSHostingView(rootView: editorView)
 
-        let window = NSWindow(
+        let window = StickyNoteWindow(
             contentRect: NSRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
             backing: .buffered,
@@ -53,11 +53,14 @@ final class StickyNoteWindowManager: NSObject {
         window.isReleasedWhenClosed = false
         window.hidesOnDeactivate = false
         window.delegate = self
-        window.level = isPinned ? .floating : .normal
         window.identifier = NSUserInterfaceItemIdentifier(rawValue: note.id)
         window.setFrameAutosaveName("")
         window.isMovableByWindowBackground = true
         window.tabbingMode = .disallowed
+        window.standardWindowButton(.closeButton)?.isHidden = true
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
+        applyWindowLevel(window, isPinned: isPinned)
 
         noteWindows[note.id] = window
 
@@ -74,13 +77,13 @@ final class StickyNoteWindowManager: NSObject {
 
         MacNoteWindowStore.shared.openWindow(for: info.id)
         let windowState = MacNoteWindowStore.shared.windowState(for: info.id)
-        let frame = windowState?.frame ?? MacWindowFrame(x: 200, y: 200, width: 280, height: 200)
+        let frame = windowState?.frame ?? defaultWindowFrame()
         let isPinned = windowState?.isPinned ?? true
 
         let lockedView = LockedStickyNoteView(noteInfo: info)
         let hostingView = NSHostingView(rootView: lockedView)
 
-        let window = NSWindow(
+        let window = StickyNoteWindow(
             contentRect: NSRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
             backing: .buffered,
@@ -92,10 +95,13 @@ final class StickyNoteWindowManager: NSObject {
         window.isReleasedWhenClosed = false
         window.hidesOnDeactivate = false
         window.delegate = self
-        window.level = isPinned ? .floating : .normal
         window.identifier = NSUserInterfaceItemIdentifier(rawValue: info.id)
         window.isMovableByWindowBackground = true
         window.tabbingMode = .disallowed
+        window.standardWindowButton(.closeButton)?.isHidden = true
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
+        applyWindowLevel(window, isPinned: isPinned)
 
         noteWindows[info.id] = window
 
@@ -118,7 +124,18 @@ final class StickyNoteWindowManager: NSObject {
 
     func updateWindowLevel(for noteId: String, isPinned: Bool) {
         guard let window = noteWindows[noteId] else { return }
+        applyWindowLevel(window, isPinned: isPinned)
+    }
+
+    private func applyWindowLevel(_ window: NSWindow, isPinned: Bool) {
         window.level = isPinned ? .floating : .normal
+        if isPinned {
+            window.collectionBehavior.insert(.canJoinAllSpaces)
+            window.collectionBehavior.insert(.fullScreenAuxiliary)
+        } else {
+            window.collectionBehavior.remove(.canJoinAllSpaces)
+            window.collectionBehavior.remove(.fullScreenAuxiliary)
+        }
     }
 
     private func saveWindowFrame(_ window: NSWindow, noteId: String) {
@@ -136,8 +153,8 @@ final class StickyNoteWindowManager: NSObject {
 
     private func defaultWindowFrame() -> MacWindowFrame {
         let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let width: Double = 280
-        let height: Double = 320
+        let width: Double = 400
+        let height: Double = 250
         let x = screen.midX - width / 2
         let y = screen.midY - height / 2
         return MacWindowFrame(x: x, y: y, width: width, height: height)
@@ -171,7 +188,7 @@ extension StickyNoteWindowManager: NSWindowDelegate {
         guard let window = notification.object as? NSWindow,
               let id = window.identifier?.rawValue else { return }
         if let state = MacNoteWindowStore.shared.windowState(for: id) {
-            window.level = state.isPinned ? .floating : .normal
+            applyWindowLevel(window, isPinned: state.isPinned)
         }
     }
 
@@ -179,7 +196,12 @@ extension StickyNoteWindowManager: NSWindowDelegate {
         guard let window = notification.object as? NSWindow,
               let id = window.identifier?.rawValue else { return }
         if let state = MacNoteWindowStore.shared.windowState(for: id), state.isPinned {
-            window.level = .floating
+            applyWindowLevel(window, isPinned: true)
         }
     }
+}
+
+private final class StickyNoteWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
 }

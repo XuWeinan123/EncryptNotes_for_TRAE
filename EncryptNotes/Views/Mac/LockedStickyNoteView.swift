@@ -5,34 +5,37 @@ struct LockedStickyNoteView: View {
     let noteInfo: EncryptedNoteInfo
     @ObservedObject private var windowStore = MacNoteWindowStore.shared
     @ObservedObject private var vaultStore = VaultStore.shared
+    @ObservedObject private var syncStore = SyncStatusStore.shared
     @State private var showingDeleteConfirmation = false
 
+    private var isPinned: Bool {
+        windowStore.windowState(for: noteInfo.id)?.isPinned ?? true
+    }
+
     var body: some View {
-        VStack(spacing: DS.s4) {
-            HStack {
-                HStack(spacing: DS.s1) {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 10))
-                    Text("加密")
-                        .font(DS.caption())
+        VStack(spacing: 0) {
+            HStack(spacing: DS.s2) {
+                Button(action: {
+                    StickyNoteWindowManager.shared.closeWindow(for: noteInfo.id)
+                }) {
+                    Image(systemName: "xmark")
+                        .foregroundColor(DS.textSecondary)
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 16, height: 16)
                 }
-                .foregroundColor(DS.primary)
-                .padding(.horizontal, DS.s2)
-                .padding(.vertical, 2)
-                .background(
-                    RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
-                        .fill(DS.primaryContainer)
-                )
+                .buttonStyle(.plain)
+                .help("关闭")
 
                 Spacer()
 
-                Button(action: { togglePin() }) {
-                    Image(systemName: isPinned ? "pin.fill" : "pin")
-                        .foregroundColor(isPinned ? DS.primary : DS.textSecondary)
+                Button(action: {}) {
+                    Image(systemName: "lock.fill")
+                        .foregroundColor(DS.primary)
                         .font(.system(size: 12))
                 }
                 .buttonStyle(.plain)
-                .help(isPinned ? "取消置顶" : "置顶")
+                .disabled(true)
+                .help("加密笔记")
 
                 Button(action: { showingDeleteConfirmation = true }) {
                     Image(systemName: "trash")
@@ -41,15 +44,24 @@ struct LockedStickyNoteView: View {
                 }
                 .buttonStyle(.plain)
                 .help("移到回收站")
+
+                Button(action: { togglePin() }) {
+                    Image(systemName: isPinned ? "pin.fill" : "pin")
+                        .foregroundColor(isPinned ? DS.primary : DS.textSecondary)
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .help(isPinned ? "取消置顶" : "置顶")
             }
             .padding(.horizontal, DS.s3)
-            .padding(.top, DS.s3)
-
-            Spacer()
+            .padding(.top, DS.s2)
+            .padding(.bottom, DS.s1)
 
             VStack(spacing: DS.s3) {
+                Spacer()
+
                 Image(systemName: "lock.shield")
-                    .font(.system(size: 32))
+                    .font(.system(size: 28))
                     .foregroundColor(DS.textSubtle)
 
                 Text("这台 Mac 还没有当前加密空间的密钥。")
@@ -68,10 +80,26 @@ struct LockedStickyNoteView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .tint(DS.primary)
+
+                Spacer()
             }
             .padding(.horizontal, DS.s4)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Spacer()
+            if !syncStore.isNetworkAvailable {
+                HStack {
+                    Spacer()
+                    Text("无网络")
+                        .font(DS.caption())
+                        .foregroundColor(DS.destructive)
+                }
+                .padding(.horizontal, DS.s3)
+                .padding(.top, DS.s1)
+                .padding(.bottom, DS.s2)
+            } else {
+                Spacer()
+                    .frame(height: DS.s2)
+            }
         }
         .dsStickyNoteWindow()
         .alert(isPresented: $showingDeleteConfirmation) {
@@ -87,10 +115,6 @@ struct LockedStickyNoteView: View {
                 secondaryButton: .cancel()
             )
         }
-    }
-
-    private var isPinned: Bool {
-        windowStore.windowState(for: noteInfo.id)?.isPinned ?? true
     }
 
     private func togglePin() {
