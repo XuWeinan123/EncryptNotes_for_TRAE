@@ -49,10 +49,11 @@ final class StickyNoteWindowManager: NSObject {
 
         let window = StickyNoteWindow(
             contentRect: NSRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height),
-            styleMask: [.borderless, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
+        window.title = windowTitle(for: note.body)
         window.contentView = hostingView
         configure(window, noteId: note.id)
         applyWindowLevel(window, isPinned: isPinned)
@@ -119,10 +120,11 @@ final class StickyNoteWindowManager: NSObject {
 
         let window = StickyNoteWindow(
             contentRect: NSRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height),
-            styleMask: [.borderless, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
+        window.title = "加密笔记"
         window.contentView = hostingView
         configure(window, noteId: info.id)
         applyWindowLevel(window, isPinned: isPinned)
@@ -149,6 +151,10 @@ final class StickyNoteWindowManager: NSObject {
     func updateWindowLevel(for noteId: String, isPinned: Bool) {
         guard let window = noteWindows[noteId] else { return }
         applyWindowLevel(window, isPinned: isPinned)
+    }
+
+    func updateWindowTitle(for noteId: String, title: String) {
+        noteWindows[noteId]?.title = title
     }
 
     private func applyWindowLevel(_ window: NSWindow, isPinned: Bool) {
@@ -183,16 +189,42 @@ final class StickyNoteWindowManager: NSObject {
         window.setFrameAutosaveName("")
         window.isMovableByWindowBackground = true
         window.tabbingMode = .disallowed
-        window.isOpaque = false
-        window.backgroundColor = .clear
+        window.isOpaque = true
+        window.backgroundColor = .textBackgroundColor
         window.hasShadow = true
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        if #available(macOS 11.0, *) {
+            window.toolbarStyle = .unified
+            window.titlebarSeparatorStyle = .none
+        }
+        installSoftScrollEdgeAccessoryIfAvailable(on: window)
         window.minSize = NSSize(
             width: Self.minimumContentSize.width,
             height: Self.minimumContentSize.height
         )
-        window.standardWindowButton(.closeButton)?.isHidden = true
-        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
-        window.standardWindowButton(.zoomButton)?.isHidden = true
+        window.standardWindowButton(.closeButton)?.isHidden = false
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = false
+        window.standardWindowButton(.zoomButton)?.isHidden = false
+    }
+
+    private func installSoftScrollEdgeAccessoryIfAvailable(on window: NSWindow) {
+        guard #available(macOS 26.1, *) else { return }
+
+        let accessory = SoftScrollEdgeTitlebarAccessoryController()
+        accessory.layoutAttribute = .bottom
+        accessory.automaticallyAdjustsSize = false
+        accessory.preferredScrollEdgeEffectStyle = .soft
+        window.addTitlebarAccessoryViewController(accessory)
+    }
+
+    private func windowTitle(for body: String) -> String {
+        let firstLine = body
+            .split(whereSeparator: \.isNewline)
+            .first
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return firstLine?.isEmpty == false ? firstLine! : ""
     }
 
     private func defaultWindowFrame() -> MacWindowFrame {
@@ -256,6 +288,16 @@ extension StickyNoteWindowManager: NSWindowDelegate {
 private final class StickyNoteWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+}
+
+@available(macOS 26.1, *)
+private final class SoftScrollEdgeTitlebarAccessoryController: NSTitlebarAccessoryViewController {
+    override func loadView() {
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 1, height: 1))
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.clear.cgColor
+        self.view = view
+    }
 }
 
 struct MacWindowDragRegion: NSViewRepresentable {

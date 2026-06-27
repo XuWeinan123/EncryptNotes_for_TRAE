@@ -14,56 +14,6 @@ struct LockedStickyNoteView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: DS.s2) {
-                Button(action: {
-                    StickyNoteWindowManager.shared.closeWindow(for: noteInfo.id)
-                }) {
-                    Image(systemName: "xmark")
-                        .foregroundColor(DS.textSecondary)
-                        .font(.system(size: 11, weight: .semibold))
-                        .frame(width: 16, height: 16)
-                }
-                .buttonStyle(.plain)
-                .help("关闭")
-
-                Spacer()
-
-                Button(action: {}) {
-                    Image(systemName: "lock.fill")
-                        .foregroundColor(DS.primary)
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
-                .disabled(true)
-                .help("加密笔记")
-
-                Rectangle()
-                    .fill(DS.line)
-                    .frame(width: 0.5, height: 14)
-                    .padding(.horizontal, DS.s1)
-
-                Button(action: { showingDeleteConfirmation = true }) {
-                    Image(systemName: "trash")
-                        .foregroundColor(DS.textSecondary)
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
-                .help("移到回收站")
-
-                Button(action: { togglePin() }) {
-                    Image(systemName: isPinned ? "pin.fill" : "pin")
-                        .foregroundColor(isPinned ? DS.primary : DS.textSecondary)
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
-                .help(isPinned ? "取消置顶" : "置顶")
-            }
-            .padding(.horizontal, DS.s4)
-            .padding(.top, DS.s3)
-            .padding(.bottom, DS.s1)
-            .frame(minHeight: 40)
-            .background(MacWindowDragRegion())
-
             VStack(spacing: DS.s3) {
                 Spacer()
 
@@ -91,6 +41,7 @@ struct LockedStickyNoteView: View {
                 Spacer()
             }
             .padding(.horizontal, DS.s4)
+            .padding(.top, 80)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if !syncStore.isNetworkAvailable {
@@ -108,7 +59,41 @@ struct LockedStickyNoteView: View {
                     .frame(height: DS.s2)
             }
         }
-        .dsStickyNoteWindow()
+        .background(Color(nsColor: .textBackgroundColor))
+        .toolbar {
+            ToolbarItemGroup(placement: .navigation) {
+                Text("加密笔记")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.secondary)
+
+                Button(action: {}) {
+                    Label("加密笔记", systemImage: "lock.fill")
+                }
+                .labelStyle(.iconOnly)
+                .controlSize(.large)
+                .disabled(true)
+                .help("加密笔记")
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: { showingDeleteConfirmation = true }) {
+                    Label("移到回收站", systemImage: "trash")
+                }
+                .labelStyle(.iconOnly)
+                .controlSize(.large)
+                .help("移到回收站")
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: { togglePin() }) {
+                    Label(isPinned ? "取消置顶" : "置顶",
+                          systemImage: isPinned ? "pin.fill" : "pin")
+                }
+                .labelStyle(.iconOnly)
+                .controlSize(.large)
+                .help(isPinned ? "取消置顶" : "置顶")
+            }
+        }
         .alert(isPresented: $showingDeleteConfirmation) {
             Alert(
                 title: Text("删除这条加密笔记？"),

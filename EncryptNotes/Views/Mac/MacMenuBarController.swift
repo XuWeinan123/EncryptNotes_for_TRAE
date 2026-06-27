@@ -141,11 +141,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
                 }
             } catch {
                 await MainActor.run {
-                    if case VaultError.freeLimitReached = error {
-                        showError(message: "免费版最多保存 20 条笔记，请先删除部分笔记或升级 Pro。")
-                    } else {
-                        showError(message: error.localizedDescription)
-                    }
+                    showError(message: error.localizedDescription)
                 }
             }
         }
@@ -257,7 +253,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         if settingsWindow == nil {
             let hostingView = NSHostingView(rootView: MacSettingsView())
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 420, height: 360),
+                contentRect: NSRect(x: 0, y: 0, width: 460, height: 400),
                 styleMask: [.titled, .closable, .resizable],
                 backing: .buffered,
                 defer: false

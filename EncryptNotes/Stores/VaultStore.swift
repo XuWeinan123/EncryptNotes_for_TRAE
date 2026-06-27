@@ -703,6 +703,26 @@ final class VaultStore: ObservableObject {
         trashNotes = try loadTrashNotes()
     }
 
+    /// 丢弃空白新笔记：直接删除原文件，不进入回收站。
+    func discardEmptyNote(_ note: Note) async throws {
+        guard note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        if note.isEncrypted {
+            if let url = storage.noteFileURL(for: note.id),
+               FileManager.default.fileExists(atPath: url.path) {
+                try storage.permanentlyDeleteFile(at: url)
+            }
+            decryptedNotes.removeAll { $0.id == note.id }
+            lockedEncryptedNotes.removeAll { $0.id == note.id }
+        } else {
+            if let url = storage.plainNoteFileURL(for: note.id),
+               FileManager.default.fileExists(atPath: url.path) {
+                try storage.permanentlyDeleteFile(at: url)
+            }
+            plainNotes.removeAll { $0.id == note.id }
+        }
+    }
+
     /// 删除未解密加密笔记（通过 EncryptedNoteInfo）。
     func deleteLockedNote(_ info: EncryptedNoteInfo) async throws {
         let now = Date()

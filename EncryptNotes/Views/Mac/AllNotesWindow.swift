@@ -16,22 +16,30 @@ struct AllNotesView: View {
                         .foregroundColor(DS.textSubtle)
                     TextField("搜索笔记…", text: $searchText)
                         .textFieldStyle(.plain)
+                        .font(DS.body())
                 }
-                .padding(DS.s2)
-                .background(DS.surfaceSunken)
-                .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+                .padding(.horizontal, DS.s3)
+                .padding(.vertical, DS.s2)
+                .dsInputSurface()
 
                 Button(action: { showingClearEmptyConfirmation = true }) {
                     Image(systemName: "trash")
                     Text("清空空笔记")
                 }
                 .font(DS.caption())
-                .foregroundColor(emptyNotes.isEmpty ? DS.textSubtle : DS.destructive)
-                .buttonStyle(.plain)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(DS.destructive)
                 .disabled(emptyNotes.isEmpty || isClearingEmptyNotes)
                 .help(emptyNotes.isEmpty ? "没有空笔记" : "将空笔记移到回收站")
             }
             .padding(DS.s3)
+            .background(DS.surfaceRaised)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(DS.line)
+                    .frame(height: 0.5)
+            }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: DS.s1) {
@@ -45,6 +53,7 @@ struct AllNotesView: View {
                     }
                 }
                 .padding(.horizontal, DS.s3)
+                .padding(.top, DS.s2)
             }
             .padding(.bottom, DS.s2)
 
@@ -65,6 +74,8 @@ struct AllNotesView: View {
                 }
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(DS.bg)
         }
         .background(DS.bg)
         .alert(isPresented: $showingClearEmptyConfirmation) {
@@ -112,12 +123,16 @@ struct AllNotesView: View {
             Text(name)
                 .font(DS.caption())
                 .padding(.horizontal, DS.s2)
-                .padding(.vertical, 3)
+                .padding(.vertical, DS.s1)
                 .background(
                     RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
-                        .fill(isSelected ? DS.primaryContainer : DS.surfaceSunken)
+                        .fill(isSelected ? DS.primaryContainer : DS.surfaceCard)
                 )
-                .foregroundColor(isSelected ? DS.primary : DS.textSecondary)
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
+                        .stroke(isSelected ? DS.primary.opacity(0.24) : DS.line, lineWidth: 0.5)
+                )
+                .foregroundColor(isSelected ? DS.primaryDeep : DS.textSecondary)
         }
         .buttonStyle(.plain)
     }
@@ -128,7 +143,7 @@ struct AllNotesView: View {
         case .readable(let note):
             HStack {
                 Image(systemName: note.isEncrypted ? "lock.fill" : "doc.text")
-                    .foregroundColor(note.isEncrypted ? DS.primary : DS.textSubtle)
+                    .foregroundColor(note.isEncrypted ? DS.primaryDeep : DS.textSubtle)
                     .font(.system(size: 12))
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -148,7 +163,12 @@ struct AllNotesView: View {
                     .font(DS.caption())
                     .foregroundColor(DS.textSubtle)
             }
-            .padding(.vertical, DS.s1)
+            .padding(.horizontal, DS.s2)
+            .padding(.vertical, DS.s2)
+            .dsInputSurface()
+            .listRowInsets(EdgeInsets(top: DS.s1, leading: DS.s3, bottom: DS.s1, trailing: DS.s3))
+            .listRowSeparator(.hidden)
+            .listRowBackground(DS.bg)
 
         case .locked(let info):
             HStack {
@@ -172,7 +192,12 @@ struct AllNotesView: View {
                     .font(DS.caption())
                     .foregroundColor(DS.textSubtle)
             }
-            .padding(.vertical, DS.s1)
+            .padding(.horizontal, DS.s2)
+            .padding(.vertical, DS.s2)
+            .dsInputSurface()
+            .listRowInsets(EdgeInsets(top: DS.s1, leading: DS.s3, bottom: DS.s1, trailing: DS.s3))
+            .listRowSeparator(.hidden)
+            .listRowBackground(DS.bg)
         }
     }
 
