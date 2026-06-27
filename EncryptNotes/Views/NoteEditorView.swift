@@ -272,8 +272,10 @@ private class PlaceholderTextView: UITextView {
         isEditable = true
         isSelectable = true
         backgroundColor = .clear
-        isScrollEnabled = true
-        alwaysBounceVertical = true
+        isScrollEnabled = false
+        showsVerticalScrollIndicator = false
+        showsHorizontalScrollIndicator = false
+        alwaysBounceVertical = false
         autocapitalizationType = .sentences
         smartDashesType = .no
         smartQuotesType = .no

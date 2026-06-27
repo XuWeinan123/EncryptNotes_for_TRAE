@@ -259,7 +259,8 @@ struct MacTextView: NSViewRepresentable {
         let container = NSView()
 
         let scrollView = NSScrollView()
-        scrollView.hasVerticalScroller = true
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = false
         scrollView.scrollerStyle = .overlay
