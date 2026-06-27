@@ -15,6 +15,14 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
 
         Task {
             await VaultStore.shared.initialize()
+            #if DEBUG
+            if CommandLine.arguments.contains("--open-recent-note"),
+               let note = VaultStore.shared.readableNotes.first(where: {
+                   !$0.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+               }) {
+                StickyNoteWindowManager.shared.showNote(note)
+            }
+            #endif
         }
     }
 

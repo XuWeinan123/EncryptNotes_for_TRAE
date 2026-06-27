@@ -22,12 +22,11 @@ struct StickyNoteEditorView: View {
                 text: $viewModel.text,
                 contentInsets: NSEdgeInsets(
                     top: 0,
-                    left: 0,
+                    left: Layout.editorHorizontalInset,
                     bottom: Layout.editorBottomInset,
-                    right: 0
+                    right: Layout.editorHorizontalInset
                 )
             )
-                .padding(.horizontal, Layout.editorHorizontalInset)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if !syncStore.isNetworkAvailable {
@@ -39,6 +38,9 @@ struct StickyNoteEditorView: View {
             }
         }
         .background(Color(nsColor: .textBackgroundColor))
+        // 内容延伸到工具栏下方供系统玻璃采样；首行留白由 MacTextView 计算。
+        .ignoresSafeArea()
+        .dsMacStickyToolbarScrollEdge()
         .navigationTitle("")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -47,8 +49,9 @@ struct StickyNoteEditorView: View {
                         viewModel.didCopy ? "已复制" : "复制",
                         systemImage: viewModel.didCopy ? "checkmark" : "square.on.square"
                     )
+                    .labelStyle(.iconOnly)
+                    .frame(width: DS.macToolbarIconWidth)
                 }
-                .labelStyle(.iconOnly)
                 .help(viewModel.didCopy ? "已复制" : "复制")
 
                 Menu {
@@ -58,20 +61,18 @@ struct StickyNoteEditorView: View {
                     }
                 } label: {
                     Label("更多", systemImage: "ellipsis")
+                        .labelStyle(.iconOnly)
+                        .frame(width: DS.macToolbarIconWidth)
                 }
-                .labelStyle(.iconOnly)
                 .menuIndicator(.hidden)
                 .help("更多")
-            }
 
-            ToolbarSpacer(.fixed)
-
-            ToolbarItem(placement: .primaryAction) {
                 if viewModel.isPinned {
                     Button(action: { viewModel.togglePin() }) {
                         Label("取消置顶", systemImage: "pin.fill")
+                            .labelStyle(.iconOnly)
+                            .frame(width: DS.macToolbarIconWidth)
                     }
-                    .labelStyle(.iconOnly)
                     .help("取消置顶")
                     .buttonStyle(.glassProminent)
                     .buttonBorderShape(.circle)
@@ -79,9 +80,12 @@ struct StickyNoteEditorView: View {
                 } else {
                     Button(action: { viewModel.togglePin() }) {
                         Label("置顶", systemImage: "pin.fill")
+                            .labelStyle(.iconOnly)
+                            .frame(width: DS.macToolbarIconWidth)
                     }
-                    .labelStyle(.iconOnly)
                     .help("置顶")
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
                 }
             }
         }
@@ -336,15 +340,12 @@ private final class AutoFocusTextView: NSTextView {
         guard string.isEmpty else { return }
 
         let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.minimumLineHeight = MacTextViewMetrics.lineHeight
-        paragraphStyle.maximumLineHeight = MacTextViewMetrics.lineHeight
         paragraphStyle.alignment = .left
 
         let attrs: [NSAttributedString.Key: Any] = [
             .font: MacTextViewMetrics.font,
             .foregroundColor: placeholderColor,
-            .paragraphStyle: paragraphStyle,
-            .baselineOffset: MacTextViewMetrics.baselineOffset
+            .paragraphStyle: paragraphStyle
         ]
 
         let inset = textContainerInset
@@ -355,9 +356,40 @@ private final class AutoFocusTextView: NSTextView {
 
 private enum MacTextViewMetrics {
     static let font = NSFont.systemFont(ofSize: 14)
-    static let naturalLineHeight = ceil(font.ascender - font.descender + font.leading)
-    static let lineHeight = ceil(naturalLineHeight * 1.25)
-    static let baselineOffset = (lineHeight - naturalLineHeight) / 2
+}
+
+/// 正文延伸到工具栏下方，同时按窗口实测标题栏高度补齐首行留白。
+private final class ToolbarInsetScrollView: NSScrollView {
+    var baseInsets = NSEdgeInsets() {
+        didSet { applyToolbarTopInset() }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        applyToolbarTopInset()
+    }
+
+    override func layout() {
+        super.layout()
+        applyToolbarTopInset()
+    }
+
+    private func applyToolbarTopInset() {
+        let top: CGFloat
+        if let window = window {
+            top = max(0, window.frame.height - window.contentLayoutRect.height)
+        } else {
+            top = baseInsets.top
+        }
+        let target = NSEdgeInsets(top: top, left: baseInsets.left, bottom: baseInsets.bottom, right: baseInsets.right)
+        guard !insetsEqual(contentInsets, target) else { return }
+        contentInsets = target
+        scrollerInsets = target
+    }
+
+    private func insetsEqual(_ a: NSEdgeInsets, _ b: NSEdgeInsets) -> Bool {
+        a.top == b.top && a.left == b.left && a.bottom == b.bottom && a.right == b.right
+    }
 }
 
 struct MacTextView: NSViewRepresentable {
@@ -370,10 +402,7 @@ struct MacTextView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSView {
-        let container = NSView()
-        container.autoresizesSubviews = true
-
-        let scrollView = NSScrollView()
+        let scrollView = ToolbarInsetScrollView()
         scrollView.hasVerticalScroller = false
         scrollView.hasHorizontalScroller = false
         scrollView.borderType = .noBorder
@@ -381,9 +410,8 @@ struct MacTextView: NSViewRepresentable {
         scrollView.scrollerStyle = .overlay
         scrollView.autoresizesSubviews = true
         scrollView.autoresizingMask = [.width, .height]
-        scrollView.automaticallyAdjustsContentInsets = true
-        scrollView.contentInsets = contentInsets
-        scrollView.scrollerInsets = contentInsets
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.baseInsets = contentInsets
 
         let textView = AutoFocusTextView()
         textView.placeholder = placeholder
@@ -400,7 +428,7 @@ struct MacTextView: NSViewRepresentable {
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
-        textView.textContainerInset = NSSize(width: 4, height: 4)
+        textView.textContainerInset = NSSize(width: 4, height: 6)
         textView.allowsUndo = true
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
@@ -412,19 +440,15 @@ struct MacTextView: NSViewRepresentable {
         context.coordinator.textView = textView
 
         scrollView.documentView = textView
-        scrollView.frame = container.bounds
-        container.addSubview(scrollView)
-
-        return container
+        return scrollView
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        guard let scrollView = nsView.subviews.first as? NSScrollView,
+        guard let scrollView = nsView as? ToolbarInsetScrollView,
               let textView = scrollView.documentView as? AutoFocusTextView else { return }
 
-        scrollView.automaticallyAdjustsContentInsets = true
-        scrollView.contentInsets = contentInsets
-        scrollView.scrollerInsets = contentInsets
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.baseInsets = contentInsets
         textView.placeholder = placeholder
 
         if textView.string != text && !context.coordinator.isUpdating {
@@ -439,14 +463,11 @@ struct MacTextView: NSViewRepresentable {
 
     private static func applyParagraphStyle(to textView: NSTextView) {
         let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.minimumLineHeight = MacTextViewMetrics.lineHeight
-        paragraphStyle.maximumLineHeight = MacTextViewMetrics.lineHeight
         textView.defaultParagraphStyle = paragraphStyle
         textView.typingAttributes = [
             .font: MacTextViewMetrics.font,
             .foregroundColor: NSColor(DS.textBody),
-            .paragraphStyle: paragraphStyle,
-            .baselineOffset: MacTextViewMetrics.baselineOffset
+            .paragraphStyle: paragraphStyle
         ]
     }
 

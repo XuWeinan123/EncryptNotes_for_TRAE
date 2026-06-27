@@ -6,6 +6,9 @@ import AppKit
 final class StickyNoteWindowManager: NSObject {
     static let shared = StickyNoteWindowManager()
     private static let minimumContentSize = CGSize(width: 200, height: 200)
+    // 统一标题栏负责稳定 toolbar placement；fullSizeContentView 让内容延伸到玻璃下方。
+    static let windowStyleMask: NSWindow.StyleMask =
+        [.titled, .closable, .miniaturizable, .resizable, .unifiedTitleAndToolbar, .fullSizeContentView]
 
     private var noteWindows: [String: NSWindow] = [:]
 
@@ -49,7 +52,7 @@ final class StickyNoteWindowManager: NSObject {
 
         let window = StickyNoteWindow(
             contentRect: NSRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            styleMask: Self.windowStyleMask,
             backing: .buffered,
             defer: false
         )
@@ -120,7 +123,7 @@ final class StickyNoteWindowManager: NSObject {
 
         let window = StickyNoteWindow(
             contentRect: NSRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            styleMask: Self.windowStyleMask,
             backing: .buffered,
             defer: false
         )
@@ -192,13 +195,11 @@ final class StickyNoteWindowManager: NSObject {
         window.isOpaque = true
         window.backgroundColor = .textBackgroundColor
         window.hasShadow = true
-        window.titleVisibility = .hidden
+        // 可见标题区是 .primaryAction 工具栏项稳定停靠尾部的布局锚点。
+        window.titleVisibility = .visible
         window.titlebarAppearsTransparent = true
-        if #available(macOS 11.0, *) {
-            window.toolbarStyle = .unified
-            window.titlebarSeparatorStyle = .none
-        }
-        installSoftScrollEdgeAccessoryIfAvailable(on: window)
+        window.toolbarStyle = .unified
+        window.titlebarSeparatorStyle = .automatic
         window.minSize = NSSize(
             width: Self.minimumContentSize.width,
             height: Self.minimumContentSize.height
@@ -206,16 +207,6 @@ final class StickyNoteWindowManager: NSObject {
         window.standardWindowButton(.closeButton)?.isHidden = false
         window.standardWindowButton(.miniaturizeButton)?.isHidden = false
         window.standardWindowButton(.zoomButton)?.isHidden = false
-    }
-
-    private func installSoftScrollEdgeAccessoryIfAvailable(on window: NSWindow) {
-        guard #available(macOS 26.1, *) else { return }
-
-        let accessory = SoftScrollEdgeTitlebarAccessoryController()
-        accessory.layoutAttribute = .bottom
-        accessory.automaticallyAdjustsSize = false
-        accessory.preferredScrollEdgeEffectStyle = .soft
-        window.addTitlebarAccessoryViewController(accessory)
     }
 
     private func windowTitle(for body: String) -> String {
@@ -288,16 +279,6 @@ extension StickyNoteWindowManager: NSWindowDelegate {
 private final class StickyNoteWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
-}
-
-@available(macOS 26.1, *)
-private final class SoftScrollEdgeTitlebarAccessoryController: NSTitlebarAccessoryViewController {
-    override func loadView() {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 1, height: 1))
-        view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.clear.cgColor
-        self.view = view
-    }
 }
 
 struct MacWindowDragRegion: NSViewRepresentable {

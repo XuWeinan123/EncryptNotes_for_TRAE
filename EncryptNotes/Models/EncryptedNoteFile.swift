@@ -5,7 +5,7 @@ import Foundation
 /// 外层 JSON 只保存元数据；正文、标签只能存在于加密 `payload` 内，
 /// 不得写入外层 JSON。`deleted_at` / `purge_after` / `original_location`
 /// 用于回收站与未来文件夹恢复，主列表中的笔记这三个字段为 nil。
-struct EncryptedNoteFile: Codable {
+struct EncryptedNoteFile: Codable, Sendable {
     let version: Int
     let app: String
     let type: String
@@ -30,7 +30,7 @@ struct EncryptedNoteFile: Codable {
         case originalLocation = "original_location"
     }
 
-    struct EncryptionMetadata: Codable {
+    struct EncryptionMetadata: Codable, Sendable {
         let algorithm: String
         let keyVersion: Int
         let nonce: String
@@ -42,7 +42,7 @@ struct EncryptedNoteFile: Codable {
         }
     }
 
-    struct EncryptionPayload: Codable {
+    struct EncryptionPayload: Codable, Sendable {
         let ciphertext: String
         let tag: String
     }

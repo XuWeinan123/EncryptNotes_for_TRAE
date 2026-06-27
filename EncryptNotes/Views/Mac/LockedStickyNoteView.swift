@@ -60,6 +60,7 @@ struct LockedStickyNoteView: View {
             }
         }
         .background(Color(nsColor: .textBackgroundColor))
+        .dsMacStickyToolbarScrollEdge()
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Text("加密笔记")
@@ -78,20 +79,36 @@ struct LockedStickyNoteView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { showingDeleteConfirmation = true }) {
                     Label("移到回收站", systemImage: "trash")
+                        .labelStyle(.iconOnly)
+                        .frame(width: DS.macToolbarIconWidth)
                 }
-                .labelStyle(.iconOnly)
                 .controlSize(.large)
                 .help("移到回收站")
             }
 
             ToolbarItem(placement: .primaryAction) {
-                Button(action: { togglePin() }) {
-                    Label(isPinned ? "取消置顶" : "置顶",
-                          systemImage: isPinned ? "pin.fill" : "pin")
+                if isPinned {
+                    Button(action: { togglePin() }) {
+                        Label("取消置顶", systemImage: "pin.fill")
+                            .labelStyle(.iconOnly)
+                            .frame(width: DS.macToolbarIconWidth)
+                    }
+                    .controlSize(.large)
+                    .help("取消置顶")
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.circle)
+                    .tint(DS.primary)
+                } else {
+                    Button(action: { togglePin() }) {
+                        Label("置顶", systemImage: "pin.fill")
+                            .labelStyle(.iconOnly)
+                            .frame(width: DS.macToolbarIconWidth)
+                    }
+                    .controlSize(.large)
+                    .help("置顶")
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
                 }
-                .labelStyle(.iconOnly)
-                .controlSize(.large)
-                .help(isPinned ? "取消置顶" : "置顶")
             }
         }
         .alert(isPresented: $showingDeleteConfirmation) {

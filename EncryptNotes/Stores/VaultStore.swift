@@ -61,6 +61,15 @@ final class VaultStore: ObservableObject {
     private var currentVaultId: String?
     private var currentKey: CryptoKit.SymmetricKey?
 
+    private struct LoadedNotesSnapshot {
+        let currentKey: CryptoKit.SymmetricKey?
+        let resetPreferredModeToPlain: Bool
+        let plainNotes: [Note]
+        let decryptedNotes: [Note]
+        let lockedEncryptedNotes: [EncryptedNoteInfo]
+        let trashNotes: [TrashNote]
+    }
+
     // MARK: - Init
 
     init(storage: VaultStorage? = nil) {
@@ -202,51 +211,96 @@ final class VaultStore: ObservableObject {
     /// 加载所有笔记：明文笔记 + 加密笔记（按密钥是否加载决定解密或展示为乱码）。
     private func loadAllNotes() async {
         do {
-            if let vaultId = currentVaultId,
+            let vaultId = currentVaultId
+            let preferredMode = settings.preferredNoteMode
+            let containerURL = storage.containerURL
+            let loadedKey: CryptoKit.SymmetricKey?
+
+            if let vaultId,
                let keyMaterial = try? keychainStore.loadKey(forVaultId: vaultId),
-               let loadedKey = try? keyManager.keyFromBase64(keyMaterial) {
-                currentKey = loadedKey
+               let key = try? keyManager.keyFromBase64(keyMaterial) {
+                loadedKey = key
             } else {
-                currentKey = nil
-                if settings.preferredNoteMode == .encrypted {
-                    settings.preferredNoteMode = .plain
-                }
+                loadedKey = nil
             }
 
-            // 明文笔记
-            plainNotes = try loadPlainNotesFromDisk()
+            let snapshot = try await Task.detached(priority: .userInitiated) {
+                try Self.loadNotesSnapshot(
+                    containerURL: containerURL,
+                    currentKey: loadedKey,
+                    preferredMode: preferredMode,
+                )
+            }.value
 
-            // 加密笔记
-            let noteURLs = try storage.listNoteFiles()
-            if let key = currentKey {
-                var decrypted: [Note] = []
-                var locked: [EncryptedNoteInfo] = []
-                for url in noteURLs {
-                    let file = try storage.loadNoteFile(at: url)
-                    if let note = try? cryptoService.decryptNote(file: file, using: key) {
-                        decrypted.append(note)
-                    } else {
-                        // 单条解密失败时降级为乱码卡片，不阻断整体加载
-                        locked.append(makeLockedInfo(from: file, url: url))
-                    }
-                }
-                decryptedNotes = decrypted
-                lockedEncryptedNotes = locked
-            } else {
-                decryptedNotes = []
-                lockedEncryptedNotes = try noteURLs.map { url in
-                    let file = try storage.loadNoteFile(at: url)
-                    return makeLockedInfo(from: file, url: url)
-                }
+            currentKey = snapshot.currentKey
+            if snapshot.resetPreferredModeToPlain {
+                settings.preferredNoteMode = .plain
             }
-
-            trashNotes = try loadTrashNotes()
+            plainNotes = snapshot.plainNotes
+            decryptedNotes = snapshot.decryptedNotes
+            lockedEncryptedNotes = snapshot.lockedEncryptedNotes
+            trashNotes = snapshot.trashNotes
         } catch {
             state = .error(message: error.localizedDescription)
         }
     }
 
+    nonisolated private static func loadNotesSnapshot(
+        containerURL: URL?,
+        currentKey: CryptoKit.SymmetricKey?,
+        preferredMode: NoteMode
+    ) throws -> LoadedNotesSnapshot {
+        guard let containerURL else {
+            throw StorageError.iCloudUnavailable
+        }
+
+        let resetPreferredModeToPlain = currentKey == nil && preferredMode == .encrypted
+        let plainNotes = try loadPlainNotesFromDisk(containerURL: containerURL)
+        let noteURLs = try listFiles(
+            in: containerURL.appendingPathComponent("notes"),
+            suffix: ".bkwenc.json"
+        )
+
+        let decryptedNotes: [Note]
+        let lockedEncryptedNotes: [EncryptedNoteInfo]
+
+        if let key = currentKey {
+            var decrypted: [Note] = []
+            var locked: [EncryptedNoteInfo] = []
+            for url in noteURLs {
+                let file: EncryptedNoteFile = try loadJSON(at: url)
+                if let note = try? decryptNote(file: file, using: key) {
+                    decrypted.append(note)
+                } else {
+                    // 单条解密失败时降级为乱码卡片，不阻断整体加载
+                    locked.append(makeLockedInfo(from: file, url: url))
+                }
+            }
+            decryptedNotes = decrypted
+            lockedEncryptedNotes = locked
+        } else {
+            decryptedNotes = []
+            lockedEncryptedNotes = try noteURLs.map { url in
+                let file: EncryptedNoteFile = try loadJSON(at: url)
+                return makeLockedInfo(from: file, url: url)
+            }
+        }
+
+        return LoadedNotesSnapshot(
+            currentKey: currentKey,
+            resetPreferredModeToPlain: resetPreferredModeToPlain,
+            plainNotes: plainNotes,
+            decryptedNotes: decryptedNotes,
+            lockedEncryptedNotes: lockedEncryptedNotes,
+            trashNotes: try loadTrashNotes(containerURL: containerURL, key: currentKey)
+        )
+    }
+
     private func makeLockedInfo(from file: EncryptedNoteFile, url: URL) -> EncryptedNoteInfo {
+        Self.makeLockedInfo(from: file, url: url)
+    }
+
+    nonisolated private static func makeLockedInfo(from file: EncryptedNoteFile, url: URL) -> EncryptedNoteInfo {
         let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
         let size = attrs[.size] as? Int ?? 0
         let preview = String(file.payload.ciphertext.prefix(50))
@@ -260,27 +314,47 @@ final class VaultStore: ObservableObject {
     }
 
     private func loadPlainNotesFromDisk() throws -> [Note] {
-        let plainURLs = try storage.listPlainNoteFiles()
+        guard let containerURL = storage.containerURL else {
+            throw StorageError.iCloudUnavailable
+        }
+        return try Self.loadPlainNotesFromDisk(containerURL: containerURL)
+    }
+
+    nonisolated private static func loadPlainNotesFromDisk(containerURL: URL) throws -> [Note] {
+        let plainURLs = try listFiles(
+            in: containerURL.appendingPathComponent("notes"),
+            suffix: ".bkwplain.json"
+        )
         var loaded: [Note] = []
         for url in plainURLs {
-            let file = try storage.loadPlainNoteFile(at: url)
-            loaded.append(file.toNote())
+            let file: PlainNoteFile = try loadJSON(at: url)
+            loaded.append(makePlainNote(from: file))
         }
         return loaded.sorted { $0.updatedAt > $1.updatedAt }
     }
 
     private func loadTrashNotes() throws -> [TrashNote] {
+        guard let containerURL = storage.containerURL else {
+            throw StorageError.iCloudUnavailable
+        }
+        return try Self.loadTrashNotes(containerURL: containerURL, key: currentKey)
+    }
+
+    nonisolated private static func loadTrashNotes(
+        containerURL: URL,
+        key: CryptoKit.SymmetricKey?
+    ) throws -> [TrashNote] {
         var loaded: [TrashNote] = []
 
-        let key = currentKey
-        let encURLs = (try? storage.listTrashNoteFiles()) ?? []
+        let trashURL = containerURL.appendingPathComponent("trash")
+        let encURLs = (try? listFiles(in: trashURL, suffix: ".bkwenc.json")) ?? []
         for url in encURLs {
-            let file = try storage.loadNoteFile(at: url)
+            let file: EncryptedNoteFile = try loadJSON(at: url)
             let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
             let size = attrs[.size] as? Int ?? 0
             let body: String? = {
                 guard let k = key else { return nil }
-                return (try? cryptoService.decryptNote(file: file, using: k))?.body
+                return (try? decryptNote(file: file, using: k))?.body
             }()
             loaded.append(TrashNote(
                 id: file.noteId,
@@ -297,9 +371,9 @@ final class VaultStore: ObservableObject {
             ))
         }
 
-        let plainURLs = (try? storage.listTrashPlainNoteFiles()) ?? []
+        let plainURLs = (try? listFiles(in: trashURL, suffix: ".bkwplain.json")) ?? []
         for url in plainURLs {
-            let file = try storage.loadPlainNoteFile(at: url)
+            let file: PlainNoteFile = try loadJSON(at: url)
             let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
             let size = attrs[.size] as? Int ?? 0
             loaded.append(TrashNote(
@@ -318,6 +392,65 @@ final class VaultStore: ObservableObject {
         }
 
         return loaded.sorted { $0.deletedAt > $1.deletedAt }
+    }
+
+    nonisolated private static func listFiles(in directoryURL: URL, suffix: String) throws -> [URL] {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: directoryURL.path) else { return [] }
+
+        let contents = try fileManager.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        return contents
+            .filter { $0.lastPathComponent.hasSuffix(suffix) }
+            .sorted { url1, url2 in
+                let date1 = (try? url1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date.distantPast
+                let date2 = (try? url2.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date.distantPast
+                return date1 > date2
+            }
+    }
+
+    nonisolated private static func loadJSON<T: Decodable>(at url: URL) throws -> T {
+        let data = try Data(contentsOf: url)
+        return try JSONDecoder.default.decode(T.self, from: data)
+    }
+
+    nonisolated private static func makePlainNote(from file: PlainNoteFile) -> Note {
+        Note(
+            id: file.noteId,
+            vaultId: file.vaultId,
+            body: file.body,
+            createdAt: file.createdAt,
+            updatedAt: file.updatedAt,
+            isEncrypted: false
+        )
+    }
+
+    nonisolated private static func decryptNote(file: EncryptedNoteFile, using key: CryptoKit.SymmetricKey) throws -> Note {
+        guard let nonceData = Data(base64Encoded: file.encryption.nonce) else {
+            throw CryptoServiceError.invalidNonce
+        }
+        guard let ciphertext = Data(base64Encoded: file.payload.ciphertext),
+              let tag = Data(base64Encoded: file.payload.tag) else {
+            throw CryptoServiceError.invalidCiphertext
+        }
+
+        let nonce = try AES.GCM.Nonce(data: nonceData)
+        let sealedBox = try AES.GCM.SealedBox(nonce: nonce, ciphertext: ciphertext, tag: tag)
+        let decryptedData = try AES.GCM.open(sealedBox, using: key)
+        let payload = try JSONDecoder.default.decode(PlainNotePayload.self, from: decryptedData)
+
+        return Note(
+            id: file.noteId,
+            vaultId: file.vaultId,
+            body: payload.body,
+            createdAt: payload.createdAt,
+            updatedAt: payload.updatedAt,
+            isEncrypted: true
+        )
     }
 
     // MARK: - Default notes

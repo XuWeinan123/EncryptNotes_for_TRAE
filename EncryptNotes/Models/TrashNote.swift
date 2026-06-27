@@ -4,7 +4,7 @@ import Foundation
 ///
 /// - `body` 非空：明文笔记或已解密加密笔记，可在回收站内直接展示内容。
 /// - `body` 为空：未解密加密笔记，仅展示乱码与上锁 icon。
-struct TrashNote: Identifiable, Equatable {
+struct TrashNote: Identifiable, Equatable, Sendable {
     let id: String
     let vaultId: String
     let isEncrypted: Bool

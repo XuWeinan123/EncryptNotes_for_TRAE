@@ -1,6 +1,6 @@
 import Foundation
 
-struct PlainNotePayload: Codable {
+struct PlainNotePayload: Codable, Sendable {
     var body: String
     var createdAt: Date
     var updatedAt: Date

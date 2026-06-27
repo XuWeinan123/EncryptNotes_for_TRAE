@@ -22,11 +22,26 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
     }
 
     func setup() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if statusItem == nil {
+            statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        }
+
+        statusItem?.isVisible = true
+        statusItem?.length = NSStatusItem.squareLength
 
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "lock.shield", accessibilityDescription: "别看我")
-            button.image?.isTemplate = true
+            button.title = ""
+            button.toolTip = "别看我"
+            button.imagePosition = .imageOnly
+
+            if let image = NSImage(systemSymbolName: "pencil.and.outline", accessibilityDescription: "别看我") {
+                image.isTemplate = true
+                button.image = image
+                button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+            } else {
+                button.image = nil
+                button.imagePosition = .noImage
+            }
         }
 
         let menu = NSMenu()

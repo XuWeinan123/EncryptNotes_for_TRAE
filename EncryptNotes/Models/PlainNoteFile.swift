@@ -5,7 +5,7 @@ import Foundation
 /// 内容真实明文落盘，适合普通内容；敏感内容应使用加密笔记。
 /// `deleted_at` / `purge_after` / `original_location` 用于回收站与未来文件夹恢复，
 /// 主列表中的笔记这三个字段为 nil。
-struct PlainNoteFile: Codable {
+struct PlainNoteFile: Codable, Sendable {
     let version: Int
     let app: String
     let type: String  // "plain_note"

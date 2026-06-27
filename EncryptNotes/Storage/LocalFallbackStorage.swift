@@ -1,6 +1,6 @@
 import Foundation
 
-final class LocalFallbackStorage: VaultStorage {
+final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
     static let shared = LocalFallbackStorage()
 
     private let fileManager = FileManager.default

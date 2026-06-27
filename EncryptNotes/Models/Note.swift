@@ -1,7 +1,7 @@
 import Foundation
 
 /// 内存中的可读笔记模型（明文笔记或已解密的加密笔记）。
-struct Note: Identifiable, Equatable {
+struct Note: Identifiable, Equatable, Sendable {
     let id: String
     let vaultId: String
     var body: String

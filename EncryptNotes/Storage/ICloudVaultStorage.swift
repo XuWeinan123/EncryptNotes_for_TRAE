@@ -1,6 +1,6 @@
 import Foundation
 
-final class ICloudVaultStorage: VaultStorage {
+final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
     static let shared = ICloudVaultStorage()
 
     private let containerIdentifier = "iCloud.com.biekanwo.EncryptNotes"

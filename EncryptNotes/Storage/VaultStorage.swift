@@ -24,7 +24,7 @@ enum StorageError: Error, LocalizedError {
     }
 }
 
-protocol VaultStorage {
+protocol VaultStorage: Sendable {
     var isAvailable: Bool { get }
     var containerURL: URL? { get }
 

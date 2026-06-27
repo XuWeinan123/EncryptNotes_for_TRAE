@@ -81,6 +81,8 @@ enum DS {
     static let sidebarWidth: CGFloat = 280
     static let contentMax: CGFloat = 720
     static let navbarHeight: CGFloat = 52
+    /// 固定 toolbar 图标宽度，避免状态切换时按钮组跳动。
+    static let macToolbarIconWidth: CGFloat = 18
 
     // MARK: - Elevation
 
@@ -174,10 +176,13 @@ extension View {
     func dsLiquidGlassToolbar() -> some View {
         #if os(iOS)
         if #available(iOS 26.0, *) {
-            self
+            self.toolbarBackground(.hidden, for: .navigationBar)
         } else {
-            self.toolbarBackground(DS.surfaceCard, for: .navigationBar)
-                .toolbarBackground(.visible, for: .navigationBar)
+            self.toolbarBackground(.hidden, for: .navigationBar)
+                .overlay(alignment: .top) {
+                    DSToolbarMaterialFade()
+                        .allowsHitTesting(false)
+                }
         }
         #else
         self
@@ -206,3 +211,38 @@ extension View {
                     y: DS.popoverShadow.y)
     }
 }
+
+#if os(iOS)
+private struct DSToolbarMaterialFade: View {
+    var body: some View {
+        Rectangle()
+            .fill(.ultraThinMaterial)
+            .frame(height: DS.navbarHeight + DS.s8)
+            .mask(alignment: .top) {
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0.0),
+                        .init(color: .black.opacity(0.9), location: 0.58),
+                        .init(color: .clear, location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .ignoresSafeArea(edges: .top)
+    }
+}
+#endif
+
+#if os(macOS)
+extension View {
+    @ViewBuilder
+    func dsMacStickyToolbarScrollEdge() -> some View {
+        if #available(macOS 26.0, *) {
+            self.scrollEdgeEffectStyle(.soft, for: .top)
+        } else {
+            self
+        }
+    }
+}
+#endif
