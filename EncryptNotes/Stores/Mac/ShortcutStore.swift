@@ -8,32 +8,22 @@ import Combine
 final class ShortcutStore: ObservableObject {
     static let shared = ShortcutStore()
 
-    @Published var newPlainNoteKey: (keyCode: UInt32, modifiers: UInt32)
-    @Published var newEncryptedNoteKey: (keyCode: UInt32, modifiers: UInt32)
+    @Published var newNoteKey: (keyCode: UInt32, modifiers: UInt32)
 
-    private var plainHotKeyRef: EventHotKeyRef?
-    private var encryptedHotKeyRef: EventHotKeyRef?
+    private var hotKeyRef: EventHotKeyRef?
     private var eventHandlerRef: EventHandlerRef?
     private let defaults: UserDefaults
 
-    private let plainKey = "mac.shortcut.newPlain"
-    private let encryptedKey = "mac.shortcut.newEncrypted"
+    private let newNoteKeyDefaults = "mac.shortcut.newNote"
 
     private init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
-        if let plainData = defaults.data(forKey: plainKey),
-           let plain = try? JSONDecoder.decode(ShortcutData.self, from: plainData) {
-            self.newPlainNoteKey = (plain.keyCode, plain.modifiers)
+        if let data = defaults.data(forKey: newNoteKeyDefaults),
+           let shortcut = try? JSONDecoder.decode(ShortcutData.self, from: data) {
+            self.newNoteKey = (shortcut.keyCode, shortcut.modifiers)
         } else {
-            self.newPlainNoteKey = (keyCode: 45, modifiers: UInt32(optionKey | cmdKey))
-        }
-
-        if let encryptedData = defaults.data(forKey: encryptedKey),
-           let encrypted = try? JSONDecoder.decode(ShortcutData.self, from: encryptedData) {
-            self.newEncryptedNoteKey = (encrypted.keyCode, encrypted.modifiers)
-        } else {
-            self.newEncryptedNoteKey = (keyCode: 45, modifiers: UInt32(optionKey | shiftKey | cmdKey))
+            self.newNoteKey = (keyCode: 6, modifiers: UInt32(controlKey | cmdKey))
         }
 
         registerHotKeys()
@@ -42,25 +32,15 @@ final class ShortcutStore: ObservableObject {
     func registerHotKeys() {
         unregisterHotKeys()
 
-        let hotKeyID1 = EventHotKeyID(signature: OSType(0x424B5731), id: 1)
-        let hotKeyID2 = EventHotKeyID(signature: OSType(0x424B5732), id: 2)
+        let hotKeyID = EventHotKeyID(signature: OSType(0x424B5730), id: 1)
 
         RegisterEventHotKey(
-            newPlainNoteKey.keyCode,
-            newPlainNoteKey.modifiers,
-            hotKeyID1,
+            newNoteKey.keyCode,
+            newNoteKey.modifiers,
+            hotKeyID,
             GetApplicationEventTarget(),
             0,
-            &plainHotKeyRef
-        )
-
-        RegisterEventHotKey(
-            newEncryptedNoteKey.keyCode,
-            newEncryptedNoteKey.modifiers,
-            hotKeyID2,
-            GetApplicationEventTarget(),
-            0,
-            &encryptedHotKeyRef
+            &hotKeyRef
         )
 
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
@@ -68,13 +48,9 @@ final class ShortcutStore: ObservableObject {
     }
 
     func unregisterHotKeys() {
-        if let ref = plainHotKeyRef {
+        if let ref = hotKeyRef {
             UnregisterEventHotKey(ref)
-            plainHotKeyRef = nil
-        }
-        if let ref = encryptedHotKeyRef {
-            UnregisterEventHotKey(ref)
-            encryptedHotKeyRef = nil
+            hotKeyRef = nil
         }
         if let handlerRef = eventHandlerRef {
             RemoveEventHandler(handlerRef)
@@ -82,17 +58,10 @@ final class ShortcutStore: ObservableObject {
         }
     }
 
-    func setNewPlainNoteShortcut(keyCode: UInt32, modifiers: UInt32) {
-        newPlainNoteKey = (keyCode, modifiers)
+    func setNewNoteShortcut(keyCode: UInt32, modifiers: UInt32) {
+        newNoteKey = (keyCode, modifiers)
         let data = try? JSONEncoder.encode(ShortcutData(keyCode: keyCode, modifiers: modifiers))
-        defaults.set(data, forKey: plainKey)
-        registerHotKeys()
-    }
-
-    func setNewEncryptedNoteShortcut(keyCode: UInt32, modifiers: UInt32) {
-        newEncryptedNoteKey = (keyCode, modifiers)
-        let data = try? JSONEncoder.encode(ShortcutData(keyCode: keyCode, modifiers: modifiers))
-        defaults.set(data, forKey: encryptedKey)
+        defaults.set(data, forKey: newNoteKeyDefaults)
         registerHotKeys()
     }
 
@@ -157,18 +126,14 @@ private let hotKeyEventHandler: EventHandlerUPP = { (_, eventRef, _) -> OSStatus
     var hkID = EventHotKeyID()
     GetEventParameter(eventRef, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &hkID)
 
-    let hotKeyID = hkID.id
     DispatchQueue.main.async {
-        if hotKeyID == 1 {
-            NotificationCenter.default.post(name: .macNewPlainNote, object: nil)
-        } else if hotKeyID == 2 {
-            NotificationCenter.default.post(name: .macNewEncryptedNote, object: nil)
+        if hkID.id == 1 {
+            NotificationCenter.default.post(name: .macNewNote, object: nil)
         }
     }
     return noErr
 }
 
 extension Notification.Name {
-    static let macNewPlainNote = Notification.Name("macNewPlainNote")
-    static let macNewEncryptedNote = Notification.Name("macNewEncryptedNote")
+    static let macNewNote = Notification.Name("macNewNote")
 }

@@ -38,11 +38,11 @@ struct MacSettingsView: View {
     private var shortcutTab: some View {
         Form {
             HStack {
-                Text("新建明文笔记")
+                Text("新建笔记")
                 Spacer()
                 Text(ShortcutStore.displayStringForKey(
-                    keyCode: shortcutStore.newPlainNoteKey.keyCode,
-                    modifiers: shortcutStore.newPlainNoteKey.modifiers
+                    keyCode: shortcutStore.newNoteKey.keyCode,
+                    modifiers: shortcutStore.newNoteKey.modifiers
                 ))
                 .foregroundColor(DS.textSecondary)
                 Button("录制…") {
@@ -50,20 +50,7 @@ struct MacSettingsView: View {
                 }
             }
 
-            HStack {
-                Text("新建加密笔记")
-                Spacer()
-                Text(ShortcutStore.displayStringForKey(
-                    keyCode: shortcutStore.newEncryptedNoteKey.keyCode,
-                    modifiers: shortcutStore.newEncryptedNoteKey.modifiers
-                ))
-                .foregroundColor(DS.textSecondary)
-                Button("录制…") {
-                    // Shortcut recording UI can be added here in future
-                }
-            }
-
-            Text("默认快捷键：⌥⌘N / ⌥⇧⌘N")
+            Text("默认快捷键：⌃⌘Z")
                 .font(DS.caption())
                 .foregroundColor(DS.textSubtle)
         }

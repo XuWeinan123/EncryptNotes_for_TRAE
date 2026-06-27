@@ -201,6 +201,9 @@ extension Notification.Name {
 }
 
 private class AutoFocusTextView: NSTextView {
+    var placeholder: String = "随便写点什么吧"
+    private let placeholderColor = NSColor(DS.textSubtle)
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard window != nil else { return }
@@ -211,11 +214,42 @@ private class AutoFocusTextView: NSTextView {
             }
         }
     }
+
+    override func becomeFirstResponder() -> Bool {
+        needsDisplay = true
+        return super.becomeFirstResponder()
+    }
+
+    override func resignFirstResponder() -> Bool {
+        needsDisplay = true
+        return super.resignFirstResponder()
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        if string.isEmpty {
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.lineHeightMultiple = 1.25
+            paragraphStyle.alignment = .left
+
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 14),
+                .foregroundColor: placeholderColor,
+                .paragraphStyle: paragraphStyle
+            ]
+
+            let inset = textContainerInset
+            let drawRect = dirtyRect.insetBy(dx: inset.width + 4, dy: inset.height)
+            (placeholder as NSString).draw(in: drawRect, withAttributes: attrs)
+        }
+    }
 }
 
 struct MacTextView: NSViewRepresentable {
     @Binding var text: String
     var onCommit: () -> Void
+    var placeholder: String = "随便写点什么吧"
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -233,6 +267,7 @@ struct MacTextView: NSViewRepresentable {
         scrollView.autoresizingMask = [.width, .height]
 
         let textView = AutoFocusTextView()
+        textView.placeholder = placeholder
         textView.delegate = context.coordinator
         textView.isEditable = true
         textView.isSelectable = true
@@ -245,11 +280,20 @@ struct MacTextView: NSViewRepresentable {
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
-        textView.textContainerInset = NSSize(width: 0, height: 4)
+        textView.textContainerInset = NSSize(width: 4, height: 4)
         textView.allowsUndo = true
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineHeightMultiple = 1.25
+        textView.defaultParagraphStyle = paragraphStyle
+        textView.typingAttributes = [
+            .font: NSFont.systemFont(ofSize: 14),
+            .foregroundColor: NSColor(DS.textBody),
+            .paragraphStyle: paragraphStyle
+        ]
 
         textView.string = text
 
@@ -259,17 +303,38 @@ struct MacTextView: NSViewRepresentable {
         scrollView.frame = container.bounds
         container.addSubview(scrollView)
 
+        NotificationCenter.default.addObserver(
+            context.coordinator,
+            selector: #selector(Coordinator.textDidChangeNotification(_:)),
+            name: NSText.didChangeNotification,
+            object: textView
+        )
+
         return container
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
         guard let scrollView = nsView.subviews.first as? NSScrollView,
-              let textView = scrollView.documentView as? NSTextView else { return }
+              let textView = scrollView.documentView as? AutoFocusTextView else { return }
+        
+        textView.placeholder = placeholder
+        
         if textView.string != text && !context.coordinator.isUpdating {
             context.coordinator.isUpdating = true
+            
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.lineHeightMultiple = 1.25
+            
             textView.string = text
+            textView.typingAttributes = [
+                .font: NSFont.systemFont(ofSize: 14),
+                .foregroundColor: NSColor(DS.textBody),
+                .paragraphStyle: paragraphStyle
+            ]
+            
             context.coordinator.isUpdating = false
         }
+        textView.needsDisplay = true
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
@@ -281,11 +346,15 @@ struct MacTextView: NSViewRepresentable {
             self.parent = parent
         }
 
-        func textDidChange(_ notification: Notification) {
+        @objc func textDidChangeNotification(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView, !isUpdating else { return }
             isUpdating = true
             parent.text = textView.string
             isUpdating = false
+            textView.needsDisplay = true
+        }
+
+        func textDidChange(_ notification: Notification) {
         }
 
         func textDidEndEditing(_ notification: Notification) {

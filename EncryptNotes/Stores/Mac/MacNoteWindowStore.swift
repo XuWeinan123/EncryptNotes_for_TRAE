@@ -100,7 +100,7 @@ final class MacNoteWindowStore: ObservableObject {
         return MacWindowFrame(x: x, y: y, width: width, height: height)
     }
 
-    private func lastWindowSize() -> (width: Double, height: Double) {
+    func lastWindowSize() -> (width: Double, height: Double) {
         guard let data = defaults.data(forKey: lastWindowSizeKey),
               let frame = try? JSONDecoder.decode(MacWindowFrame.self, from: data) else {
             return (

@@ -27,7 +27,7 @@ final class StickyNoteWindowManager: NSObject {
         }
     }
 
-    func showNote(_ note: Note) {
+    func showNote(_ note: Note, at screenPoint: NSPoint? = nil) {
         if let existingWindow = noteWindows[note.id] {
             existingWindow.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -36,8 +36,13 @@ final class StickyNoteWindowManager: NSObject {
 
         MacNoteWindowStore.shared.openWindow(for: note.id, isEncrypted: note.isEncrypted)
         let windowState = MacNoteWindowStore.shared.windowState(for: note.id)
-        let frame = windowState?.frame ?? defaultWindowFrame()
+        var frame = windowState?.frame ?? defaultWindowFrame()
         let isPinned = windowState?.isPinned ?? true
+
+        if let point = screenPoint {
+            let size = NSSize(width: frame.width, height: frame.height)
+            frame = windowFrameNearMouse(screenPoint: point, size: size)
+        }
 
         let editorView = StickyNoteEditorView(note: note)
         let hostingView = NSHostingView(rootView: editorView)
@@ -56,6 +61,45 @@ final class StickyNoteWindowManager: NSObject {
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func windowFrameNearMouse(screenPoint: NSPoint, size: NSSize) -> MacWindowFrame {
+        var mouseScreen: NSScreen? = nil
+        for screen in NSScreen.screens {
+            if NSPointInRect(screenPoint, screen.frame) {
+                mouseScreen = screen
+                break
+            }
+        }
+        let screen = mouseScreen ?? NSScreen.main
+        let visibleFrame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+
+        let offset: CGFloat = 8
+        var x = screenPoint.x - size.width / 2
+        var y = screenPoint.y - size.height - offset
+
+        if x < visibleFrame.minX + 8 { x = visibleFrame.minX + 8 }
+        if x + size.width > visibleFrame.maxX - 8 { x = visibleFrame.maxX - size.width - 8 }
+        if y < visibleFrame.minY + 8 {
+            y = screenPoint.y + offset
+            if y + size.height > visibleFrame.maxY - 8 {
+                y = visibleFrame.midY - size.height / 2
+            }
+        }
+        if y + size.height > visibleFrame.maxY - 8 {
+            y = visibleFrame.maxY - size.height - 8
+        }
+
+        return MacWindowFrame(
+            x: Double(x),
+            y: Double(y),
+            width: Double(size.width),
+            height: Double(size.height)
+        )
+    }
+
+    static func currentMouseLocation() -> NSPoint {
+        NSEvent.mouseLocation
     }
 
     func showLockedNote(_ info: EncryptedNoteInfo) {
@@ -152,9 +196,10 @@ final class StickyNoteWindowManager: NSObject {
     }
 
     private func defaultWindowFrame() -> MacWindowFrame {
+        let lastSize = MacNoteWindowStore.shared.lastWindowSize()
         let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let width = Double(MacNoteWindowStore.defaultWindowSize.width)
-        let height = Double(MacNoteWindowStore.defaultWindowSize.height)
+        let width = lastSize.width
+        let height = lastSize.height
         let x = screen.midX - width / 2
         let y = screen.midY - height / 2
         return MacWindowFrame(x: x, y: y, width: width, height: height)
