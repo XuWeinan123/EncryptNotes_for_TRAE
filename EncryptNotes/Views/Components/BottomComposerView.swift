@@ -18,10 +18,11 @@ struct BottomComposerView: View {
             modeControl
 
             HStack(alignment: .bottom, spacing: DS.s2) {
-                TextField("快速记录...", text: $draft, axis: .vertical)
+                TextField("随便写点什么吧", text: $draft, axis: .vertical)
                     .font(DS.bodyLg())
                     .foregroundColor(DS.textBody)
                     .lineLimit(1...4)
+                    .lineSpacing(15 * 0.25)
                     .textFieldStyle(.plain)
                     .padding(.horizontal, DS.s3)
                     .padding(.vertical, DS.s2)

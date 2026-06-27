@@ -1,6 +1,10 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+#if os(iOS)
+import UIKit
+#endif
+
 enum NoteEditorMode {
     case create
     case edit(Note)
@@ -47,16 +51,30 @@ struct NoteEditorView: View {
                         .font(DS.caption())
                         .foregroundColor(DS.textSecondary)
 
-                    TextEditor(text: $noteBody)
-                        .font(DS.bodyLg())
-                        .foregroundColor(DS.textBody)
+                    #if os(iOS)
+                    NoteTextView(text: $noteBody, placeholder: "随便写点什么吧")
                         .frame(minHeight: 320)
-                        .scrollContentBackground(.hidden)
-                        .padding(DS.cardPadding)
                         .dsInputSurface()
+                    #else
+                    ZStack(alignment: .topLeading) {
+                        if noteBody.isEmpty {
+                            Text("随便写点什么吧")
+                                .font(DS.bodyLg())
+                                .foregroundColor(DS.textSubtle)
+                                .padding(DS.cardPadding)
+                        }
+
+                        TextEditor(text: $noteBody)
+                            .font(DS.bodyLg())
+                            .foregroundColor(DS.textBody)
+                            .scrollContentBackground(.hidden)
+                            .padding(DS.cardPadding)
+                    }
+                    .frame(minHeight: 320)
+                    .dsInputSurface()
+                    #endif
 
                     if isEditing {
-                        // 编辑时不提供明文 ↔ 加密转换
                         SWStatusBadge(
                             isEncrypted ? "加密笔记" : "明文笔记",
                             systemImage: isEncrypted ? "lock.open.fill" : "doc.text",
@@ -172,14 +190,12 @@ struct NoteEditorView: View {
             isEncrypted = note.isEncrypted
         } else {
             noteBody = initialBody
-            // 新建模式：根据持久化偏好与密钥状态决定默认值
             if vaultStore.isKeyLoaded {
                 isEncrypted = settings.preferredNoteMode == .encrypted
             } else {
                 isEncrypted = false
             }
 
-            // 首次创建笔记 + 未加载密钥 + 未处理过首次提示
             if !settings.hasSeenFirstKeyPrompt && !vaultStore.isKeyLoaded {
                 showFirstKeyPrompt = true
                 settings.hasSeenFirstKeyPrompt = true
@@ -189,11 +205,9 @@ struct NoteEditorView: View {
 
     private func handleEncryptedToggle(_ newValue: Bool) {
         if newValue && !vaultStore.isKeyLoaded {
-            // 未加载密钥时尝试打开加密开关：提示创建或导入密钥
             showFirstKeyPrompt = true
         } else {
             isEncrypted = newValue
-            // 持久化用户选择
             settings.preferredNoteMode = newValue ? .encrypted : .plain
         }
     }
@@ -236,3 +250,124 @@ struct NoteEditorView: View {
         }
     }
 }
+
+#if os(iOS)
+private class PlaceholderTextView: UITextView {
+    var placeholder: String = "" {
+        didSet { placeholderLabel.text = placeholder }
+    }
+    private let placeholderLabel = UILabel()
+
+    override init(frame: CGRect, textContainer: NSTextContainer?) {
+        super.init(frame: frame, textContainer: textContainer)
+        setup()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+
+    private func setup() {
+        isEditable = true
+        isSelectable = true
+        backgroundColor = .clear
+        isScrollEnabled = false
+        showsVerticalScrollIndicator = false
+        showsHorizontalScrollIndicator = false
+        alwaysBounceVertical = false
+        autocapitalizationType = .sentences
+        smartDashesType = .no
+        smartQuotesType = .no
+        smartInsertDeleteType = .no
+        autocorrectionType = .default
+
+        let font = UIFont.systemFont(ofSize: 15)
+        self.font = font
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineHeightMultiple = 1.25
+        typingAttributes = [
+            .font: font,
+            .foregroundColor: UIColor(DS.textBody),
+            .paragraphStyle: paragraphStyle
+        ]
+
+        textContainerInset = UIEdgeInsets(top: DS.cardPadding, left: DS.cardPadding - 5, bottom: DS.cardPadding, right: DS.cardPadding - 5)
+
+        placeholderLabel.textColor = UIColor(DS.textSubtle)
+        placeholderLabel.font = font
+        placeholderLabel.numberOfLines = 0
+        placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(placeholderLabel)
+
+        NSLayoutConstraint.activate([
+            placeholderLabel.topAnchor.constraint(equalTo: topAnchor, constant: DS.cardPadding),
+            placeholderLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: DS.cardPadding),
+            placeholderLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -DS.cardPadding)
+        ])
+
+        updatePlaceholderVisibility()
+    }
+
+    func updatePlaceholderVisibility() {
+        placeholderLabel.isHidden = !text.isEmpty
+    }
+}
+
+private struct NoteTextView: UIViewRepresentable {
+    @Binding var text: String
+    var placeholder: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text)
+    }
+
+    func makeUIView(context: Context) -> PlaceholderTextView {
+        let textView = PlaceholderTextView()
+        textView.placeholder = placeholder
+        textView.delegate = context.coordinator
+        textView.text = text
+        context.coordinator.textView = textView
+        return textView
+    }
+
+    func updateUIView(_ uiView: PlaceholderTextView, context: Context) {
+        uiView.placeholder = placeholder
+        if uiView.text != text && !context.coordinator.isUpdating {
+            context.coordinator.isUpdating = true
+            uiView.text = text
+
+            let font = UIFont.systemFont(ofSize: 15)
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.lineHeightMultiple = 1.25
+            uiView.typingAttributes = [
+                .font: font,
+                .foregroundColor: UIColor(DS.textBody),
+                .paragraphStyle: paragraphStyle
+            ]
+
+            context.coordinator.isUpdating = false
+        }
+        uiView.updatePlaceholderVisibility()
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var text: Binding<String>
+        weak var textView: PlaceholderTextView?
+        var isUpdating = false
+
+        init(text: Binding<String>) {
+            self.text = text
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            guard !isUpdating else { return }
+            isUpdating = true
+            text.wrappedValue = textView.text
+            (textView as? PlaceholderTextView)?.updatePlaceholderVisibility()
+            isUpdating = false
+        }
+    }
+}
+#endif

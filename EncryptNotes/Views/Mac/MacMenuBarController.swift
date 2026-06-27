@@ -11,6 +11,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
     private let vaultStore = VaultStore.shared
     private let windowStore = MacNoteWindowStore.shared
     private let shortcutStore = ShortcutStore.shared
+    private let settings = SettingsStore.shared
 
     private var allNotesWindow: NSWindow?
     private var trashWindow: NSWindow?
@@ -36,14 +37,8 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
 
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(handleNewPlainNote),
-            name: .macNewPlainNote,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleNewEncryptedNote),
-            name: .macNewEncryptedNote,
+            selector: #selector(handleNewNote),
+            name: .macNewNote,
             object: nil
         )
     }
@@ -55,23 +50,14 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
     private func buildMenu(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        let newPlainItem = NSMenuItem(
-            title: "新建明文笔记",
-            action: #selector(handleNewPlainNote),
-            keyEquivalent: "n"
+        let newNoteItem = NSMenuItem(
+            title: "新建笔记",
+            action: #selector(handleNewNote),
+            keyEquivalent: "z"
         )
-        newPlainItem.keyEquivalentModifierMask = [.option, .command]
-        newPlainItem.target = self
-        menu.addItem(newPlainItem)
-
-        let newEncryptedItem = NSMenuItem(
-            title: "新建加密笔记",
-            action: #selector(handleNewEncryptedNote),
-            keyEquivalent: "n"
-        )
-        newEncryptedItem.keyEquivalentModifierMask = [.option, .shift, .command]
-        newEncryptedItem.target = self
-        menu.addItem(newEncryptedItem)
+        newNoteItem.keyEquivalentModifierMask = [.control, .command]
+        newNoteItem.target = self
+        menu.addItem(newNoteItem)
 
         menu.addItem(.separator())
 
@@ -143,78 +129,22 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(quitItem)
     }
 
-    @objc private func handleNewPlainNote() {
-        Task {
-            do {
-                let note = try await vaultStore.createNote(body: "", isEncrypted: false)
-                openStickyNote(for: note)
-            } catch {
-                showError(message: error.localizedDescription)
-            }
-        }
-    }
-
-    @objc private func handleNewEncryptedNote() {
-        guard vaultStore.isKeyLoaded else {
-            let alert = NSAlert()
-            alert.messageText = "无法创建加密笔记"
-            alert.informativeText = "加载密钥后才能创建加密笔记。"
-            alert.addButton(withTitle: "加载密钥文件…")
-            alert.addButton(withTitle: "创建新加密空间…")
-            alert.addButton(withTitle: "取消")
-            let response = alert.runModal()
-            if response == .alertFirstButtonReturn {
-                loadKeyFile()
-            } else if response == .alertSecondButtonReturn {
-                createNewVaultAndKey()
-            }
-            return
-        }
+    @objc private func handleNewNote() {
+        let mouseLocation = StickyNoteWindowManager.currentMouseLocation()
+        let wantEncrypted = vaultStore.isKeyLoaded && settings.preferredNoteMode == .encrypted
 
         Task {
             do {
-                let note = try await vaultStore.createNote(body: "", isEncrypted: true)
-                openStickyNote(for: note)
+                let note = try await vaultStore.createNote(body: "", isEncrypted: wantEncrypted)
+                await MainActor.run {
+                    StickyNoteWindowManager.shared.showNote(note, at: mouseLocation)
+                }
             } catch {
-                showError(message: error.localizedDescription)
-            }
-        }
-    }
-
-    private func createNewVaultAndKey() {
-        let alert = NSAlert()
-        alert.messageText = "创建新的加密空间？"
-        alert.informativeText = "将生成新的密钥，你需要妥善保存密钥文件。如果 iCloud 中已有加密笔记，将无法使用新密钥解锁。"
-        alert.addButton(withTitle: "创建")
-        alert.addButton(withTitle: "取消")
-        if alert.runModal() == .alertFirstButtonReturn {
-            Task {
-                do {
-                    try await vaultStore.createKey()
-                    let keyURL = try vaultStore.exportKeyFile()
-                    await MainActor.run {
-                        let savePanel = NSSavePanel()
-                        savePanel.title = "保存密钥文件"
-                        savePanel.message = "请立即将密钥文件保存到安全的位置。丢失密钥将无法解密加密笔记。密钥文件只会在本机读取，不会上传。"
-                        savePanel.nameFieldStringValue = keyURL.lastPathComponent
-                        savePanel.allowedContentTypes = [.init(filenameExtension: "bkwkey")!]
-                        if savePanel.runModal() == .OK, let saveURL = savePanel.url {
-                            try? FileManager.default.copyItem(at: keyURL, to: saveURL)
-                        }
-                        try? FileManager.default.removeItem(at: keyURL)
-
-                        Task {
-                            do {
-                                let note = try await vaultStore.createNote(body: "", isEncrypted: true)
-                                self.openStickyNote(for: note)
-                            } catch {
-                                self.showError(message: error.localizedDescription)
-                            }
-                        }
-                    }
-                } catch {
-                    await MainActor.run {
-                        self.showError(message: error.localizedDescription)
+                await MainActor.run {
+                    if case VaultError.freeLimitReached = error {
+                        showError(message: "免费版最多保存 20 条笔记，请先删除部分笔记或升级 Pro。")
+                    } else {
+                        showError(message: error.localizedDescription)
                     }
                 }
             }
