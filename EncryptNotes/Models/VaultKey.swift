@@ -4,16 +4,14 @@ struct VaultKey: Codable {
     let version: Int
     let app: String
     let type: String
-    let vaultId: String
-    let keyVersion: Int
+    let keyId: String
     let algorithm: String
     let createdAt: Date
     let keyMaterial: String
 
     enum CodingKeys: String, CodingKey {
         case version, app, type, algorithm
-        case vaultId = "vault_id"
-        case keyVersion = "key_version"
+        case keyId = "key_id"
         case createdAt = "created_at"
         case keyMaterial = "key_material"
     }

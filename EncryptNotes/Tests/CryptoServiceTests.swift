@@ -4,56 +4,98 @@ import CryptoKit
 
 final class CryptoServiceTests: XCTestCase {
 
-    func testEncryptDecryptRoundTrip() throws {
+    func testEncryptDecryptMarkdownRoundTrip() throws {
         let cryptoService = CryptoService.shared
         let key = SymmetricKey(size: .bits256)
-        let vaultId = UUID().uuidString
-        let noteId = UUID().uuidString
-        let now = Date()
+        let body = "这是一段测试正文内容 #标签"
 
-        let payload = PlainNotePayload(
-            body: "这是一段测试正文内容",
-            createdAt: now,
-            updatedAt: now
-        )
+        let encrypted = try cryptoService.encryptMarkdownBody(body, using: key)
 
-        let encryptedFile = try cryptoService.encryptToNoteFile(
-            noteId: noteId,
-            vaultId: vaultId,
-            payload: payload,
-            key: key
-        )
+        XCTAssertTrue(encrypted.hasPrefix("bkwenc:v1:"))
+        XCTAssertNotEqual(encrypted, body)
 
-        XCTAssertEqual(encryptedFile.noteId, noteId)
-        XCTAssertEqual(encryptedFile.vaultId, vaultId)
-        XCTAssertNotEqual(encryptedFile.payload.ciphertext, "")
-
-        let decryptedNote = try cryptoService.decryptNote(file: encryptedFile, using: key)
-
-        XCTAssertEqual(decryptedNote.body, "这是一段测试正文内容")
+        let decrypted = try cryptoService.decryptMarkdownBody(encrypted, using: key)
+        XCTAssertEqual(decrypted, body)
     }
 
     func testWrongKeyFailsDecryption() throws {
         let cryptoService = CryptoService.shared
         let correctKey = SymmetricKey(size: .bits256)
         let wrongKey = SymmetricKey(size: .bits256)
-        let vaultId = UUID().uuidString
-        let noteId = UUID().uuidString
-        let now = Date()
 
-        let payload = PlainNotePayload(
-            body: "只有正确密钥才能解密",
-            createdAt: now,
-            updatedAt: now
-        )
+        let encrypted = try cryptoService.encryptMarkdownBody("只有正确密钥才能解密", using: correctKey)
 
-        let encryptedFile = try cryptoService.encryptToNoteFile(
-            noteId: noteId,
-            vaultId: vaultId,
-            payload: payload,
-            key: correctKey
-        )
+        XCTAssertThrowsError(try cryptoService.decryptMarkdownBody(encrypted, using: wrongKey))
+    }
 
-        XCTAssertThrowsError(try cryptoService.decryptNote(file: encryptedFile, using: wrongKey))
+    func testTamperedCiphertextFails() throws {
+        let cryptoService = CryptoService.shared
+        let key = SymmetricKey(size: .bits256)
+
+        var encrypted = try cryptoService.encryptMarkdownBody("原始内容", using: key)
+
+        let base64Start = encrypted.index(encrypted.startIndex, offsetBy: "bkwenc:v1:".count)
+        let prefix = encrypted[..<base64Start]
+        var base64 = String(encrypted[base64Start...])
+        if let lastChar = base64.last, lastChar != "A" {
+            base64 = String(base64.dropLast()) + "A"
+        } else {
+            base64 = String(base64.dropLast()) + "B"
+        }
+        let tampered = String(prefix) + base64
+
+        XCTAssertThrowsError(try cryptoService.decryptMarkdownBody(tampered, using: key))
+    }
+
+    func testInvalidFormatFails() throws {
+        let cryptoService = CryptoService.shared
+        let key = SymmetricKey(size: .bits256)
+
+        XCTAssertThrowsError(try cryptoService.decryptMarkdownBody("not-encrypted", using: key))
+        XCTAssertThrowsError(try cryptoService.decryptMarkdownBody("bkwenc:v1:", using: key))
+        XCTAssertThrowsError(try cryptoService.decryptMarkdownBody("bkwenc:v1:!!!", using: key))
+    }
+
+    func testEncryptedBodyDoesNotContainPlaintext() throws {
+        let cryptoService = CryptoService.shared
+        let key = SymmetricKey(size: .bits256)
+        let secretBody = "这是超级私密的内容 #秘密标签"
+
+        let encrypted = try cryptoService.encryptMarkdownBody(secretBody, using: key)
+
+        XCTAssertFalse(encrypted.contains("私密"))
+        XCTAssertFalse(encrypted.contains("秘密标签"))
+        XCTAssertFalse(encrypted.contains("#"))
+    }
+
+    func testEmptyBodyRoundTrip() throws {
+        let cryptoService = CryptoService.shared
+        let key = SymmetricKey(size: .bits256)
+
+        let encrypted = try cryptoService.encryptMarkdownBody("", using: key)
+        let decrypted = try cryptoService.decryptMarkdownBody(encrypted, using: key)
+        XCTAssertEqual(decrypted, "")
+    }
+
+    func testLongBodyRoundTrip() throws {
+        let cryptoService = CryptoService.shared
+        let key = SymmetricKey(size: .bits256)
+        let longBody = String(repeating: "长文本内容测试。", count: 1000)
+
+        let encrypted = try cryptoService.encryptMarkdownBody(longBody, using: key)
+        let decrypted = try cryptoService.decryptMarkdownBody(encrypted, using: key)
+        XCTAssertEqual(decrypted, longBody)
+    }
+
+    func testBase64URLFormat() throws {
+        let cryptoService = CryptoService.shared
+        let key = SymmetricKey(size: .bits256)
+
+        let encrypted = try cryptoService.encryptMarkdownBody("test", using: key)
+        let afterPrefix = String(encrypted.dropFirst("bkwenc:v1:".count))
+
+        XCTAssertFalse(afterPrefix.contains("+"), "base64url should not contain +")
+        XCTAssertFalse(afterPrefix.contains("/"), "base64url should not contain /")
+        XCTAssertFalse(afterPrefix.contains("="), "base64url should not contain padding =")
     }
 }

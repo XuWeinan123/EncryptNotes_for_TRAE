@@ -507,7 +507,6 @@ struct MacTextView: NSViewRepresentable {
     StickyNoteEditorView(
         note: Note(
             id: "preview-sticky-note",
-            vaultId: "preview-vault",
             body: "",
             createdAt: Date(timeIntervalSince1970: 1_782_532_980),
             updatedAt: Date(timeIntervalSince1970: 1_782_532_980),
