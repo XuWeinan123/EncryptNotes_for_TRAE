@@ -1,8 +1,13 @@
 import SwiftUI
 
-/// 可读笔记卡片（明文笔记或已解密加密笔记）。
 struct NoteCardView: View {
     let note: Note
+    var isSelected: Bool = false
+    var isSelecting: Bool = false
+    var onTap: (() -> Void)?
+    var onEdit: (() -> Void)?
+    var onDelete: (() -> Void)?
+    var onToggleSelect: (() -> Void)?
 
     @State private var isPressed = false
 
@@ -22,33 +27,59 @@ struct NoteCardView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.s3) {
-            // 时间戳 + 加密状态 icon
-            HStack(spacing: DS.s1) {
-                Text(DateFormatters.formatDisplayDateTime(note.updatedAt).replacingOccurrences(of: ".", with: "-"))
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSubtle)
-
-                Spacer()
-                SWStatusBadge(
-                    note.isEncrypted ? "加密" : "明文",
-                    systemImage: note.isEncrypted ? "lock.open.fill" : "doc.text",
-                    style: note.isEncrypted ? .success : .neutral
-                )
+        HStack(alignment: .top, spacing: DS.s3) {
+            if isSelecting {
+                selectionCircle
+                    .padding(.top, DS.s1)
             }
 
-            // 标题
-            Text(title)
-                .font(DS.bodyLg())
-                .foregroundColor(DS.textEmphasize)
-                .lineLimit(2)
+            VStack(alignment: .leading, spacing: DS.s3) {
+                HStack(spacing: DS.s1) {
+                    Text(DateFormatters.formatDisplayDateTime(note.updatedAt).replacingOccurrences(of: ".", with: "-"))
+                        .font(DS.caption())
+                        .foregroundColor(DS.textSubtle)
 
-            // 预览行，#tags 用叶绿色
-            if !previewLines.isEmpty {
-                VStack(alignment: .leading, spacing: DS.s2) {
-                    ForEach(Array(previewLines.enumerated()), id: \.offset) { _, line in
-                        tagAwareText(line)
-                            .lineLimit(1)
+                    Spacer()
+
+                    SWStatusBadge(
+                        note.isEncrypted ? "加密" : "明文",
+                        systemImage: note.isEncrypted ? "lock.open.fill" : "doc.text",
+                        style: note.isEncrypted ? .success : .neutral
+                    )
+
+                    if !isSelecting {
+                        Menu {
+                            if let onEdit {
+                                Button { onEdit() } label: {
+                                    Label("编辑", systemImage: "pencil")
+                                }
+                            }
+                            if let onDelete {
+                                Button(role: .destructive) { onDelete() } label: {
+                                    Label("删除", systemImage: "trash")
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(DS.textSubtle)
+                                .frame(width: 28, height: 28)
+                                .contentShape(Rectangle())
+                        }
+                    }
+                }
+
+                Text(title)
+                    .font(DS.bodyLg())
+                    .foregroundColor(DS.textEmphasize)
+                    .lineLimit(2)
+
+                if !previewLines.isEmpty {
+                    VStack(alignment: .leading, spacing: DS.s2) {
+                        ForEach(Array(previewLines.enumerated()), id: \.offset) { _, line in
+                            tagAwareText(line)
+                                .lineLimit(1)
+                        }
                     }
                 }
             }
@@ -60,18 +91,33 @@ struct NoteCardView: View {
         .opacity(isPressed ? 0.92 : 1.0)
         .scaleEffect(isPressed ? 0.985 : 1.0)
         .animation(.easeInOut(duration: 0.15), value: isPressed)
+        .animation(.easeInOut(duration: 0.2), value: isSelected)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if isSelecting {
+                onToggleSelect?()
+            } else {
+                onTap?()
+            }
+        }
         .pressEvents {
-            withAnimation(.easeInOut(duration: 0.1)) {
-                isPressed = true
+            if !isSelecting {
+                withAnimation(.easeInOut(duration: 0.1)) { isPressed = true }
             }
         } onRelease: {
-            withAnimation(.easeInOut(duration: 0.15)) {
-                isPressed = false
-            }
+            withAnimation(.easeInOut(duration: 0.15)) { isPressed = false }
         }
     }
 
-    /// 将 `#tags` 渲染为叶绿色，其余文字保持正文色。
+    private var selectionCircle: some View {
+        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+            .font(.system(size: 22, weight: .regular))
+            .foregroundColor(isSelected ? DS.primary : DS.textSubtle.opacity(0.5))
+            .frame(width: 28, height: 28)
+            .contentShape(Rectangle())
+            .onTapGesture { onToggleSelect?() }
+    }
+
     private func tagAwareText(_ source: String) -> Text {
         let pattern = TagParser.pattern
         guard let regex = try? NSRegularExpression(pattern: pattern) else {
