@@ -3,10 +3,19 @@ import SwiftUI
 import Combine
 import Network
 
-enum SyncStatus {
+enum SyncStatus: Equatable {
     case syncing
     case saved
     case failed(message: String)
+
+    static func == (lhs: SyncStatus, rhs: SyncStatus) -> Bool {
+        switch (lhs, rhs) {
+        case (.syncing, .syncing): return true
+        case (.saved, .saved): return true
+        case (.failed(let l), .failed(let r)): return l == r
+        default: return false
+        }
+    }
 }
 
 @MainActor

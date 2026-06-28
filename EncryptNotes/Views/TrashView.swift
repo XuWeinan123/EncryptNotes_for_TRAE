@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// 回收站页面：展示已删除笔记，支持恢复与永久删除。
 struct TrashView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var vaultStore = VaultStore.shared
@@ -21,16 +20,20 @@ struct TrashView: View {
             .dsCanvasBackground()
             .navigationTitle("回收站")
             .navigationBarTitleDisplayMode(.inline)
-            .dsLiquidGlassToolbar()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
-                        .dsToolbarButtonStyle()
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
                 }
                 if !vaultStore.trashNotes.isEmpty {
-                    ToolbarItem(placement: .destructiveAction) {
-                        Button("清空") { showEmptyConfirmation = true }
-                            .foregroundColor(DS.destructive)
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { showEmptyConfirmation = true } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 16, weight: .regular))
+                                .foregroundColor(DS.destructive)
+                        }
                     }
                 }
             }
@@ -103,6 +106,9 @@ struct TrashView: View {
             Text("回收站为空")
                 .font(DS.title())
                 .foregroundColor(DS.textSecondary)
+            Text("删除的笔记会在这里保留 30 天")
+                .font(DS.body())
+                .foregroundColor(DS.textSubtle)
             Spacer()
         }
     }
@@ -116,18 +122,6 @@ struct TrashView: View {
                         onRestore: { noteToRestore = trashNote },
                         onPurge: { noteToPurge = trashNote }
                     )
-                        .contextMenu {
-                            Button {
-                                noteToRestore = trashNote
-                            } label: {
-                                Label("恢复", systemImage: "arrow.uturn.backward")
-                            }
-                            Button(role: .destructive) {
-                                noteToPurge = trashNote
-                            } label: {
-                                Label("永久删除", systemImage: "trash.slash")
-                            }
-                        }
                 }
             }
             .padding(.horizontal, DS.cardPadding)
