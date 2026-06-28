@@ -23,43 +23,30 @@ struct BottomComposerView: View {
                     .foregroundColor(DS.textBody)
                     .lineLimit(1...4)
                     .lineSpacing(15 * 0.25)
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, DS.s3)
-                    .padding(.vertical, DS.s2)
-                    .background(DS.surfaceCard)
-                    .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
-                            .stroke(DS.line, lineWidth: 0.5)
-                    )
+                    .textFieldStyle(.roundedBorder)
 
                 Button(action: onExpand) {
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(DS.textSecondary)
-                        .frame(width: 36, height: 36)
-                        .background(DS.surfaceSunken)
-                        .clipShape(Circle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.circle)
+                .controlSize(.regular)
+                .accessibilityLabel("展开编辑")
 
                 Button(action: onSubmit) {
                     Group {
                         if isSaving {
                             ProgressView()
-                                .tint(DS.onPrimary)
                         } else {
                             Image(systemName: "arrow.up")
-                                .font(.system(size: 16, weight: .semibold))
                         }
                     }
-                    .foregroundColor(canSubmit ? DS.onPrimary : DS.textSubtle)
-                    .frame(width: 36, height: 36)
-                    .background(canSubmit ? DS.primary : DS.surfaceSunken)
-                    .clipShape(Circle())
                 }
                 .disabled(!canSubmit)
-                .buttonStyle(.plain)
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.circle)
+                .controlSize(.regular)
+                .accessibilityLabel("保存笔记")
             }
 
             if !canEncrypt {
@@ -75,25 +62,26 @@ struct BottomComposerView: View {
                 .fill(DS.line)
                 .frame(height: 0.5)
         }
+        .onChange(of: canEncrypt) { _, newValue in
+            if !newValue {
+                isEncrypted = false
+            }
+        }
     }
 
     private var modeControl: some View {
-        HStack(spacing: DS.s2) {
-            SWTabButton(
-                title: "明文",
-                systemImage: "doc.text",
-                isSelected: !isEncrypted
-            ) {
-                isEncrypted = false
-            }
+        Picker("保存方式", selection: $isEncrypted) {
+            Label("明文", systemImage: "doc.text")
+                .tag(false)
 
-            SWTabButton(
-                title: "加密",
-                systemImage: canEncrypt ? "lock.fill" : "lock.slash",
-                isSelected: isEncrypted,
-                isEnabled: canEncrypt
-            ) {
-                if canEncrypt { isEncrypted = true }
+            Label("加密", systemImage: canEncrypt ? "lock.fill" : "lock.slash")
+                .tag(true)
+                .disabled(!canEncrypt)
+        }
+        .pickerStyle(.segmented)
+        .onChange(of: isEncrypted) { _, newValue in
+            if newValue && !canEncrypt {
+                isEncrypted = false
             }
         }
     }

@@ -1,4 +1,5 @@
 import XCTest
+import CryptoKit
 @testable import EncryptNotes
 
 final class SchemaTests: XCTestCase {

@@ -216,12 +216,13 @@ final class VaultStore: ObservableObject {
                 loadedKey = nil
             }
 
-            let snapshot = try await Task.detached(priority: .userInitiated) { [storage, noteIndex] in
+            let preferredMode = settings.preferredNoteMode
+            let snapshot = try await Task.detached(priority: .userInitiated) { [storage, noteIndex, preferredMode] in
                 try Self.loadNotesSnapshot(
                     storage: storage,
                     index: noteIndex,
                     currentKey: loadedKey,
-                    preferredMode: self.settings.preferredNoteMode
+                    preferredMode: preferredMode
                 )
             }.value
 
@@ -524,12 +525,13 @@ final class VaultStore: ObservableObject {
                 loadedKey = nil
             }
 
-            let snapshot = try await Task.detached(priority: .userInitiated) { [storage, noteIndex] in
+            let preferredMode = settings.preferredNoteMode
+            let snapshot = try await Task.detached(priority: .userInitiated) { [storage, noteIndex, preferredMode] in
                 try Self.loadNotesSnapshot(
                     storage: storage,
                     index: noteIndex,
                     currentKey: loadedKey,
-                    preferredMode: self.settings.preferredNoteMode
+                    preferredMode: preferredMode
                 )
             }.value
 
@@ -643,7 +645,7 @@ final class VaultStore: ObservableObject {
         )
         try storage.saveMarkdownFile(mdFile, at: url)
 
-        if var entry = noteIndex.entry(for: note.id) {
+        if let entry = noteIndex.entry(for: note.id) {
             noteIndex.upsert(entry)
             try? storage.saveIndex(noteIndex)
         }
@@ -689,13 +691,16 @@ final class VaultStore: ObservableObject {
         try storage.saveMarkdownFile(trashFile, at: trashURL)
         try storage.permanentlyDeleteFile(at: srcURL)
 
-        if var entry = noteIndex.entry(for: note.id) {
-            entry.location = .trash
-            entry.deletedAt = now
-            entry.purgeAfter = purgeAfter
-            entry.originalLocation = .notes
-            entry.fileName = "\(note.id).md"
-            noteIndex.upsert(entry)
+        if let entry = noteIndex.entry(for: note.id) {
+            noteIndex.upsert(NoteIndexEntry(
+                noteId: entry.noteId,
+                fileName: "\(note.id).md",
+                mode: entry.mode,
+                location: .trash,
+                deletedAt: now,
+                purgeAfter: purgeAfter,
+                originalLocation: .notes
+            ))
             try storage.saveIndex(noteIndex)
         }
 
@@ -739,13 +744,16 @@ final class VaultStore: ObservableObject {
         try storage.saveMarkdownFile(trashFile, at: trashURL)
         try storage.permanentlyDeleteFile(at: info.url)
 
-        if var entry = noteIndex.entry(for: info.id) {
-            entry.location = .trash
-            entry.deletedAt = now
-            entry.purgeAfter = purgeAfter
-            entry.originalLocation = .notes
-            entry.fileName = "\(info.id).md"
-            noteIndex.upsert(entry)
+        if let entry = noteIndex.entry(for: info.id) {
+            noteIndex.upsert(NoteIndexEntry(
+                noteId: entry.noteId,
+                fileName: "\(info.id).md",
+                mode: entry.mode,
+                location: .trash,
+                deletedAt: now,
+                purgeAfter: purgeAfter,
+                originalLocation: .notes
+            ))
             try storage.saveIndex(noteIndex)
         }
 
@@ -772,13 +780,13 @@ final class VaultStore: ObservableObject {
         try storage.saveMarkdownFile(restoredFile, at: dstURL)
         try storage.permanentlyDeleteFile(at: srcURL)
 
-        if var entry = noteIndex.entry(for: trashNote.id) {
-            entry.location = .notes
-            entry.deletedAt = nil
-            entry.purgeAfter = nil
-            entry.originalLocation = nil
-            entry.fileName = "\(trashNote.id).md"
-            noteIndex.upsert(entry)
+        if let entry = noteIndex.entry(for: trashNote.id) {
+            noteIndex.upsert(NoteIndexEntry(
+                noteId: entry.noteId,
+                fileName: "\(trashNote.id).md",
+                mode: entry.mode,
+                location: .notes
+            ))
             try storage.saveIndex(noteIndex)
         }
 
@@ -820,12 +828,13 @@ final class VaultStore: ObservableObject {
     }
 
     private func reloadTrashOnly() async {
-        let snapshot = try? await Task.detached(priority: .userInitiated) { [storage, noteIndex, currentKey] in
+        let preferredMode = settings.preferredNoteMode
+        let snapshot = try? await Task.detached(priority: .userInitiated) { [storage, noteIndex, currentKey, preferredMode] in
             try Self.loadNotesSnapshot(
                 storage: storage,
                 index: noteIndex,
                 currentKey: currentKey,
-                preferredMode: self.settings.preferredNoteMode
+                preferredMode: preferredMode
             )
         }.value
         if let snap = snapshot {

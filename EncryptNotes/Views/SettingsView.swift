@@ -36,6 +36,7 @@ struct SettingsView: View {
             .listStyle(.insetGrouped)
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
+            .dsLiquidGlassToolbar()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
@@ -63,13 +64,13 @@ private struct KeyManagementView: View {
         List {
             Section {
                 HStack {
-                    Text("密钥状态")
+                    Label(
+                        "密钥状态",
+                        systemImage: vaultStore.isKeyLoaded ? "lock.open.fill" : "lock.fill"
+                    )
                     Spacer()
-                    if vaultStore.isKeyLoaded {
-                        SWStatusBadge("已加载", systemImage: "lock.open.fill", style: .success)
-                    } else {
-                        SWStatusBadge("未加载", systemImage: "lock.fill", style: .warning)
-                    }
+                    Text(vaultStore.isKeyLoaded ? "已加载" : "未加载")
+                        .foregroundStyle(.secondary)
                 }
             }
 

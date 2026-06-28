@@ -16,15 +16,14 @@ struct EncryptedCardView: View {
                     .padding(.top, DS.s1)
             }
 
-            VStack(alignment: .leading, spacing: DS.s2) {
-                HStack {
-                    SWStatusBadge("待解锁", systemImage: "lock.fill", style: .warning)
-
-                    Spacer()
-
-                    Text(DateFormatters.formatDisplayDate(info.updatedAt))
+            VStack(alignment: .leading, spacing: DS.memoGap) {
+                HStack(spacing: DS.s2) {
+                    Text(timestampText)
                         .font(DS.caption())
                         .foregroundColor(DS.textSubtle)
+                        .lineLimit(1)
+
+                    Spacer()
 
                     if !isSelecting {
                         Menu {
@@ -35,7 +34,7 @@ struct EncryptedCardView: View {
                             }
                         } label: {
                             Image(systemName: "ellipsis")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.system(size: 15, weight: .semibold))
                                 .foregroundColor(DS.textSubtle)
                                 .frame(width: 28, height: 28)
                                 .contentShape(Rectangle())
@@ -46,7 +45,7 @@ struct EncryptedCardView: View {
                 Text(info.ciphertextPreview)
                     .font(DS.mono())
                     .foregroundColor(DS.textSubtle)
-                    .lineLimit(2)
+                    .lineLimit(3)
                     .opacity(0.7)
 
                 HStack(spacing: DS.s1) {
@@ -84,6 +83,12 @@ struct EncryptedCardView: View {
         } onRelease: {
             withAnimation(.easeInOut(duration: 0.15)) { isPressed = false }
         }
+    }
+
+    private var timestampText: String {
+        let timestamp = DateFormatters.formatDisplayDateTime(info.updatedAt)
+            .replacingOccurrences(of: ".", with: "-")
+        return "\(timestamp) · 加密"
     }
 
     private var selectionCircle: some View {

@@ -10,30 +10,30 @@ struct TrashView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            ZStack {
+                DS.bg.ignoresSafeArea()
+
                 if vaultStore.trashNotes.isEmpty {
                     emptyState
                 } else {
-                    noteList
+                    trashList
                 }
             }
-            .dsCanvasBackground()
             .navigationTitle("回收站")
             .navigationBarTitleDisplayMode(.inline)
+            .dsLiquidGlassToolbar()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 16, weight: .semibold))
                     }
                 }
                 if !vaultStore.trashNotes.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button { showEmptyConfirmation = true } label: {
                             Image(systemName: "trash")
-                                .font(.system(size: 16, weight: .regular))
-                                .foregroundColor(DS.destructive)
                         }
+                        .tint(DS.destructive)
                     }
                 }
             }
@@ -103,32 +103,129 @@ struct TrashView: View {
             Image(systemName: "trash")
                 .font(.system(size: 44, weight: .regular))
                 .foregroundColor(DS.textSubtle)
+
             Text("回收站为空")
                 .font(DS.title())
                 .foregroundColor(DS.textSecondary)
+
             Text("删除的笔记会在这里保留 30 天")
                 .font(DS.body())
                 .foregroundColor(DS.textSubtle)
+                .multilineTextAlignment(.center)
+
             Spacer()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, DS.s6)
     }
 
-    private var noteList: some View {
-        ScrollView {
-            LazyVStack(spacing: DS.memoGap) {
-                ForEach(vaultStore.trashNotes) { trashNote in
-                    TrashCardView(
-                        trashNote: trashNote,
-                        onRestore: { noteToRestore = trashNote },
-                        onPurge: { noteToPurge = trashNote }
-                    )
-                }
+    private var trashList: some View {
+        List {
+            ForEach(vaultStore.trashNotes) { trashNote in
+                trashCard(trashNote)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(
+                        top: DS.s1 + 2,
+                        leading: DS.s3,
+                        bottom: DS.s1 + 2,
+                        trailing: DS.s3
+                    ))
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        Button {
+                            noteToRestore = trashNote
+                        } label: {
+                            Label("恢复", systemImage: "arrow.uturn.backward")
+                        }
+                        .tint(DS.primary)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            noteToPurge = trashNote
+                        } label: {
+                            Label("永久删除", systemImage: "trash")
+                        }
+                    }
+                    .contextMenu {
+                        Button {
+                            noteToRestore = trashNote
+                        } label: {
+                            Label("恢复", systemImage: "arrow.uturn.backward")
+                        }
+
+                        Button(role: .destructive) {
+                            noteToPurge = trashNote
+                        } label: {
+                            Label("永久删除", systemImage: "trash")
+                        }
+                    }
             }
-            .padding(.horizontal, DS.cardPadding)
-            .padding(.top, DS.s3)
-            .padding(.bottom, DS.s8)
-            .frame(maxWidth: DS.contentMax)
-            .frame(maxWidth: .infinity)
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .padding(.top, DS.s2)
+    }
+
+    private func trashCard(_ trashNote: TrashNote) -> some View {
+        VStack(alignment: .leading, spacing: DS.s2) {
+            HStack {
+                Label(
+                    trashNote.isEncrypted ? "加密笔记" : "明文笔记",
+                    systemImage: trashNote.isEncrypted ? (trashNote.isReadable ? "lock.open.fill" : "lock.fill") : "doc.text"
+                )
+                .foregroundStyle(.secondary)
+                .font(DS.caption())
+
+                Spacer()
+
+                Menu {
+                    Button {
+                        noteToRestore = trashNote
+                    } label: {
+                        Label("恢复", systemImage: "arrow.uturn.backward")
+                    }
+
+                    Button(role: .destructive) {
+                        noteToPurge = trashNote
+                    } label: {
+                        Label("永久删除", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(DS.textSubtle)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            HStack(spacing: DS.s2) {
+                Text("删除于 \(DateFormatters.formatDisplayDateTime(trashNote.deletedAt).replacingOccurrences(of: ".", with: "-"))")
+                    .font(DS.caption())
+                    .foregroundStyle(DS.textSubtle)
+
+                Spacer()
+
+                Text("剩 \(trashNote.remainingDays) 天")
+                    .font(DS.caption())
+                    .foregroundStyle(DS.textSubtle)
+            }
+
+            if let body = trashNote.body {
+                Text(body)
+                    .font(DS.body())
+                    .foregroundStyle(DS.textBody)
+                    .lineLimit(3)
+            } else if let preview = trashNote.ciphertextPreview {
+                Text(preview)
+                    .font(DS.mono())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(DS.cardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .dsCardSurface(shadow: false)
     }
 }

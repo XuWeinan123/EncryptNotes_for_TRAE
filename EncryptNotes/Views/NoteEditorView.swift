@@ -86,21 +86,6 @@ struct NoteEditorView: View {
                     .disabled(isSaving)
                     .dsGlassToolbarButton()
                 }
-                ToolbarItem(placement: .principal) {
-                    Group {
-                        if isEditing {
-                            SWStatusBadge(
-                                isEncrypted ? "加密" : "明文",
-                                systemImage: isEncrypted ? "lock.fill" : "doc.text",
-                                style: isEncrypted ? .success : .neutral
-                            )
-                        } else {
-                            Text("新建笔记")
-                                .font(DS.caption())
-                                .foregroundColor(DS.textSecondary)
-                        }
-                    }
-                }
                 ToolbarItem(placement: .confirmationAction) {
                     HStack(spacing: DS.s2) {
                         if !isEditing {

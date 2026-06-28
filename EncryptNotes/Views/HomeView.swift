@@ -34,6 +34,13 @@ struct HomeView: View {
         filteredItems.filter { selectedIDs.contains($0.id) }
     }
 
+    private var isSystemBottomSearchAvailable: Bool {
+        if #available(iOS 26.0, *) {
+            return true
+        }
+        return false
+    }
+
     var body: some View {
         ZStack {
             mainContent
@@ -157,31 +164,6 @@ struct HomeView: View {
                         .dsLiquidGlassToolbar()
                         .toolbar {
                             ToolbarItem(placement: .topBarLeading) {
-                                Button {
-                                    if isSelecting {
-                                        exitSelectMode()
-                                    } else {
-                                        withAnimation(.easeInOut(duration: 0.3)) {
-                                            showSidebar.toggle()
-                                        }
-                                    }
-                                } label: {
-                                    Image(systemName: isSelecting ? "checkmark" : "line.3.horizontal")
-                                        .font(.system(size: 17, weight: .semibold))
-                                }
-                            }
-                            ToolbarItem(placement: .principal) {
-                                if isSelecting {
-                                    Text("\(selectedItems.count) 已选择")
-                                        .font(DS.title())
-                                        .foregroundColor(DS.textEmphasize)
-                                } else {
-                                    Text("全部笔记")
-                                        .font(DS.title())
-                                        .foregroundColor(DS.textEmphasize)
-                                }
-                            }
-                            ToolbarItem(placement: .topBarTrailing) {
                                 if isSelecting {
                                     Button {
                                         if selectedItems.count == filteredItems.count {
@@ -192,6 +174,38 @@ struct HomeView: View {
                                     } label: {
                                         Text(selectedItems.count == filteredItems.count && !filteredItems.isEmpty ? "取消全选" : "全选")
                                             .font(DS.body())
+                                    }
+                                    .disabled(filteredItems.isEmpty)
+                                } else {
+                                    Button {
+                                        withAnimation(.easeInOut(duration: 0.3)) {
+                                            showSidebar.toggle()
+                                        }
+                                    }
+                                    label: {
+                                        Image(systemName: "line.3.horizontal")
+                                            .font(.system(size: 17, weight: .semibold))
+                                    }
+                                }
+                            }
+                            ToolbarItem(placement: .principal) {
+                                if isSelecting {
+                                    Text("\(selectedItems.count) selected")
+                                        .font(DS.title())
+                                        .foregroundColor(DS.textEmphasize)
+                                } else {
+                                    Text("别看我")
+                                        .font(DS.page())
+                                        .foregroundColor(DS.textEmphasize)
+                                }
+                            }
+                            ToolbarItem(placement: .topBarTrailing) {
+                                if isSelecting {
+                                    Button {
+                                        exitSelectMode()
+                                    } label: {
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 17, weight: .semibold))
                                     }
                                 } else {
                                     Menu {
@@ -211,12 +225,49 @@ struct HomeView: View {
                                     }
                                 }
                             }
-                        }
-                        .safeAreaInset(edge: .bottom) {
+
                             if isSelecting {
-                                batchActionBar
-                            } else {
-                                bottomBar
+                                ToolbarItemGroup(placement: .bottomBar) {
+                                    Button {
+                                        performBatchCopy()
+                                    } label: {
+                                        Label("复制", systemImage: "doc.on.doc")
+                                    }
+                                    .disabled(selectedItems.isEmpty)
+
+                                    Spacer()
+
+                                    Button(role: .destructive) {
+                                        showBatchDeleteConfirmation = true
+                                    } label: {
+                                        Label("删除", systemImage: "trash")
+                                    }
+                                    .disabled(selectedItems.isEmpty)
+                                }
+                            } else if #available(iOS 26.0, *) {
+                                DefaultToolbarItem(kind: .search, placement: .bottomBar)
+                                ToolbarSpacer(.fixed, placement: .bottomBar)
+                                ToolbarItem(placement: .bottomBar) {
+                                    Button {
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            showNewNoteEditor = true
+                                        }
+                                    } label: {
+                                        Image(systemName: "square.and.pencil")
+                                    }
+                                    .accessibilityLabel("新建笔记")
+                                }
+                            }
+                        }
+                        .searchable(
+                            text: $vaultStore.searchText,
+                            placement: .toolbar,
+                            prompt: "搜索"
+                        )
+                        .autocorrectionDisabled()
+                        .safeAreaInset(edge: .bottom) {
+                            if !isSelecting && !isSystemBottomSearchAvailable {
+                                bottomSearchBar
                             }
                         }
                     }
@@ -248,7 +299,7 @@ struct HomeView: View {
                         }
                         .padding(DS.cardPadding)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .dsCardSurface()
+                        .dsCardSurface(shadow: false)
                     }
                 }
             }
@@ -260,13 +311,17 @@ struct HomeView: View {
 
     private func sidebarOverlay(width: CGFloat) -> some View {
         ZStack(alignment: .leading) {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.3)) { showSidebar = false }
-                }
-                .transition(.opacity)
+            ZStack {
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                Rectangle()
+                    .fill(Color.black.opacity(0.34))
+            }
+            .ignoresSafeArea()
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.3)) { showSidebar = false }
+            }
+            .transition(.opacity)
 
             SidebarView(
                 isPresented: $showSidebar,
@@ -275,73 +330,13 @@ struct HomeView: View {
             )
             .frame(width: DS.sidebarWidth)
             .frame(maxHeight: .infinity)
-            .background(DS.bg)
-            .clipShape(RoundedRectangle(cornerRadius: DS.rLg, style: .continuous))
+            .background(DS.surfaceRaised)
             .shadow(color: DS.popoverShadow.color,
                     radius: DS.popoverShadow.radius,
                     x: DS.popoverShadow.x,
                     y: DS.popoverShadow.y)
             .transition(.move(edge: .leading).combined(with: .opacity))
         }
-    }
-
-    private var bottomBar: some View {
-        HStack(spacing: DS.s3) {
-            SWSearchBar(text: $vaultStore.searchText, placeholder: "搜索")
-                .focused($searchFocused)
-
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) { showNewNoteEditor = true }
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 22, weight: .regular))
-                    .foregroundColor(DS.onFloat)
-                    .frame(width: 52, height: 52)
-                    .background(DS.primary)
-                    .clipShape(Circle())
-                    .shadow(color: DS.floatShadow.color,
-                            radius: DS.floatShadow.radius,
-                            x: DS.floatShadow.x,
-                            y: DS.floatShadow.y)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, DS.cardPadding)
-        .padding(.vertical, DS.s2)
-        .background(.bar)
-    }
-
-    private var batchActionBar: some View {
-        HStack(spacing: DS.s3) {
-            Button {
-                performBatchCopy()
-            } label: {
-                Label("复制", systemImage: "doc.on.doc")
-                    .font(DS.body())
-                    .foregroundColor(DS.textBody)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, DS.s3)
-                    .background(DS.surfaceCard)
-                    .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
-            }
-            .buttonStyle(.plain)
-
-            Button(role: .destructive) {
-                showBatchDeleteConfirmation = true
-            } label: {
-                Label("删除", systemImage: "trash")
-                    .font(DS.body())
-                    .foregroundColor(DS.onPrimary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, DS.s3)
-                    .background(DS.destructive)
-                    .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, DS.cardPadding)
-        .padding(.vertical, DS.s2)
-        .background(.bar)
     }
 
     private var emptyState: some View {
@@ -391,7 +386,7 @@ struct HomeView: View {
                 Text("密钥未加载")
                     .font(DS.body())
                     .foregroundColor(DS.textEmphasize)
-                Text("\(vaultStore.lockedNoteCount) 条加密笔记待解锁")
+                Text("\(vaultStore.lockedNoteCount) 条加密笔记")
                     .font(DS.caption())
                     .foregroundColor(DS.textSecondary)
             }
@@ -402,15 +397,14 @@ struct HomeView: View {
                 showKeyImporter = true
             } label: {
                 Image(systemName: "square.and.arrow.down")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(DS.primaryDeep)
-                    .frame(width: 36, height: 36)
-                    .background(DS.primaryContainer)
-                    .clipShape(Circle())
+                    .font(.system(size: 17, weight: .semibold))
             }
+            .buttonStyle(.plain)
+            .foregroundColor(DS.primaryDeep)
+            .accessibilityLabel("导入密钥文件")
         }
         .padding(DS.s3)
-        .dsCardSurface(cornerRadius: DS.rMd)
+        .dsCardSurface(cornerRadius: DS.rMd, shadow: false)
     }
 
     private var homeFeed: some View {
@@ -451,9 +445,9 @@ struct HomeView: View {
                     }
                 }
             }
-            .padding(.horizontal, DS.cardPadding)
+            .padding(.horizontal, DS.s3)
             .padding(.top, DS.s3)
-            .padding(.bottom, DS.s2)
+            .padding(.bottom, DS.s4)
             .frame(maxWidth: DS.contentMax)
             .frame(maxWidth: .infinity)
         }
@@ -463,6 +457,57 @@ struct HomeView: View {
         .onAppear {
             vaultStore.searchText = ""
         }
+    }
+
+    private var bottomSearchBar: some View {
+        HStack(spacing: DS.s2) {
+            HStack(spacing: DS.s2) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(DS.textSecondary)
+
+                TextField("搜索", text: $vaultStore.searchText)
+                    .font(DS.body())
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($searchFocused)
+                    .submitLabel(.search)
+
+                Button {
+                    searchFocused = true
+                } label: {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 16, weight: .regular))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(DS.textSecondary)
+                .accessibilityLabel("语音搜索")
+            }
+            .padding(.horizontal, DS.s3)
+            .frame(height: 44)
+            .background(.regularMaterial)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.white.opacity(0.42), lineWidth: 0.5)
+            )
+            .shadow(color: Color.black.opacity(0.08), radius: 18, x: 0, y: 6)
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showNewNoteEditor = true
+                }
+            } label: {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 19, weight: .semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("新建笔记")
+            .dsSystemGlassButton()
+        }
+        .padding(.horizontal, DS.cardPadding)
+        .padding(.vertical, DS.s2)
+        .background(.clear)
     }
 
     @ViewBuilder
@@ -656,5 +701,16 @@ struct ErrorView: View {
             Spacer()
         }
         .dsCanvasBackground()
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func dsSystemGlassButton() -> some View {
+        if #available(iOS 26.0, *) {
+            self.buttonStyle(.glass)
+        } else {
+            self.buttonStyle(.bordered)
+        }
     }
 }
