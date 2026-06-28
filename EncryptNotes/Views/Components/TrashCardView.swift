@@ -65,6 +65,11 @@ struct TrashCardView: View {
         }
         .padding(DS.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .dsCardSurface()
+        .background(DS.surfaceCard)
+        .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
+                .stroke(DS.line, lineWidth: 0.5)
+        )
     }
 }

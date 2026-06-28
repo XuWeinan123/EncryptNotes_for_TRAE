@@ -45,77 +45,86 @@ struct NoteEditorView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: DS.s3) {
-                    Text(isEditing ? "继续整理这条想法" : "快速记下一闪而过的想法")
-                        .font(DS.caption())
-                        .foregroundColor(DS.textSecondary)
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        #if os(iOS)
+                        NoteTextView(text: $noteBody, placeholder: "随便写点什么吧")
+                            .frame(minHeight: 360)
+                        #else
+                        ZStack(alignment: .topLeading) {
+                            if noteBody.isEmpty {
+                                Text("随便写点什么吧")
+                                    .font(DS.bodyLg())
+                                    .foregroundColor(DS.textSubtle)
+                                    .padding(DS.cardPadding)
+                            }
 
-                    #if os(iOS)
-                    NoteTextView(text: $noteBody, placeholder: "随便写点什么吧")
-                        .frame(minHeight: 320)
-                        .dsInputSurface()
-                    #else
-                    ZStack(alignment: .topLeading) {
-                        if noteBody.isEmpty {
-                            Text("随便写点什么吧")
+                            TextEditor(text: $noteBody)
                                 .font(DS.bodyLg())
-                                .foregroundColor(DS.textSubtle)
+                                .foregroundColor(DS.textBody)
+                                .scrollContentBackground(.hidden)
                                 .padding(DS.cardPadding)
                         }
-
-                        TextEditor(text: $noteBody)
-                            .font(DS.bodyLg())
-                            .foregroundColor(DS.textBody)
-                            .scrollContentBackground(.hidden)
-                            .padding(DS.cardPadding)
+                        .frame(minHeight: 360)
+                        #endif
                     }
-                    .frame(minHeight: 320)
-                    .dsInputSurface()
-                    #endif
-
-                    if isEditing {
-                        SWStatusBadge(
-                            isEncrypted ? "加密笔记" : "明文笔记",
-                            systemImage: isEncrypted ? "lock.open.fill" : "doc.text",
-                            style: isEncrypted ? .success : .neutral
-                        )
-                    } else {
-                        modePicker
-                    }
-
-                    HStack(spacing: DS.s1) {
-                        Text("用")
-                        Text("#tag")
-                            .foregroundColor(DS.primary)
-                        Text("把想法连接起来")
-                    }
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSubtle)
+                    .padding(DS.cardPadding)
+                    .frame(maxWidth: DS.contentMax, alignment: .leading)
+                    .frame(maxWidth: .infinity)
                 }
-                .padding(.horizontal, DS.cardPadding)
-                .padding(.top, DS.s4)
-                .padding(.bottom, DS.s8)
-                .frame(maxWidth: DS.contentMax, alignment: .leading)
-                .frame(maxWidth: .infinity)
             }
             .dsCanvasBackground()
-            .navigationTitle(isEditing ? "编辑笔记" : "新建笔记")
             .navigationBarTitleDisplayMode(.inline)
             .dsLiquidGlassToolbar()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                        .dsToolbarButtonStyle()
-                        .disabled(isSaving)
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .disabled(isSaving)
+                    .dsGlassToolbarButton()
+                }
+                ToolbarItem(placement: .principal) {
+                    Group {
+                        if isEditing {
+                            SWStatusBadge(
+                                isEncrypted ? "加密" : "明文",
+                                systemImage: isEncrypted ? "lock.fill" : "doc.text",
+                                style: isEncrypted ? .success : .neutral
+                            )
+                        } else {
+                            Text("新建笔记")
+                                .font(DS.caption())
+                                .foregroundColor(DS.textSecondary)
+                        }
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    if isSaving {
-                        ProgressView()
-                    } else {
-                        Button("保存") { saveNote() }
-                            .dsToolbarButtonStyle()
+                    HStack(spacing: DS.s2) {
+                        if !isEditing {
+                            Button {
+                                toggleEncryption()
+                            } label: {
+                                Image(systemName: isEncrypted ? "lock.fill" : "lock.open")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(isEncrypted ? DS.primaryDeep : DS.textSecondary)
+                            }
+                            .disabled(isSaving)
+                            .dsGlassToolbarButton()
+                        }
+
+                        if isSaving {
+                            ProgressView()
+                        } else {
+                            Button { saveNote() } label: {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 16, weight: .semibold))
+                            }
                             .disabled(noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .dsGlassToolbarButton(isProminent: true)
+                        }
                     }
                 }
             }
@@ -152,36 +161,18 @@ struct NoteEditorView: View {
         }
     }
 
-    private var modePicker: some View {
-        VStack(alignment: .leading, spacing: DS.s2) {
-            HStack(spacing: DS.s2) {
-                SWTabButton(
-                    title: "明文",
-                    systemImage: "doc.text",
-                    isSelected: !isEncrypted
-                ) {
-                    handleEncryptedToggle(false)
-                }
-
-                SWTabButton(
-                    title: "加密",
-                    systemImage: vaultStore.isKeyLoaded ? "lock.fill" : "lock.slash",
-                    isSelected: isEncrypted,
-                    isEnabled: vaultStore.isKeyLoaded
-                ) {
-                    handleEncryptedToggle(true)
-                }
-            }
-
+    private func toggleEncryption() {
+        if isEncrypted {
+            isEncrypted = false
+            settings.preferredNoteMode = .plain
+        } else {
             if !vaultStore.isKeyLoaded {
-                Text("导入密钥文件后，可保存加密笔记。密钥文件只会在本机读取，不会上传。")
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSubtle)
+                showFirstKeyPrompt = true
+            } else {
+                isEncrypted = true
+                settings.preferredNoteMode = .encrypted
             }
         }
-        .padding(.horizontal, DS.cardPadding)
-        .padding(.vertical, DS.s3)
-        .dsInputSurface()
     }
 
     private func configureInitialState() {
@@ -200,15 +191,6 @@ struct NoteEditorView: View {
                 showFirstKeyPrompt = true
                 settings.hasSeenFirstKeyPrompt = true
             }
-        }
-    }
-
-    private func handleEncryptedToggle(_ newValue: Bool) {
-        if newValue && !vaultStore.isKeyLoaded {
-            showFirstKeyPrompt = true
-        } else {
-            isEncrypted = newValue
-            settings.preferredNoteMode = newValue ? .encrypted : .plain
         }
     }
 
@@ -251,6 +233,25 @@ struct NoteEditorView: View {
     }
 }
 
+private extension View {
+    @ViewBuilder
+    func dsGlassToolbarButton(isProminent: Bool = false) -> some View {
+        if #available(iOS 26.0, *) {
+            if isProminent {
+                self.buttonStyle(.glassProminent)
+            } else {
+                self.buttonStyle(.glass)
+            }
+        } else {
+            self
+                .foregroundColor(isProminent ? DS.onPrimary : DS.textBody)
+                .frame(width: 36, height: 36)
+                .background(isProminent ? DS.primary : DS.surfaceSunken.opacity(0.6))
+                .clipShape(Circle())
+        }
+    }
+}
+
 #if os(iOS)
 private class PlaceholderTextView: UITextView {
     var placeholder: String = "" {
@@ -286,7 +287,7 @@ private class PlaceholderTextView: UITextView {
         self.font = font
 
         let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineHeightMultiple = 1.25
+        paragraphStyle.lineHeightMultiple = 1.3
         typingAttributes = [
             .font: font,
             .foregroundColor: UIColor(DS.textBody),
@@ -306,6 +307,10 @@ private class PlaceholderTextView: UITextView {
             placeholderLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: DS.cardPadding),
             placeholderLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -DS.cardPadding)
         ])
+
+        layer.cornerRadius = DS.rMd
+        layer.borderWidth = 0.5
+        layer.borderColor = UIColor(DS.line).cgColor
 
         updatePlaceholderVisibility()
     }
@@ -329,6 +334,7 @@ private struct NoteTextView: UIViewRepresentable {
         textView.delegate = context.coordinator
         textView.text = text
         context.coordinator.textView = textView
+        textView.backgroundColor = UIColor(DS.surfaceCard)
         return textView
     }
 
@@ -340,7 +346,7 @@ private struct NoteTextView: UIViewRepresentable {
 
             let font = UIFont.systemFont(ofSize: 15)
             let paragraphStyle = NSMutableParagraphStyle()
-            paragraphStyle.lineHeightMultiple = 1.25
+            paragraphStyle.lineHeightMultiple = 1.3
             uiView.typingAttributes = [
                 .font: font,
                 .foregroundColor: UIColor(DS.textBody),

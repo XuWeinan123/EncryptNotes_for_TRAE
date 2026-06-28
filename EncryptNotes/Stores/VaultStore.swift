@@ -3,6 +3,10 @@ import SwiftUI
 import Combine
 import CryptoKit
 
+#if os(iOS)
+import UIKit
+#endif
+
 /// 内部技术状态，仅用于初始化与错误展示，不再决定首页是否可用。
 enum VaultState: Equatable {
     case loading
@@ -979,12 +983,104 @@ final class VaultStore: ObservableObject {
         }
     }
 
+    // MARK: - Batch operations
+
+    /// 批量删除笔记：逐个复用 deleteNote / deleteLockedNote，确保均移动至回收站。
+    func batchDeleteNotes(_ items: [NoteListItem]) async throws -> (deleted: Int, errors: Int) {
+        var deleted = 0
+        var errors = 0
+        for item in items {
+            do {
+                switch item {
+                case .readable(let note):
+                    try await deleteNote(note)
+                case .locked(let info):
+                    try await deleteLockedNote(info)
+                }
+                deleted += 1
+            } catch {
+                errors += 1
+            }
+        }
+        return (deleted, errors)
+    }
+
+    /// 批量复制可读明文笔记到剪贴板；返回成功复制数与跳过数。
+    /// 按 Assumptions：跳过所有加密笔记（含已解密加密笔记与未解密加密笔记），仅复制明文笔记。
+    #if os(iOS)
+    @discardableResult
+    func batchCopyNotesToClipboard(_ items: [NoteListItem]) -> (copied: Int, skipped: Int) {
+        var plainBodies: [String] = []
+        var skipped = 0
+        for item in items {
+            switch item {
+            case .readable(let note):
+                if !note.isEncrypted {
+                    plainBodies.append(note.body)
+                } else {
+                    skipped += 1
+                }
+            case .locked:
+                skipped += 1
+            }
+        }
+        if !plainBodies.isEmpty {
+            UIPasteboard.general.string = plainBodies.joined(separator: "\n\n---\n\n")
+        }
+        return (plainBodies.count, skipped)
+    }
+    #endif
+
+    /// 导出明文可读笔记为 Markdown zip 包。
+    /// 跳过所有加密笔记（含已解密加密笔记与未解密加密笔记），返回导出 URL、导出数量、跳过数量。
+    func exportReadableNotesAsZip() throws -> (url: URL, exportedCount: Int, skippedCount: Int) {
+        let plainOnly = plainNotes.sorted { $0.updatedAt > $1.updatedAt }
+        let skippedCount = decryptedNotes.count + lockedEncryptedNotes.count
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let dateStr = dateFormatter.string(from: Date())
+
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("别看我-笔记-\(dateStr)-\(UUID().uuidString.prefix(8))")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+
+        let fileDateFormatter = DateFormatter()
+        fileDateFormatter.dateFormat = "yyyy-MM-dd-HHmmss"
+
+        for (index, note) in plainOnly.enumerated() {
+            let timestamp = fileDateFormatter.string(from: note.updatedAt)
+            let shortId = String(note.id.prefix(6))
+            let safeIndex = String(format: "%03d", index + 1)
+            let fileName = "\(safeIndex)-\(timestamp)-\(shortId).md"
+            let fileURL = tmpDir.appendingPathComponent(fileName)
+
+            let createdStr = DateFormatters.formatDisplayDateTime(note.createdAt).replacingOccurrences(of: ".", with: "-")
+            let updatedStr = DateFormatters.formatDisplayDateTime(note.updatedAt).replacingOccurrences(of: ".", with: "-")
+            let md = """
+            ---
+            创建时间: \(createdStr)
+            更新时间: \(updatedStr)
+            ---
+
+            \(note.body)
+            """
+            try md.write(to: fileURL, atomically: true, encoding: .utf8)
+        }
+
+        let zipURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("别看我-笔记-\(dateStr).zip")
+        try ZipUtility.createZip(from: tmpDir, to: zipURL)
+        try? FileManager.default.removeItem(at: tmpDir)
+
+        return (zipURL, plainOnly.count, skippedCount)
+    }
+
     // MARK: - Scene phase
 
     /// App 进入后台时调用：清空内存中的密钥与已解密笔记，加密笔记回到乱码态。
     func handleEnterBackground() {
         guard settings.autoUnloadKeyOnForeground == false else { return }
-        // 默认不清空密钥，仅由 AppLockStore 显示隐私遮罩
     }
 
     /// App 回到前台时调用：若开启自动卸载密钥，则卸载密钥。

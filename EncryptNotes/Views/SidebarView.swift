@@ -1,32 +1,35 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// 侧边栏：应用名称 + 设置入口、密钥卡片、标签列表、回收站入口。
 struct SidebarView: View {
     @Binding var isPresented: Bool
     @Binding var showSettings: Bool
     @Binding var showTrash: Bool
 
     @StateObject private var vaultStore = VaultStore.shared
+    @StateObject private var syncStore = SyncStatusStore.shared
 
     @State private var showKeyImporter = false
-    @State private var showKeyExportGuide = false
+    @State private var exportedKeyURL: URL?
+    @State private var showShareSheet = false
     @State private var showUnloadConfirmation = false
     @State private var showResetFirstConfirmation = false
     @State private var showResetSecondConfirmation = false
-    @State private var exportedKeyURL: URL?
-    @State private var showShareSheet = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: DS.s6) {
-                header
-                keyCard
-                tagSection
-                trashEntry
+        VStack(spacing: 0) {
+            header
+            Divider().padding(.vertical, DS.s2)
+            ScrollView {
+                VStack(alignment: .leading, spacing: DS.s5) {
+                    keyCard
+                    navSection
+                    tagSection
+                    trashEntry
+                }
+                .padding(.horizontal, DS.cardPadding)
+                .padding(.vertical, DS.s3)
             }
-            .padding(.horizontal, DS.cardPadding)
-            .padding(.vertical, DS.s4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(DS.bg.ignoresSafeArea())
@@ -42,7 +45,7 @@ struct SidebarView: View {
                 ShareSheet(items: [url])
             }
         }
-        .alert("保存密钥文件", isPresented: $showKeyExportGuide) {
+        .alert("保存密钥文件", isPresented: $vaultStore.needsKeyExport) {
             Button("立即保存") { exportKeyFile() }
             Button("稍后", role: .cancel) { vaultStore.needsKeyExport = false }
         } message: {
@@ -85,11 +88,15 @@ struct SidebarView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: DS.s3) {
             Text("别看我")
                 .font(DS.page())
                 .foregroundColor(DS.textEmphasize)
+
             Spacer()
+
+            syncStatusIcon
+
             Button {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     isPresented = false
@@ -99,7 +106,28 @@ struct SidebarView: View {
                 Image(systemName: "gearshape")
                     .font(.system(size: 18, weight: .regular))
                     .foregroundColor(DS.textSecondary)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Rectangle())
             }
+        }
+        .padding(.horizontal, DS.cardPadding)
+        .padding(.top, DS.s2)
+    }
+
+    @ViewBuilder
+    private var syncStatusIcon: some View {
+        switch syncStore.status {
+        case .syncing:
+            ProgressView()
+                .controlSize(.small)
+        case .saved:
+            Image(systemName: syncStore.isNetworkAvailable ? "icloud" : "icloud.slash")
+                .font(.system(size: 16, weight: .regular))
+                .foregroundColor(DS.textSubtle)
+        case .failed:
+            Image(systemName: "exclamationmark.icloud")
+                .font(.system(size: 16, weight: .regular))
+                .foregroundColor(DS.destructive)
         }
     }
 
@@ -108,108 +136,120 @@ struct SidebarView: View {
         VStack(alignment: .leading, spacing: DS.s3) {
             if vaultStore.isKeyLoaded {
                 HStack {
+                    Image(systemName: "lock.open.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(DS.primaryDeep)
                     Text("密钥已加载")
                         .font(DS.title())
                         .foregroundColor(DS.textEmphasize)
                     Spacer()
-                    SWStatusBadge("可查看", systemImage: "lock.open.fill", style: .success)
                 }
-                Text("加密笔记已在本机解密显示。")
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSecondary)
 
-                VStack(spacing: DS.s2) {
-                    Button {
+                VStack(spacing: 0) {
+                    sidebarButton(icon: "square.and.arrow.up", title: "导出密钥", destructive: false) {
                         exportKeyFile()
-                    } label: {
-                        Label("导出密钥", systemImage: "square.and.arrow.up")
-                            .font(DS.body())
-                            .foregroundColor(DS.textBody)
-                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    Button {
+                    Divider().padding(.leading, 32)
+                    sidebarButton(icon: "lock.slash", title: "卸载本机密钥", destructive: false) {
                         showUnloadConfirmation = true
-                    } label: {
-                        Label("卸载本机密钥", systemImage: "lock.slash")
-                            .font(DS.body())
-                            .foregroundColor(DS.textBody)
-                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    Button {
+                    Divider().padding(.leading, 32)
+                    sidebarButton(icon: "trash", title: "重置密钥", destructive: true) {
                         showResetFirstConfirmation = true
-                    } label: {
-                        Label("重置密钥", systemImage: "trash")
-                            .font(DS.body())
-                            .foregroundColor(DS.destructive)
-                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
+                .background(DS.surfaceCard)
+                .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
+                        .stroke(DS.line, lineWidth: 0.5)
+                )
             } else {
                 HStack {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(DS.pro)
                     Text("未加载密钥")
                         .font(DS.title())
                         .foregroundColor(DS.textEmphasize)
                     Spacer()
-                    SWStatusBadge("待导入", systemImage: "lock.fill", style: .warning)
                 }
-                Text("加密笔记将以乱码显示。")
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSecondary)
 
-                VStack(spacing: DS.s2) {
-                    Button {
-                        Task {
-                            do {
-                                try await vaultStore.createKey()
-                            } catch {
-                                vaultStore.lastError = "创建密钥失败：\(error.localizedDescription)"
-                            }
+                Button {
+                    Task {
+                        do {
+                            try await vaultStore.createKey()
+                        } catch {
+                            vaultStore.lastError = "创建密钥失败：\(error.localizedDescription)"
                         }
-                    } label: {
-                        Label("创建密钥", systemImage: "key.fill")
-                            .font(DS.body())
-                            .foregroundColor(DS.onPrimary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(DS.primary)
-                            .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
                     }
-                    .buttonStyle(.plain)
+                } label: {
+                    HStack {
+                        Image(systemName: "key.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("创建密钥")
+                            .font(DS.body())
+                        Spacer()
+                    }
+                    .foregroundColor(DS.onPrimary)
+                    .padding(.horizontal, DS.s3)
+                    .padding(.vertical, DS.s3)
+                    .background(DS.primary)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+                }
+                .buttonStyle(.plain)
 
-                    Button {
+                VStack(spacing: 0) {
+                    sidebarButton(icon: "square.and.arrow.down", title: "导入密钥文件", destructive: false) {
                         showKeyImporter = true
-                    } label: {
-                        Label("导入密钥文件", systemImage: "square.and.arrow.down")
-                            .font(DS.body())
-                            .foregroundColor(DS.textBody)
-                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    Button {
+                    Divider().padding(.leading, 32)
+                    sidebarButton(icon: "trash", title: "重置密钥", destructive: true) {
                         showResetFirstConfirmation = true
-                    } label: {
-                        Label("重置密钥", systemImage: "trash")
-                            .font(DS.body())
-                            .foregroundColor(DS.destructive)
-                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
+                .background(DS.surfaceCard)
+                .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
+                        .stroke(DS.line, lineWidth: 0.5)
+                )
+
                 Text("密钥文件只会在本机读取，不会上传。")
                     .font(DS.caption())
                     .foregroundColor(DS.textSubtle)
-                Text("重置密钥会删除所有加密笔记，明文笔记会保留。")
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSubtle)
-            }
-            HStack(spacing: DS.s2) {
-                SWStatusBadge("可读 \(vaultStore.readableNoteCount)", systemImage: "doc.text", style: .neutral)
-                if vaultStore.lockedNoteCount > 0 {
-                    SWStatusBadge("待解锁 \(vaultStore.lockedNoteCount)", systemImage: "exclamationmark.lock", style: .warning)
-                }
             }
         }
-        .padding(DS.cardPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .dsCardSurface()
+    }
+
+    private var navSection: some View {
+        VStack(alignment: .leading, spacing: DS.s1) {
+            Button {
+                vaultStore.selectedTag = nil
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isPresented = false
+                }
+            } label: {
+                HStack(spacing: DS.s3) {
+                    Image(systemName: "note.text")
+                        .font(.system(size: 16, weight: .regular))
+                        .foregroundColor(DS.textSecondary)
+                        .frame(width: 24)
+                    Text("全部笔记")
+                        .font(DS.body())
+                        .foregroundColor(DS.textBody)
+                    Spacer()
+                    Text("\(vaultStore.readableNoteCount)")
+                        .font(DS.caption())
+                        .foregroundColor(DS.textSubtle)
+                }
+                .padding(.horizontal, DS.s3)
+                .padding(.vertical, DS.s2)
+                .background(vaultStore.selectedTag == nil ? DS.primaryContainer : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     @ViewBuilder
@@ -218,52 +258,47 @@ struct SidebarView: View {
             Text("标签")
                 .font(DS.caption())
                 .foregroundColor(DS.textSecondary)
-
-            Button {
-                vaultStore.selectedTag = nil
-            } label: {
-                HStack {
-                    Text("全部")
-                        .font(DS.body())
-                        .foregroundColor(vaultStore.selectedTag == nil ? DS.primaryDeep : DS.textBody)
-                    Spacer()
-                    Text("\(vaultStore.readableNotes.count)")
-                        .font(DS.caption())
-                        .foregroundColor(DS.textSubtle)
-                }
-                .padding(.vertical, DS.s1)
-                .padding(.horizontal, DS.s2)
-                .background(vaultStore.selectedTag == nil ? DS.primaryContainer : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
-            }
-            .buttonStyle(.plain)
-
-            ForEach(vaultStore.allTags) { tagCount in
-                Button {
-                    vaultStore.selectedTag = vaultStore.selectedTag == tagCount.tag ? nil : tagCount.tag
-                } label: {
-                    HStack {
-                        Text(tagCount.tag)
-                            .font(DS.body())
-                            .foregroundColor(vaultStore.selectedTag == tagCount.tag ? DS.primaryDeep : DS.textBody)
-                        Spacer()
-                        Text("\(tagCount.count)")
-                            .font(DS.caption())
-                            .foregroundColor(DS.textSubtle)
-                    }
-                    .padding(.vertical, DS.s1)
-                    .padding(.horizontal, DS.s2)
-                    .background(vaultStore.selectedTag == tagCount.tag ? DS.primaryContainer : Color.clear)
-                    .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
-                }
-                .buttonStyle(.plain)
-            }
+                .padding(.horizontal, DS.s3)
 
             if vaultStore.allTags.isEmpty {
                 Text("暂无标签")
                     .font(DS.caption())
                     .foregroundColor(DS.textSubtle)
+                    .padding(.horizontal, DS.s3)
                     .padding(.vertical, DS.s1)
+            } else {
+                VStack(spacing: 2) {
+                    ForEach(vaultStore.allTags) { tagCount in
+                        Button {
+                            vaultStore.selectedTag = vaultStore.selectedTag == tagCount.tag ? nil : tagCount.tag
+                            if vaultStore.selectedTag != nil {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    isPresented = false
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: DS.s3) {
+                                Image(systemName: "number")
+                                    .font(.system(size: 14, weight: .regular))
+                                    .foregroundColor(DS.primary)
+                                    .frame(width: 24)
+                                Text(tagCount.tag)
+                                    .font(DS.body())
+                                    .foregroundColor(DS.textBody)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text("\(tagCount.count)")
+                                    .font(DS.caption())
+                                    .foregroundColor(DS.textSubtle)
+                            }
+                            .padding(.horizontal, DS.s3)
+                            .padding(.vertical, DS.s2)
+                            .background(vaultStore.selectedTag == tagCount.tag ? DS.primaryContainer : Color.clear)
+                            .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
         }
     }
@@ -275,10 +310,11 @@ struct SidebarView: View {
                 showTrash = true
             }
         } label: {
-            HStack {
+            HStack(spacing: DS.s3) {
                 Image(systemName: "trash")
                     .font(.system(size: 16, weight: .regular))
                     .foregroundColor(DS.textSecondary)
+                    .frame(width: 24)
                 Text("回收站")
                     .font(DS.body())
                     .foregroundColor(DS.textBody)
@@ -289,7 +325,26 @@ struct SidebarView: View {
                         .foregroundColor(DS.textSubtle)
                 }
             }
+            .padding(.horizontal, DS.s3)
             .padding(.vertical, DS.s2)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func sidebarButton(icon: String, title: String, destructive: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: DS.s3) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundColor(destructive ? DS.destructive : DS.textSecondary)
+                    .frame(width: 24)
+                Text(title)
+                    .font(DS.body())
+                    .foregroundColor(destructive ? DS.destructive : DS.textBody)
+                Spacer()
+            }
+            .padding(.horizontal, DS.s3)
+            .padding(.vertical, DS.s3)
         }
         .buttonStyle(.plain)
     }

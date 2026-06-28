@@ -1,5 +1,6 @@
 import XCTest
 import CryptoKit
+import Compression
 @testable import EncryptNotes
 
 final class VaultStoreTests: XCTestCase {
@@ -292,5 +293,135 @@ final class VaultStoreTests: XCTestCase {
         let countBefore = store.plainNotes.count
         await store.initialize()
         XCTAssertEqual(store.plainNotes.count, countBefore, "不应重复创建默认笔记")
+    }
+
+    // MARK: - 批量删除
+
+    @MainActor
+    func testBatchDeletePlainNotesMovesToTrash() async throws {
+        let store = VaultStore(storage: LocalFallbackStorage.shared)
+        let storage = LocalFallbackStorage.shared
+        try await storage.initializeVault()
+        try? storage.emptyTrash()
+
+        store.configureForTesting(vaultId: "batch-plain-vault")
+
+        let n1 = try await store.createNote(body: "明文笔记一", isEncrypted: false)
+        let n2 = try await store.createNote(body: "明文笔记二", isEncrypted: false)
+        let n3 = try await store.createNote(body: "明文笔记三", isEncrypted: false)
+
+        XCTAssertEqual(store.plainNotes.count, 3)
+
+        let items: [NoteListItem] = [
+            .readable(n1),
+            .readable(n2)
+        ]
+        let result = try await store.batchDeleteNotes(items)
+
+        XCTAssertEqual(result.deleted, 2)
+        XCTAssertEqual(result.errors, 0)
+        XCTAssertEqual(store.plainNotes.count, 1, "应只保留一条")
+        XCTAssertEqual(store.plainNotes.first?.id, n3.id)
+        XCTAssertEqual(store.trashNotes.count, 2, "回收站应有两条")
+    }
+
+    @MainActor
+    func testBatchDeleteEncryptedNotesWithKeyMovesToTrash() async throws {
+        let store = VaultStore(storage: LocalFallbackStorage.shared)
+        let storage = LocalFallbackStorage.shared
+        try await storage.initializeVault()
+        try? storage.emptyTrash()
+
+        let key = SymmetricKey(size: .bits256)
+        store.configureForTesting(vaultId: "batch-enc-vault", key: key)
+
+        let e1 = try await store.createNote(body: "加密笔记一", isEncrypted: true)
+        let e2 = try await store.createNote(body: "加密笔记二", isEncrypted: true)
+        let p1 = try await store.createNote(body: "明文笔记", isEncrypted: false)
+
+        XCTAssertEqual(store.decryptedNotes.count, 2)
+        XCTAssertEqual(store.plainNotes.count, 1)
+
+        let items: [NoteListItem] = [
+            .readable(e1),
+            .readable(e2)
+        ]
+        let result = try await store.batchDeleteNotes(items)
+
+        XCTAssertEqual(result.deleted, 2)
+        XCTAssertEqual(result.errors, 0)
+        XCTAssertTrue(store.decryptedNotes.isEmpty, "加密笔记应被删除")
+        XCTAssertEqual(store.plainNotes.count, 1, "明文笔记应保留")
+        XCTAssertEqual(store.trashNotes.count, 2, "回收站应有两条加密笔记")
+    }
+
+    // MARK: - 导出
+
+    @MainActor
+    func testExportOnlyIncludesPlainNotesSkipsEncrypted() async throws {
+        let store = VaultStore(storage: LocalFallbackStorage.shared)
+        let storage = LocalFallbackStorage.shared
+        try await storage.initializeVault()
+
+        let key = SymmetricKey(size: .bits256)
+        store.configureForTesting(vaultId: "export-vault", key: key)
+
+        try await store.createNote(body: "明文笔记内容 A", isEncrypted: false)
+        try await store.createNote(body: "明文笔记内容 B", isEncrypted: false)
+        try await store.createNote(body: "加密笔记内容", isEncrypted: true)
+
+        XCTAssertEqual(store.plainNotes.count, 2)
+        XCTAssertEqual(store.decryptedNotes.count, 1)
+
+        let result = try store.exportReadableNotesAsZip()
+
+        XCTAssertEqual(result.exportedCount, 2, "只应导出 2 条明文笔记")
+        XCTAssertEqual(result.skippedCount, 1, "应跳过 1 条加密笔记")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.url.path))
+
+        var extractedMarkdown: [String] = []
+        if let archive = Archive(url: result.url, accessMode: .read) {
+            for entry in archive {
+                var data = Data()
+                _ = try archive.extract(entry) { chunk in
+                    data.append(chunk)
+                    return chunk.count
+                }
+                if let content = String(data: data, encoding: .utf8) {
+                    extractedMarkdown.append(content)
+                }
+            }
+        }
+
+        XCTAssertEqual(extractedMarkdown.count, 2, "zip 中应包含 2 个 Markdown 文件")
+
+        let allContent = extractedMarkdown.joined(separator: "\n")
+        XCTAssertTrue(allContent.contains("明文笔记内容 A"))
+        XCTAssertTrue(allContent.contains("明文笔记内容 B"))
+        XCTAssertFalse(allContent.contains("加密笔记内容"), "加密笔记内容不应出现在导出中")
+    }
+
+    @MainActor
+    func testBatchCopyOnlyCopiesPlainNotes() async throws {
+        let store = VaultStore(storage: LocalFallbackStorage.shared)
+        let storage = LocalFallbackStorage.shared
+        try await storage.initializeVault()
+
+        let key = SymmetricKey(size: .bits256)
+        store.configureForTesting(vaultId: "copy-vault", key: key)
+
+        let p1 = try await store.createNote(body: "明文复制测试", isEncrypted: false)
+        let e1 = try await store.createNote(body: "加密不应复制", isEncrypted: true)
+
+        let items: [NoteListItem] = [
+            .readable(p1),
+            .readable(e1)
+        ]
+
+        #if os(iOS)
+        let result = store.batchCopyNotesToClipboard(items)
+        XCTAssertEqual(result.copied, 1, "只应复制 1 条明文笔记")
+        XCTAssertEqual(result.skipped, 1, "应跳过 1 条加密笔记")
+        #endif
     }
 }

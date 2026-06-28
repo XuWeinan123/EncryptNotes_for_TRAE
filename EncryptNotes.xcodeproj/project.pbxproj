@@ -30,7 +30,6 @@
 				App/Mac/MacAppDelegate.swift,
 				Stores/Mac/MacNoteWindowStore.swift,
 				Stores/Mac/ShortcutStore.swift,
-				Stores/Mac/SyncStatusStore.swift,
 				Tests/CryptoServiceTests.swift,
 				Tests/SchemaTests.swift,
 				Tests/VaultStoreTests.swift,
