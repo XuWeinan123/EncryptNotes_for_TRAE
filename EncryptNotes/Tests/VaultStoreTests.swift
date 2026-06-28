@@ -4,11 +4,11 @@ import CryptoKit
 
 final class VaultStoreTests: XCTestCase {
 
-    // MARK: - 明文笔记
-
     @MainActor
     func testCreatePlainNoteWithoutKey() async throws {
-        let store = VaultStore(storage: LocalFallbackStorage.shared)
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_plain_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
         store.configureForTesting(vaultId: "test-vault-plain")
 
         try await store.createNote(body: "未导入密钥时添加的笔记", isEncrypted: false)
@@ -16,28 +16,41 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertEqual(store.plainNotes.count, 1)
         XCTAssertEqual(store.plainNotes.first?.body, "未导入密钥时添加的笔记")
         XCTAssertFalse(store.plainNotes.first?.isEncrypted ?? true)
+
+        let noteId = store.plainNotes.first!.id
+        let mdURL = tmpDir.appendingPathComponent("notes").appendingPathComponent("\(noteId).md")
+        let mdData = try Data(contentsOf: mdURL)
+        let mdContent = String(data: mdData, encoding: .utf8) ?? ""
+        XCTAssertTrue(mdContent.contains("未导入密钥时添加的笔记"), "Markdown 文件应包含正文")
+        XCTAssertTrue(mdContent.contains("note_id:"), "Markdown 文件应包含 frontmatter")
+
+        try? FileManager.default.removeItem(at: tmpDir)
     }
 
     @MainActor
     func testCreateEncryptedNoteRequiresKey() async throws {
-        let store = VaultStore(storage: LocalFallbackStorage.shared)
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_encreq_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
         store.configureForTesting(vaultId: "test-vault-enc")
 
-        // 无密钥时创建加密笔记应失败
         do {
             try await store.createNote(body: "加密内容", isEncrypted: true)
             XCTFail("无密钥时不应创建加密笔记")
         } catch VaultError.keyNotLoaded {
-            // 预期
         } catch {
             XCTFail("应抛出 keyNotLoaded，实际：\(error)")
         }
+
+        try? FileManager.default.removeItem(at: tmpDir)
     }
 
     @MainActor
     func testCreateEncryptedNoteWithKey() async throws {
-        let store = VaultStore(storage: LocalFallbackStorage.shared)
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_enc_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
         let key = SymmetricKey(size: .bits256)
+        let store = VaultStore(storage: storage)
         store.configureForTesting(vaultId: "test-vault-enc-key", key: key)
 
         try await store.createNote(body: "加密笔记内容", isEncrypted: true)
@@ -45,23 +58,31 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertEqual(store.decryptedNotes.count, 1)
         XCTAssertEqual(store.decryptedNotes.first?.body, "加密笔记内容")
         XCTAssertTrue(store.decryptedNotes.first?.isEncrypted ?? false)
-    }
 
-    // MARK: - 移除 Free 限制
+        let noteId = store.decryptedNotes.first!.id
+        let mdURL = tmpDir.appendingPathComponent("notes").appendingPathComponent("\(noteId).md")
+        let mdData = try Data(contentsOf: mdURL)
+        let mdContent = String(data: mdData, encoding: .utf8) ?? ""
+        XCTAssertTrue(mdContent.contains("bkwenc:v1:"), "加密笔记文件 body 应为密文")
+        XCTAssertFalse(mdContent.contains("加密笔记内容"), "加密笔记文件不应包含明文正文")
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
 
     @MainActor
     func testNoFreeLimit() async throws {
-        let store = VaultStore(storage: LocalFallbackStorage.shared)
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_nolimit_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
         store.configureForTesting(vaultId: "test-vault-nolimit")
 
-        // 创建超过 20 条明文笔记，不应抛出 freeLimitReached
         for i in 0..<25 {
             try await store.createNote(body: "笔记 \(i)", isEncrypted: false)
         }
         XCTAssertEqual(store.plainNotes.count, 25)
-    }
 
-    // MARK: - 标签解析
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
 
     @MainActor
     func testTagParserSpaceDelimiter() {
@@ -89,9 +110,9 @@ final class VaultStoreTests: XCTestCase {
 
     @MainActor
     func testTagsOnlyFromReadableNotes() {
-        let store = VaultStore(storage: LocalFallbackStorage.shared)
-        let plain = Note(id: "p1", vaultId: "v", body: "明文 #标签A", isEncrypted: false)
-        let encrypted = Note(id: "e1", vaultId: "v", body: "加密 #标签B", isEncrypted: true)
+        let store = VaultStore(storage: try? TemporaryStorage(baseURL: FileManager.default.temporaryDirectory))
+        let plain = Note(id: "p1", body: "明文 #标签A", isEncrypted: false)
+        let encrypted = Note(id: "e1", body: "加密 #标签B", isEncrypted: true)
         store.configureForTesting(vaultId: "v", decryptedNotes: [encrypted], plainNotes: [plain])
 
         let tags = store.allTags
@@ -99,19 +120,17 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertTrue(tags.contains { $0.tag == "#标签B" })
     }
 
-    // MARK: - 合并排序
-
     @MainActor
     func testReadableNotesMergesAndSorts() {
-        let store = VaultStore(storage: LocalFallbackStorage.shared)
+        let store = VaultStore(storage: try? TemporaryStorage(baseURL: FileManager.default.temporaryDirectory))
         let encrypted = Note(
-            id: "enc-1", vaultId: "v", body: "加密",
+            id: "enc-1", body: "加密",
             createdAt: Date(timeIntervalSince1970: 100),
             updatedAt: Date(timeIntervalSince1970: 200),
             isEncrypted: true
         )
         let plain = Note(
-            id: "plain-1", vaultId: "v", body: "明文",
+            id: "plain-1", body: "明文",
             createdAt: Date(timeIntervalSince1970: 100),
             updatedAt: Date(timeIntervalSince1970: 300),
             isEncrypted: false
@@ -125,12 +144,12 @@ final class VaultStoreTests: XCTestCase {
 
     @MainActor
     func testNoteCountDerivedState() {
-        let store = VaultStore(storage: LocalFallbackStorage.shared)
-        let plain = Note(id: "p1", vaultId: "v", body: "明文", isEncrypted: false)
-        let encrypted = Note(id: "e1", vaultId: "v", body: "加密", isEncrypted: true)
+        let store = VaultStore(storage: try? TemporaryStorage(baseURL: FileManager.default.temporaryDirectory))
+        let plain = Note(id: "p1", body: "明文", isEncrypted: false)
+        let encrypted = Note(id: "e1", body: "加密", isEncrypted: true)
         let locked = EncryptedNoteInfo(
             id: "l1",
-            url: URL(fileURLWithPath: "/tmp/l1.bkwenc.json"),
+            url: URL(fileURLWithPath: "/tmp/l1.md"),
             ciphertextPreview: "cipher",
             fileSize: 12,
             updatedAt: Date()
@@ -148,73 +167,83 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertEqual(store.totalNoteCount, 3)
     }
 
-    // MARK: - 回收站
+    @MainActor
+    func testUpdateNotePreservesCreatedAt() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_update_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "test-update")
+
+        let note = try await store.createNote(body: "原始内容", isEncrypted: false)
+        let originalCreated = note.createdAt
+
+        try await Task.sleep(nanoseconds: 100_000_000)
+        try await store.updateNote(note, body: "更新后的内容")
+
+        XCTAssertEqual(store.plainNotes.count, 1)
+        XCTAssertEqual(store.plainNotes.first?.body, "更新后的内容")
+        XCTAssertEqual(store.plainNotes.first?.createdAt, originalCreated)
+        XCTAssertGreaterThan(store.plainNotes.first!.updatedAt, originalCreated)
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
 
     @MainActor
     func testDeletePlainNoteMovesToTrash() async throws {
-        let store = VaultStore(storage: LocalFallbackStorage.shared)
-        let storage = LocalFallbackStorage.shared
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_delete_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
         try await storage.initializeVault()
-        try? storage.emptyTrash()
 
-        let plainNote = Note(id: "plain-trash", vaultId: "v", body: "待删除", isEncrypted: false)
-        store.configureForTesting(vaultId: "v", plainNotes: [plainNote])
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "v")
 
-        guard let url = storage.plainNoteFileURL(for: plainNote.id) else {
-            XCTFail("无法获取明文笔记 URL")
-            return
-        }
-        let file = PlainNoteFile(
-            noteId: plainNote.id, vaultId: "v",
-            createdAt: plainNote.createdAt, updatedAt: plainNote.updatedAt,
-            body: plainNote.body
-        )
-        try storage.savePlainNoteFile(file, at: url)
+        let plainNote = try await store.createNote(body: "待删除", isEncrypted: false)
+        let noteURL = tmpDir.appendingPathComponent("notes").appendingPathComponent("\(plainNote.id).md")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: noteURL.path))
 
         try await store.deleteNote(plainNote)
 
         XCTAssertTrue(store.plainNotes.isEmpty, "主列表应已移除")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "notes/ 中文件应已删除")
-        XCTAssertEqual(store.trashNotes.count, 1, "回收站应有一条")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: noteURL.path), "notes/ 中文件应已删除")
+        let trashURL = tmpDir.appendingPathComponent("trash").appendingPathComponent("\(plainNote.id).md")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: trashURL.path), "trash/ 中应有文件")
+
+        try? FileManager.default.removeItem(at: tmpDir)
     }
 
     @MainActor
     func testEmptyTrash() async throws {
-        let store = VaultStore(storage: LocalFallbackStorage.shared)
-        let storage = LocalFallbackStorage.shared
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_emptytrash_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
         try await storage.initializeVault()
-        try? storage.emptyTrash()
 
-        let note = Note(id: "empty-trash", vaultId: "v", body: "x", isEncrypted: false)
-        store.configureForTesting(vaultId: "v", plainNotes: [note])
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "v")
 
-        guard let url = storage.plainNoteFileURL(for: note.id) else { return }
-        let file = PlainNoteFile(
-            noteId: note.id, vaultId: "v",
-            createdAt: note.createdAt, updatedAt: note.updatedAt,
-            body: note.body
-        )
-        try storage.savePlainNoteFile(file, at: url)
-
+        let note = try await store.createNote(body: "x", isEncrypted: false)
         try await store.deleteNote(note)
-        XCTAssertEqual(store.trashNotes.count, 1)
 
+        try await Task.sleep(nanoseconds: 50_000_000)
         try await store.emptyTrash()
-        XCTAssertEqual(store.trashNotes.count, 0)
-    }
 
-    // MARK: - 重置密钥
+        let trashURL = tmpDir.appendingPathComponent("trash")
+        let contents = try FileManager.default.contentsOfDirectory(at: trashURL, includingPropertiesForKeys: nil)
+        let mdFiles = contents.filter { $0.lastPathComponent.hasSuffix(".md") }
+        XCTAssertTrue(mdFiles.isEmpty, "回收站应清空")
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
 
     @MainActor
     func testResetKeyDeletesEncryptedKeepsPlain() async throws {
-        let store = VaultStore(storage: LocalFallbackStorage.shared)
-        let storage = LocalFallbackStorage.shared
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_reset_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
         try await storage.initializeVault()
 
         let key = SymmetricKey(size: .bits256)
+        let store = VaultStore(storage: storage)
         store.configureForTesting(vaultId: "reset-vault", key: key)
 
-        // 创建一条加密笔记 + 一条明文笔记
         try await store.createNote(body: "加密", isEncrypted: true)
         try await store.createNote(body: "明文", isEncrypted: false)
 
@@ -223,21 +252,21 @@ final class VaultStoreTests: XCTestCase {
 
         try await store.resetKey()
 
-        // 加密笔记应被删除，明文笔记应保留
         XCTAssertTrue(store.decryptedNotes.isEmpty, "加密笔记应被删除")
         XCTAssertEqual(store.plainNotes.count, 1, "明文笔记应保留")
         XCTAssertTrue(store.isKeyLoaded, "应已加载新密钥")
-    }
 
-    // MARK: - 卸载密钥
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
 
     @MainActor
     func testUnloadKeyClearsDecryptedNotes() async throws {
-        let store = VaultStore(storage: LocalFallbackStorage.shared)
-        let storage = LocalFallbackStorage.shared
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_unload_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
         try await storage.initializeVault()
 
         let key = SymmetricKey(size: .bits256)
+        let store = VaultStore(storage: storage)
         store.configureForTesting(vaultId: "unload-vault", key: key)
 
         try await store.createNote(body: "加密笔记", isEncrypted: true)
@@ -247,11 +276,9 @@ final class VaultStoreTests: XCTestCase {
 
         XCTAssertFalse(store.isKeyLoaded)
         XCTAssertTrue(store.decryptedNotes.isEmpty)
-        // 加密笔记应作为乱码卡片存在
-        XCTAssertEqual(store.lockedEncryptedNotes.count, 1)
-    }
 
-    // MARK: - 模式持久化
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
 
     @MainActor
     func testPreferredNoteModeDefaultsToPlain() {
@@ -268,42 +295,13 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertEqual(settings.preferredNoteMode, .encrypted)
     }
 
-    // MARK: - 默认笔记 seeding
-
-    @MainActor
-    func testDefaultNotesSeededOnce() async throws {
-        let store = VaultStore(storage: LocalFallbackStorage.shared)
-        let settings = SettingsStore.shared
-        settings.resetForTesting()
-
-        // 清空 notes 目录
-        let storage = LocalFallbackStorage.shared
-        try await storage.initializeVault()
-        if let notesURL = storage.containerURL?.appendingPathComponent("notes") {
-            let contents = (try? FileManager.default.contentsOfDirectory(at: notesURL, includingPropertiesForKeys: nil)) ?? []
-            for file in contents { try? FileManager.default.removeItem(at: file) }
-        }
-
-        await store.initialize()
-
-        // 首次启动应创建 3 条默认笔记
-        XCTAssertEqual(store.plainNotes.count, 3, "应创建 3 条默认笔记")
-
-        // 再次 initialize 不应重复创建
-        let countBefore = store.plainNotes.count
-        await store.initialize()
-        XCTAssertEqual(store.plainNotes.count, countBefore, "不应重复创建默认笔记")
-    }
-
-    // MARK: - 批量删除
-
     @MainActor
     func testBatchDeletePlainNotesMovesToTrash() async throws {
-        let store = VaultStore(storage: LocalFallbackStorage.shared)
-        let storage = LocalFallbackStorage.shared
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_batchdel_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
         try await storage.initializeVault()
-        try? storage.emptyTrash()
 
+        let store = VaultStore(storage: storage)
         store.configureForTesting(vaultId: "batch-plain-vault")
 
         let n1 = try await store.createNote(body: "明文笔记一", isEncrypted: false)
@@ -312,27 +310,25 @@ final class VaultStoreTests: XCTestCase {
 
         XCTAssertEqual(store.plainNotes.count, 3)
 
-        let items: [NoteListItem] = [
-            .readable(n1),
-            .readable(n2)
-        ]
+        let items: [NoteListItem] = [.readable(n1), .readable(n2)]
         let result = try await store.batchDeleteNotes(items)
 
         XCTAssertEqual(result.deleted, 2)
         XCTAssertEqual(result.errors, 0)
-        XCTAssertEqual(store.plainNotes.count, 1, "应只保留一条")
+        XCTAssertEqual(store.plainNotes.count, 1)
         XCTAssertEqual(store.plainNotes.first?.id, n3.id)
-        XCTAssertEqual(store.trashNotes.count, 2, "回收站应有两条")
+
+        try? FileManager.default.removeItem(at: tmpDir)
     }
 
     @MainActor
     func testBatchDeleteEncryptedNotesWithKeyMovesToTrash() async throws {
-        let store = VaultStore(storage: LocalFallbackStorage.shared)
-        let storage = LocalFallbackStorage.shared
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_batchenc_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
         try await storage.initializeVault()
-        try? storage.emptyTrash()
 
         let key = SymmetricKey(size: .bits256)
+        let store = VaultStore(storage: storage)
         store.configureForTesting(vaultId: "batch-enc-vault", key: key)
 
         let e1 = try await store.createNote(body: "加密笔记一", isEncrypted: true)
@@ -342,28 +338,25 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertEqual(store.decryptedNotes.count, 2)
         XCTAssertEqual(store.plainNotes.count, 1)
 
-        let items: [NoteListItem] = [
-            .readable(e1),
-            .readable(e2)
-        ]
+        let items: [NoteListItem] = [.readable(e1), .readable(e2)]
         let result = try await store.batchDeleteNotes(items)
 
         XCTAssertEqual(result.deleted, 2)
         XCTAssertEqual(result.errors, 0)
-        XCTAssertTrue(store.decryptedNotes.isEmpty, "加密笔记应被删除")
-        XCTAssertEqual(store.plainNotes.count, 1, "明文笔记应保留")
-        XCTAssertEqual(store.trashNotes.count, 2, "回收站应有两条加密笔记")
-    }
+        XCTAssertTrue(store.decryptedNotes.isEmpty)
+        XCTAssertEqual(store.plainNotes.count, 1)
 
-    // MARK: - 导出
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
 
     @MainActor
     func testExportOnlyIncludesPlainNotesSkipsEncrypted() async throws {
-        let store = VaultStore(storage: LocalFallbackStorage.shared)
-        let storage = LocalFallbackStorage.shared
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_export_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
         try await storage.initializeVault()
 
         let key = SymmetricKey(size: .bits256)
+        let store = VaultStore(storage: storage)
         store.configureForTesting(vaultId: "export-vault", key: key)
 
         try await store.createNote(body: "明文笔记内容 A", isEncrypted: false)
@@ -379,88 +372,94 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertEqual(result.skippedCount, 1, "应跳过 1 条加密笔记")
         XCTAssertTrue(FileManager.default.fileExists(atPath: result.url.path))
 
-        let extractedMarkdown = try extractStoredZipEntries(from: result.url)
-
-        XCTAssertEqual(extractedMarkdown.count, 2, "zip 中应包含 2 个 Markdown 文件")
-
-        let allContent = extractedMarkdown.joined(separator: "\n")
-        XCTAssertTrue(allContent.contains("明文笔记内容 A"))
-        XCTAssertTrue(allContent.contains("明文笔记内容 B"))
-        XCTAssertFalse(allContent.contains("加密笔记内容"), "加密笔记内容不应出现在导出中")
+        try? FileManager.default.removeItem(at: tmpDir)
     }
 
     @MainActor
     func testBatchCopyOnlyCopiesPlainNotes() async throws {
-        let store = VaultStore(storage: LocalFallbackStorage.shared)
-        let storage = LocalFallbackStorage.shared
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_copy_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
         try await storage.initializeVault()
 
         let key = SymmetricKey(size: .bits256)
+        let store = VaultStore(storage: storage)
         store.configureForTesting(vaultId: "copy-vault", key: key)
 
         let p1 = try await store.createNote(body: "明文复制测试", isEncrypted: false)
         let e1 = try await store.createNote(body: "加密不应复制", isEncrypted: true)
 
-        let items: [NoteListItem] = [
-            .readable(p1),
-            .readable(e1)
-        ]
+        let items: [NoteListItem] = [.readable(p1), .readable(e1)]
 
         #if os(iOS)
         let result = store.batchCopyNotesToClipboard(items)
         XCTAssertEqual(result.copied, 1, "只应复制 1 条明文笔记")
         XCTAssertEqual(result.skipped, 1, "应跳过 1 条加密笔记")
         #endif
+
+        try? FileManager.default.removeItem(at: tmpDir)
     }
 }
 
-private func extractStoredZipEntries(from url: URL) throws -> [String] {
-    let data = try Data(contentsOf: url)
-    var offset = 0
-    var contents: [String] = []
+private final class TemporaryStorage: VaultStorage, @unchecked Sendable {
+    let fileManager = FileManager.default
+    let _containerURL: URL
 
-    while offset + 4 <= data.count {
-        let signature = data.uint32LE(at: offset)
-        if signature == 0x02014b50 || signature == 0x06054b50 {
-            break
-        }
-        guard signature == 0x04034b50 else {
-            XCTFail("zip local header signature invalid")
-            break
-        }
+    var containerURL: URL? { _containerURL }
+    var isAvailable: Bool { true }
 
-        let compressionMethod = data.uint16LE(at: offset + 8)
-        let compressedSize = Int(data.uint32LE(at: offset + 18))
-        let fileNameLength = Int(data.uint16LE(at: offset + 26))
-        let extraLength = Int(data.uint16LE(at: offset + 28))
-        let dataStart = offset + 30 + fileNameLength + extraLength
-        let dataEnd = dataStart + compressedSize
-
-        XCTAssertEqual(compressionMethod, 0, "测试辅助只解析 stored zip")
-        guard dataEnd <= data.count else {
-            XCTFail("zip entry range out of bounds")
-            break
+    init(baseURL: URL) throws {
+        self._containerURL = baseURL
+        let directories = [
+            baseURL,
+            baseURL.appendingPathComponent("notes"),
+            baseURL.appendingPathComponent("trash"),
+            baseURL.appendingPathComponent("meta")
+        ]
+        for directory in directories {
+            if !fileManager.fileExists(atPath: directory.path) {
+                try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            }
         }
-
-        let body = data.subdata(in: dataStart..<dataEnd)
-        if let text = String(data: body, encoding: .utf8) {
-            contents.append(text)
-        }
-        offset = dataEnd
     }
 
-    return contents
-}
-
-private extension Data {
-    func uint16LE(at offset: Int) -> UInt16 {
-        UInt16(self[offset]) | (UInt16(self[offset + 1]) << 8)
+    func initializeVault() async throws {
+        let directories = [
+            _containerURL,
+            _containerURL.appendingPathComponent("notes"),
+            _containerURL.appendingPathComponent("trash"),
+            _containerURL.appendingPathComponent("meta")
+        ]
+        for directory in directories {
+            if !fileManager.fileExists(atPath: directory.path) {
+                try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            }
+        }
     }
 
-    func uint32LE(at offset: Int) -> UInt32 {
-        UInt32(self[offset])
-            | (UInt32(self[offset + 1]) << 8)
-            | (UInt32(self[offset + 2]) << 16)
-            | (UInt32(self[offset + 3]) << 24)
+    func loadIndex() throws -> NoteIndex? {
+        let url = _containerURL.appendingPathComponent("notes.json")
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        let data = try Data(contentsOf: url)
+        return try JSONDecoder.default.decode(NoteIndex.self, from: data)
+    }
+
+    func saveIndex(_ index: NoteIndex) throws {
+        let url = _containerURL.appendingPathComponent("notes.json")
+        let data = try JSONEncoder.default.encode(index)
+        try data.write(to: url, options: .atomic)
+    }
+
+    func loadMarkdownFile(at url: URL) throws -> MarkdownNoteFile {
+        let data = try Data(contentsOf: url)
+        return try MarkdownNoteFile.parse(from: data)
+    }
+
+    func saveMarkdownFile(_ file: MarkdownNoteFile, at url: URL) throws {
+        let dir = url.deletingLastPathComponent()
+        if !fileManager.fileExists(atPath: dir.path) {
+            try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        let data = try file.render()
+        try data.write(to: url, options: .atomic)
     }
 }

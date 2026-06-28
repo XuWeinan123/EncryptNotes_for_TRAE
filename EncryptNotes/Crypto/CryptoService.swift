@@ -7,6 +7,7 @@ enum CryptoServiceError: Error, LocalizedError {
     case invalidCiphertext
     case invalidNonce
     case authenticationFailed
+    case invalidEncryptedFormat
 
     var errorDescription: String? {
         switch self {
@@ -15,6 +16,7 @@ enum CryptoServiceError: Error, LocalizedError {
         case .invalidCiphertext: return "Invalid ciphertext"
         case .invalidNonce: return "Invalid nonce"
         case .authenticationFailed: return "Authentication failed - wrong key or tampered data"
+        case .invalidEncryptedFormat: return "Invalid encrypted body format"
         }
     }
 }
@@ -22,85 +24,80 @@ enum CryptoServiceError: Error, LocalizedError {
 final class CryptoService {
     static let shared = CryptoService()
 
+    static let encryptedPrefix = "bkwenc:v1:"
+
     private init() {}
 
-    func encrypt(payload: PlainNotePayload, using key: SymmetricKey) throws -> EncryptedNoteFile.EncryptionPayload {
-        let payloadData = try JSONEncoder.default.encode(payload)
+    func encryptMarkdownBody(_ body: String, using key: SymmetricKey) throws -> String {
+        let bodyData = Data(body.utf8)
 
         let nonce = AES.GCM.Nonce()
-        let sealedBox = try AES.GCM.seal(payloadData, using: key, nonce: nonce)
+        let sealedBox = try AES.GCM.seal(bodyData, using: key, nonce: nonce)
 
         guard let ciphertext = sealedBox.ciphertext as Data?,
               let tag = sealedBox.tag as Data? else {
             throw CryptoServiceError.encryptionFailed
         }
 
-        return EncryptedNoteFile.EncryptionPayload(
-            ciphertext: ciphertext.base64EncodedString(),
-            tag: tag.base64EncodedString()
-        )
+        let nonceData = Data(nonce)
+        let combined = nonceData + ciphertext + tag
+        let base64url = combined.base64URLEncodedString()
+
+        return CryptoService.encryptedPrefix + base64url
     }
 
-    func encryptToNoteFile(
-        noteId: String,
-        vaultId: String,
-        payload: PlainNotePayload,
-        key: SymmetricKey
-    ) throws -> EncryptedNoteFile {
-        let nonce = AES.GCM.Nonce()
-        let payloadData = try JSONEncoder.default.encode(payload)
-        let sealedBox = try AES.GCM.seal(payloadData, using: key, nonce: nonce)
-
-        guard let ciphertext = sealedBox.ciphertext as Data?,
-              let tag = sealedBox.tag as Data? else {
-            throw CryptoServiceError.encryptionFailed
+    func decryptMarkdownBody(_ encrypted: String, using key: SymmetricKey) throws -> String {
+        guard encrypted.hasPrefix(CryptoService.encryptedPrefix) else {
+            throw CryptoServiceError.invalidEncryptedFormat
         }
 
-        let now = Date()
-
-        return EncryptedNoteFile(
-            version: 1,
-            app: "BieKanWo",
-            type: "encrypted_note",
-            noteId: noteId,
-            vaultId: vaultId,
-            createdAt: payload.createdAt,
-            updatedAt: now,
-            encryption: EncryptedNoteFile.EncryptionMetadata(
-                algorithm: "AES-GCM",
-                keyVersion: 1,
-                nonce: Data(nonce).base64EncodedString()
-            ),
-            payload: EncryptedNoteFile.EncryptionPayload(
-                ciphertext: ciphertext.base64EncodedString(),
-                tag: tag.base64EncodedString()
-            )
-        )
-    }
-
-    func decrypt(file: EncryptedNoteFile, using key: SymmetricKey) throws -> PlainNotePayload {
-        guard let nonceData = Data(base64Encoded: file.encryption.nonce) else {
-            throw CryptoServiceError.invalidNonce
-        }
-
-        guard let ciphertext = Data(base64Encoded: file.payload.ciphertext),
-              let tag = Data(base64Encoded: file.payload.tag) else {
+        let base64url = String(encrypted.dropFirst(CryptoService.encryptedPrefix.count))
+        guard let combined = Data(base64URLEncoded: base64url) else {
             throw CryptoServiceError.invalidCiphertext
         }
 
+        guard combined.count >= 12 + 16 else {
+            throw CryptoServiceError.invalidCiphertext
+        }
+
+        let nonceData = combined.prefix(12)
+        let ciphertextAndTag = combined.dropFirst(12)
+        let tag = ciphertextAndTag.suffix(16)
+        let ciphertext = ciphertextAndTag.dropLast(16)
+
         let nonce = try AES.GCM.Nonce(data: nonceData)
-        let sealedBox = try AES.GCM.SealedBox(nonce: nonce, ciphertext: ciphertext, tag: tag)
+        let sealedBox = try AES.GCM.SealedBox(
+            nonce: nonce,
+            ciphertext: Data(ciphertext),
+            tag: Data(tag)
+        )
 
         do {
             let decryptedData = try AES.GCM.open(sealedBox, using: key)
-            return try JSONDecoder.default.decode(PlainNotePayload.self, from: decryptedData)
+            guard let body = String(data: decryptedData, encoding: .utf8) else {
+                throw CryptoServiceError.decryptionFailed
+            }
+            return body
         } catch {
             throw CryptoServiceError.authenticationFailed
         }
     }
+}
 
-    func decryptNote(file: EncryptedNoteFile, using key: SymmetricKey) throws -> Note {
-        let payload = try decrypt(file: file, using: key)
-        return Note(from: payload, noteId: file.noteId, vaultId: file.vaultId)
+private extension Data {
+    func base64URLEncodedString() -> String {
+        base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "="))
+    }
+
+    init?(base64URLEncoded string: String) {
+        var base64 = string
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let padLength = (4 - base64.count % 4) % 4
+        base64.append(String(repeating: "=", count: padLength))
+        self.init(base64Encoded: base64)
     }
 }
