@@ -151,6 +151,74 @@ final class StickyNoteWindowManager: NSObject {
         MacNoteWindowStore.shared.closeAllWindows()
     }
 
+    func fitWindowToContent(noteId: String, text: String, fontSize: CGFloat) {
+        guard let window = noteWindows[noteId] else { return }
+        let textContainerInset = NSSize(
+            width: 4,
+            height: ceil(fontSize * 0.3)
+        )
+        let horizontalPadding = MacStickyEditorLayout.editorHorizontalInset * 2
+            + textContainerInset.width * 2 + 8
+        let targetWidth = fontSize * MacStickyEditorLayout.widthMultiplier + horizontalPadding
+
+        let textWidth = max(10, targetWidth - horizontalPadding)
+        let measuredHeight = measureTextHeight(text: text, width: textWidth, fontSize: fontSize)
+        let verticalPadding = textContainerInset.height * 2 + DS.s4 + MacStickyEditorLayout.editorBottomInset
+        let contentHeight = measuredHeight + verticalPadding
+
+        var targetHeight = max(targetWidth / 2, contentHeight)
+        targetHeight = min(targetWidth * 2, targetHeight)
+
+        let finalWidth = max(Self.minimumContentSize.width, targetWidth)
+        let finalHeight = max(Self.minimumContentSize.height, targetHeight)
+
+        let oldFrame = window.frame
+        var newOrigin = NSPoint(
+            x: oldFrame.origin.x,
+            y: oldFrame.maxY - finalHeight
+        )
+
+        if let screen = window.screen ?? NSScreen.main {
+            let vf = screen.visibleFrame
+            if newOrigin.x < vf.minX + 8 { newOrigin.x = vf.minX + 8 }
+            if newOrigin.x + finalWidth > vf.maxX - 8 { newOrigin.x = vf.maxX - finalWidth - 8 }
+            if newOrigin.y < vf.minY + 8 { newOrigin.y = vf.minY + 8 }
+            if newOrigin.y + finalHeight > vf.maxY - 8 { newOrigin.y = vf.maxY - finalHeight - 8 }
+        }
+
+        let newFrame = NSRect(origin: newOrigin, size: NSSize(width: finalWidth, height: finalHeight))
+        window.setFrame(newFrame, display: true, animate: true)
+        saveWindowFrame(window, noteId: noteId)
+    }
+
+    private func measureTextHeight(text: String, width: CGFloat, fontSize: CGFloat) -> CGFloat {
+        let bodyFont = NSFont.systemFont(ofSize: fontSize)
+        let paraStyle = NSMutableParagraphStyle()
+        let lh = ceil(fontSize * 1.25)
+        paraStyle.minimumLineHeight = lh
+        paraStyle.maximumLineHeight = lh
+        paraStyle.lineHeightMultiple = 1
+        paraStyle.alignment = .left
+        paraStyle.lineBreakMode = .byWordWrapping
+
+        let attributed = NSAttributedString(string: text, attributes: [
+            .font: bodyFont,
+            .paragraphStyle: paraStyle
+        ])
+
+        let textStorage = NSTextStorage(attributedString: attributed)
+        let layoutManager = NSLayoutManager()
+        let textContainer = NSTextContainer(containerSize: NSSize(width: width, height: .greatestFiniteMagnitude))
+        textContainer.lineFragmentPadding = 0
+        textContainer.widthTracksTextView = false
+        textContainer.heightTracksTextView = false
+        layoutManager.addTextContainer(textContainer)
+        textStorage.addLayoutManager(layoutManager)
+        layoutManager.glyphRange(for: textContainer)
+        let usedRect = layoutManager.usedRect(for: textContainer)
+        return usedRect.height
+    }
+
     func updateWindowLevel(for noteId: String, isPinned: Bool) {
         guard let window = noteWindows[noteId] else { return }
         applyWindowLevel(window, isPinned: isPinned)

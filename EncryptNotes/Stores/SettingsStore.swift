@@ -9,6 +9,9 @@ import Combine
 final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
 
+    static let macEditorFontSizes: [Double] = [12, 14, 16, 18]
+    static let defaultMacEditorFontSize: Double = 14
+
     private let defaults: UserDefaults
 
     @Published var preferredNoteMode: NoteMode {
@@ -31,13 +34,29 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(hasSeededDefaultNotes, forKey: Keys.hasSeededDefaultNotes) }
     }
 
-    private init(defaults: UserDefaults = .standard) {
+    @Published var macEditorFontSize: Double {
+        didSet {
+            if !Self.macEditorFontSizes.contains(macEditorFontSize) {
+                macEditorFontSize = Self.defaultMacEditorFontSize
+            }
+            defaults.set(macEditorFontSize, forKey: Keys.macEditorFontSize)
+        }
+    }
+
+    init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.preferredNoteMode = NoteMode(rawValue: defaults.string(forKey: Keys.preferredNoteMode) ?? "") ?? .plain
         self.hideContentOnBackground = defaults.object(forKey: Keys.hideContentOnBackground) as? Bool ?? true
         self.autoUnloadKeyOnForeground = defaults.object(forKey: Keys.autoUnloadKeyOnForeground) as? Bool ?? false
         self.hasSeenFirstKeyPrompt = defaults.bool(forKey: Keys.hasSeenFirstKeyPrompt)
         self.hasSeededDefaultNotes = defaults.bool(forKey: Keys.hasSeededDefaultNotes)
+
+        let storedFontSize = defaults.double(forKey: Keys.macEditorFontSize)
+        if Self.macEditorFontSizes.contains(storedFontSize) {
+            self.macEditorFontSize = storedFontSize
+        } else {
+            self.macEditorFontSize = Self.defaultMacEditorFontSize
+        }
     }
 
     /// 用于测试：重置为默认值。
@@ -47,6 +66,7 @@ final class SettingsStore: ObservableObject {
         autoUnloadKeyOnForeground = false
         hasSeenFirstKeyPrompt = false
         hasSeededDefaultNotes = false
+        macEditorFontSize = Self.defaultMacEditorFontSize
     }
 
     private enum Keys {
@@ -55,5 +75,6 @@ final class SettingsStore: ObservableObject {
         static let autoUnloadKeyOnForeground = "BKAutoUnloadKeyOnForeground"
         static let hasSeenFirstKeyPrompt = "BKHasSeenFirstKeyPrompt"
         static let hasSeededDefaultNotes = "BKHasSeededDefaultNotes"
+        static let macEditorFontSize = "BKMacEditorFontSize"
     }
 }
