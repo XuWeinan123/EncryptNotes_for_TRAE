@@ -25,12 +25,31 @@ struct MacSettingsView: View {
                 }
         }
         .padding(DS.s4)
-        .frame(width: 460, height: 360)
+        .frame(width: 460, height: 400)
         .background(DS.bg)
     }
 
     private var generalTab: some View {
         panelStack {
+            macPanel("编辑器") {
+                HStack(spacing: DS.s3) {
+                    Text("编辑字号")
+                        .font(DS.bodyLg())
+                        .foregroundColor(DS.textBody)
+                    Spacer()
+                    Picker("编辑字号", selection: fontSizeBinding) {
+                        ForEach(SettingsStore.macEditorFontSizes, id: \.self) { size in
+                            Text(String(format: "%.0f", size)).tag(size)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 200)
+                }
+                .padding(.vertical, DS.s1)
+                helperText("仅影响 mac 便利贴编辑器")
+            }
+
             macPanel("隐私保护") {
                 toggleRow("进入后台时隐藏内容", isOn: $settings.hideContentOnBackground)
                 toggleRow("回到前台时自动卸载密钥", isOn: $settings.autoUnloadKeyOnForeground)
@@ -92,6 +111,17 @@ struct MacSettingsView: View {
                 }
             }
         }
+    }
+
+    private var fontSizeBinding: Binding<Double> {
+        Binding(
+            get: { settings.macEditorFontSize },
+            set: { newValue in
+                if SettingsStore.macEditorFontSizes.contains(newValue) {
+                    settings.macEditorFontSize = newValue
+                }
+            }
+        )
     }
 
     private func panelStack<Content: View>(@ViewBuilder content: () -> Content) -> some View {

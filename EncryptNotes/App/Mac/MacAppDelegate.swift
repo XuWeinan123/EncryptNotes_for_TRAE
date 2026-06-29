@@ -11,6 +11,7 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
 
         menuBarController.setup()
+        MacMainMenuController.shared.installMainMenu()
         _ = shortcutStore
 
         Task {

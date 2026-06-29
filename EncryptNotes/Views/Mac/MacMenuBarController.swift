@@ -266,6 +266,10 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
     }
 
     @objc private func showSettings() {
+        openSettingsWindow()
+    }
+
+    func openSettingsWindow() {
         if settingsWindow == nil {
             let hostingView = NSHostingView(rootView: MacSettingsView())
             let window = NSWindow(
