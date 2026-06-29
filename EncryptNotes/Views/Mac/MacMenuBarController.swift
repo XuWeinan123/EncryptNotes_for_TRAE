@@ -34,9 +34,10 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
             button.toolTip = "别看我"
             button.imagePosition = .imageOnly
 
-            if let image = NSImage(systemSymbolName: "pencil.and.outline", accessibilityDescription: "别看我") {
+            if let image = NSImage(systemSymbolName: "pencil", accessibilityDescription: "别看我") {
                 image.isTemplate = true
                 button.image = image
+                button.imageScaling = .scaleProportionallyDown
                 button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
             } else {
                 button.image = nil

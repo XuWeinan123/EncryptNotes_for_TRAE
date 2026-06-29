@@ -8,7 +8,7 @@ final class StickyNoteWindowManager: NSObject {
     private static let minimumContentSize = CGSize(width: 200, height: 200)
     // 统一标题栏负责稳定 toolbar placement；fullSizeContentView 让内容延伸到玻璃下方。
     static let windowStyleMask: NSWindow.StyleMask =
-        [.titled, .closable, .miniaturizable, .resizable, .unifiedTitleAndToolbar, .fullSizeContentView]
+        [.titled, .closable, .resizable, .unifiedTitleAndToolbar, .fullSizeContentView]
 
     private var noteWindows: [String: NSWindow] = [:]
 
@@ -56,7 +56,7 @@ final class StickyNoteWindowManager: NSObject {
             backing: .buffered,
             defer: false
         )
-        window.title = windowTitle(for: note.body)
+        window.title = ""
         window.contentView = hostingView
         configure(window, noteId: note.id)
         applyWindowLevel(window, isPinned: isPinned)
@@ -127,7 +127,7 @@ final class StickyNoteWindowManager: NSObject {
             backing: .buffered,
             defer: false
         )
-        window.title = "加密笔记"
+        window.title = ""
         window.contentView = hostingView
         configure(window, noteId: info.id)
         applyWindowLevel(window, isPinned: isPinned)
@@ -154,10 +154,6 @@ final class StickyNoteWindowManager: NSObject {
     func updateWindowLevel(for noteId: String, isPinned: Bool) {
         guard let window = noteWindows[noteId] else { return }
         applyWindowLevel(window, isPinned: isPinned)
-    }
-
-    func updateWindowTitle(for noteId: String, title: String) {
-        noteWindows[noteId]?.title = title
     }
 
     private func applyWindowLevel(_ window: NSWindow, isPinned: Bool) {
@@ -205,17 +201,10 @@ final class StickyNoteWindowManager: NSObject {
             height: Self.minimumContentSize.height
         )
         window.standardWindowButton(.closeButton)?.isHidden = false
-        window.standardWindowButton(.miniaturizeButton)?.isHidden = false
-        window.standardWindowButton(.zoomButton)?.isHidden = false
-    }
-
-    private func windowTitle(for body: String) -> String {
-        let firstLine = body
-            .split(whereSeparator: \.isNewline)
-            .first
-            .map(String.init)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return firstLine?.isEmpty == false ? firstLine! : ""
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.miniaturizeButton)?.isEnabled = false
+        window.standardWindowButton(.zoomButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isEnabled = false
     }
 
     private func defaultWindowFrame() -> MacWindowFrame {

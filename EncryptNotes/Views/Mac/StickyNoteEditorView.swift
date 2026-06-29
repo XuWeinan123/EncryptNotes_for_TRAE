@@ -66,7 +66,9 @@ struct StickyNoteEditorView: View {
                 }
                 .menuIndicator(.hidden)
                 .help("更多")
-
+            }
+            ToolbarSpacer(.fixed)
+            ToolbarItem{
                 if viewModel.isPinned {
                     Button(action: { viewModel.togglePin() }) {
                         Label("取消置顶", systemImage: "pin.fill")
@@ -123,15 +125,6 @@ final class StickyNoteEditorViewModel: ObservableObject {
         text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    var windowTitle: String {
-        let firstLine = text
-            .split(whereSeparator: \.isNewline)
-            .first
-            .map(String.init)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return firstLine?.isEmpty == false ? firstLine! : ""
-    }
-
     init(note: Note, isPreview: Bool = false) {
         self.note = note
         self.text = note.body
@@ -143,16 +136,9 @@ final class StickyNoteEditorViewModel: ObservableObject {
             .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self else { return }
-                if !self.isPreview {
-                    StickyNoteWindowManager.shared.updateWindowTitle(for: self.note.id, title: self.windowTitle)
-                }
                 self.save()
             }
             .store(in: &cancellables)
-
-        if !isPreview {
-            StickyNoteWindowManager.shared.updateWindowTitle(for: note.id, title: windowTitle)
-        }
 
         $isPinned
             .sink { [weak self] newValue in
@@ -339,13 +325,10 @@ private final class AutoFocusTextView: NSTextView {
 
         guard string.isEmpty else { return }
 
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = .left
-
         let attrs: [NSAttributedString.Key: Any] = [
             .font: MacTextViewMetrics.font,
             .foregroundColor: placeholderColor,
-            .paragraphStyle: paragraphStyle
+            .paragraphStyle: MacTextViewMetrics.paragraphStyle()
         ]
 
         let inset = textContainerInset
@@ -356,6 +339,14 @@ private final class AutoFocusTextView: NSTextView {
 
 private enum MacTextViewMetrics {
     static let font = NSFont.systemFont(ofSize: 14)
+    static let lineHeightMultiple: CGFloat = 1.25
+
+    static func paragraphStyle() -> NSParagraphStyle {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .left
+        paragraphStyle.lineHeightMultiple = lineHeightMultiple
+        return paragraphStyle
+    }
 }
 
 /// 正文延伸到工具栏下方，同时按窗口实测标题栏高度补齐首行留白。
@@ -462,7 +453,7 @@ struct MacTextView: NSViewRepresentable {
     }
 
     private static func applyParagraphStyle(to textView: NSTextView) {
-        let paragraphStyle = NSMutableParagraphStyle()
+        let paragraphStyle = MacTextViewMetrics.paragraphStyle()
         textView.defaultParagraphStyle = paragraphStyle
         textView.typingAttributes = [
             .font: MacTextViewMetrics.font,
