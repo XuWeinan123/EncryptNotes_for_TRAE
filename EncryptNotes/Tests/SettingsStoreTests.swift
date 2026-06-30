@@ -31,20 +31,18 @@ final class SettingsStoreTests: XCTestCase {
 
     func testAllowedFontSizesCanBeSet() {
         let store = makeStore()
-        for size in [12.0, 14.0, 16.0, 18.0] {
+        for size in [12.0, 13.0, 14.0, 16.0, 18.0] {
             store.macEditorFontSize = size
             XCTAssertEqual(store.macEditorFontSize, size)
         }
     }
 
-    func testIllegalFontSizeFallsBackTo14() {
+    func testIllegalFontSizeIsClamped() {
         let store = makeStore()
-        store.macEditorFontSize = 13
-        XCTAssertEqual(store.macEditorFontSize, 14)
         store.macEditorFontSize = 100
-        XCTAssertEqual(store.macEditorFontSize, 14)
+        XCTAssertEqual(store.macEditorFontSize, 18)
         store.macEditorFontSize = 0
-        XCTAssertEqual(store.macEditorFontSize, 14)
+        XCTAssertEqual(store.macEditorFontSize, 12)
     }
 
     func testResetForTestingRestoresFontSize() {
@@ -58,9 +56,9 @@ final class SettingsStoreTests: XCTestCase {
     }
 
     func testPersistedFontSizeIsLoaded() {
-        defaults.set(16.0, forKey: "BKMacEditorFontSize")
+        defaults.set(15.0, forKey: "BKMacEditorFontSize")
         let store = makeStore()
-        XCTAssertEqual(store.macEditorFontSize, 16)
+        XCTAssertEqual(store.macEditorFontSize, 15)
     }
 
     func testDefaultLineHeightMultipleIs125() {
@@ -88,5 +86,19 @@ final class SettingsStoreTests: XCTestCase {
         defaults.set(1.5, forKey: "BKMacEditorLineHeightMultiple")
         let store = makeStore()
         XCTAssertEqual(store.macEditorLineHeightMultiple, 1.5, accuracy: 0.0001)
+    }
+
+    func testNewMacSettingsDefaults() {
+        let store = makeStore()
+        XCTAssertFalse(store.copyAddsParagraphSpacing)
+        XCTAssertTrue(store.autoDeleteEmptyNotes)
+        XCTAssertEqual(store.macTheme, .green)
+    }
+
+    func testMacThemePersists() {
+        let store = makeStore()
+        store.macTheme = .cyan
+        let reloaded = makeStore()
+        XCTAssertEqual(reloaded.macTheme, .cyan)
     }
 }

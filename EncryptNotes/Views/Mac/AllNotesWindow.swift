@@ -10,28 +10,34 @@ struct AllNotesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: DS.s2) {
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(DS.textSubtle)
-                    TextField("搜索笔记…", text: $searchText)
-                        .textFieldStyle(.plain)
-                        .font(DS.body())
-                }
-                .padding(.horizontal, DS.s3)
-                .padding(.vertical, DS.s2)
-                .dsInputSurface()
+            VStack(spacing: DS.s3) {
+                SWPageHeader(
+                    title: "全部笔记",
+                    subtitle: selectedTag.map { "正在筛选 #\($0)" } ?? "浏览、搜索和打开所有可读笔记",
+                    systemImage: "tray.full",
+                    tint: DS.primaryDeep
+                )
 
-                Button(action: { showingClearEmptyConfirmation = true }) {
-                    Image(systemName: "trash")
-                    Text("清空空笔记")
+                HStack(spacing: DS.s2) {
+                    SWSearchField(placeholder: "搜索笔记…", text: $searchText)
+
+                    SWStatusBadge("\(filteredNotes.count) 条", systemImage: "doc.text", style: .success)
+                    if !emptyNotes.isEmpty {
+                        SWStatusBadge("\(emptyNotes.count) 条空笔记", systemImage: "exclamationmark.triangle", style: .warning)
+                    }
+
+                    Button {
+                        showingClearEmptyConfirmation = true
+                    } label: {
+                        Label("清空空笔记", systemImage: "trash")
+                    }
+                    .font(DS.caption())
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .tint(DS.destructive)
+                    .disabled(emptyNotes.isEmpty || isClearingEmptyNotes)
+                    .help(emptyNotes.isEmpty ? "没有空笔记" : "将空笔记移到回收站")
                 }
-                .font(DS.caption())
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .tint(DS.destructive)
-                .disabled(emptyNotes.isEmpty || isClearingEmptyNotes)
-                .help(emptyNotes.isEmpty ? "没有空笔记" : "将空笔记移到回收站")
             }
             .padding(DS.s3)
             .background(DS.surfaceRaised)
@@ -43,11 +49,11 @@ struct AllNotesView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: DS.s1) {
-                    tagChip(name: "全部", isSelected: selectedTag == nil) {
+                    SWFilterChip(title: "全部", isSelected: selectedTag == nil) {
                         selectedTag = nil
                     }
                     ForEach(vaultStore.allTags) { tagCount in
-                        tagChip(name: tagCount.tag, isSelected: selectedTag == tagCount.tag) {
+                        SWFilterChip(title: tagCount.tag, isSelected: selectedTag == tagCount.tag) {
                             selectedTag = tagCount.tag
                         }
                     }
@@ -58,19 +64,30 @@ struct AllNotesView: View {
             .padding(.bottom, DS.s2)
 
             List {
-                ForEach(filteredNotes) { item in
-                    noteRow(for: item)
-                        .contentShape(Rectangle())
-                        .onTapGesture(count: 2) {
-                            openNote(item)
-                        }
-                        .contextMenu {
-                            Button("打开") { openNote(item) }
-                            Divider()
-                            Button("移到回收站", role: .destructive) {
-                                deleteNote(item)
+                if filteredNotes.isEmpty {
+                    SWEmptyState(
+                        title: "没有匹配的笔记",
+                        message: emptyStateMessage,
+                        systemImage: "magnifyingglass"
+                    )
+                    .listRowInsets(EdgeInsets(top: DS.s3, leading: DS.s3, bottom: DS.s3, trailing: DS.s3))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(DS.bg)
+                } else {
+                    ForEach(filteredNotes) { item in
+                        noteRow(for: item)
+                            .contentShape(Rectangle())
+                            .onTapGesture(count: 2) {
+                                openNote(item)
                             }
-                        }
+                            .contextMenu {
+                                Button("打开") { openNote(item) }
+                                Divider()
+                                Button("移到回收站", role: .destructive) {
+                                    deleteNote(item)
+                                }
+                            }
+                    }
                 }
             }
             .listStyle(.plain)
@@ -118,83 +135,51 @@ struct AllNotesView: View {
         vaultStore.readableNotes.filter { isEmptyNote($0) }
     }
 
-    private func tagChip(name: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(name)
-                .font(DS.caption())
-                .padding(.horizontal, DS.s2)
-                .padding(.vertical, DS.s1)
-                .background(
-                    RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
-                        .fill(isSelected ? DS.primaryContainer : DS.surfaceCard)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
-                        .stroke(isSelected ? DS.primary.opacity(0.24) : DS.line, lineWidth: 0.5)
-                )
-                .foregroundColor(isSelected ? DS.primaryDeep : DS.textSecondary)
+    private var emptyStateMessage: String {
+        if !searchText.isEmpty {
+            return "换个关键词试试，或清空搜索内容。"
         }
-        .buttonStyle(.plain)
+        if selectedTag != nil {
+            return "这个标签下暂时没有可读笔记。"
+        }
+        return "创建第一条笔记后会出现在这里。"
     }
 
     @ViewBuilder
     private func noteRow(for item: NoteListItem) -> some View {
         switch item {
         case .readable(let note):
-            HStack {
-                Image(systemName: note.isEncrypted ? "lock.fill" : "doc.text")
-                    .foregroundColor(note.isEncrypted ? DS.primaryDeep : DS.textSubtle)
-                    .font(.system(size: 12))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(firstLine(of: note.body))
-                        .font(DS.body())
-                        .foregroundColor(DS.textStrong)
-                        .lineLimit(1)
-
-                    Text(note.isEncrypted ? "加密" : "明文")
+            SWNoteListRow(
+                title: firstLine(of: note.body),
+                subtitle: note.isEncrypted ? "加密笔记" : "明文笔记",
+                systemImage: note.isEncrypted ? "lock.fill" : "doc.text",
+                tint: note.isEncrypted ? DS.primaryDeep : DS.textSubtle
+            ) {
+                HStack(spacing: DS.s2) {
+                    SWStatusBadge(note.isEncrypted ? "加密" : "明文", systemImage: note.isEncrypted ? "lock.fill" : "doc.text", style: note.isEncrypted ? .success : .neutral)
+                    Text(timeString(from: note.updatedAt))
                         .font(DS.caption())
                         .foregroundColor(DS.textSubtle)
                 }
-
-                Spacer()
-
-                Text(timeString(from: note.updatedAt))
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSubtle)
             }
-            .padding(.horizontal, DS.s2)
-            .padding(.vertical, DS.s2)
-            .dsInputSurface()
             .listRowInsets(EdgeInsets(top: DS.s1, leading: DS.s3, bottom: DS.s1, trailing: DS.s3))
             .listRowSeparator(.hidden)
             .listRowBackground(DS.bg)
 
         case .locked(let info):
-            HStack {
-                Image(systemName: "lock.fill")
-                    .foregroundColor(DS.textSubtle)
-                    .font(.system(size: 12))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("加密笔记 · 未加载密钥")
-                        .font(DS.body())
-                        .foregroundColor(DS.textSecondary)
-
-                    Text("加密")
+            SWNoteListRow(
+                title: "加密笔记 · 未加载密钥",
+                subtitle: "加密笔记",
+                systemImage: "lock.fill",
+                tint: DS.textSubtle
+            ) {
+                HStack(spacing: DS.s2) {
+                    SWStatusBadge("锁定", systemImage: "lock.fill", style: .neutral)
+                    Text(timeString(from: info.updatedAt))
                         .font(DS.caption())
                         .foregroundColor(DS.textSubtle)
                 }
-
-                Spacer()
-
-                Text(timeString(from: info.updatedAt))
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSubtle)
             }
-            .padding(.horizontal, DS.s2)
-            .padding(.vertical, DS.s2)
-            .dsInputSurface()
             .listRowInsets(EdgeInsets(top: DS.s1, leading: DS.s3, bottom: DS.s1, trailing: DS.s3))
             .listRowSeparator(.hidden)
             .listRowBackground(DS.bg)

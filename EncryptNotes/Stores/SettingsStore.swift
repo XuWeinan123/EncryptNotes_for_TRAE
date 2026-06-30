@@ -2,6 +2,22 @@ import Foundation
 import SwiftUI
 import Combine
 
+enum MacTheme: String, CaseIterable, Identifiable, Codable {
+    case green
+    case pink
+    case cyan
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .green: return "绿色"
+        case .pink: return "粉色"
+        case .cyan: return "青色"
+        }
+    }
+}
+
 /// 用户偏好与隐私设置，基于 UserDefaults 持久化。
 ///
 /// - seealso: PRD v0.2 5.6（新建模式持久记忆）、11.5（隐私保护）
@@ -9,10 +25,13 @@ import Combine
 final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
 
-    static let macEditorFontSizes: [Double] = [12, 14, 16, 18]
+    static let macEditorFontSizeRange: ClosedRange<Double> = 12...18
+    static let macEditorFontSizeStep: Double = 1
     static let defaultMacEditorFontSize: Double = 14
     static let defaultMacEditorLineHeightMultiple: Double = 1.25
     static let macEditorLineHeightRange: ClosedRange<Double> = 1.2...2.0
+    static let defaultMacTheme: MacTheme = .green
+    static let macThemeDefaultsKey = "BKMacTheme"
 
     private let defaults: UserDefaults
 
@@ -38,8 +57,10 @@ final class SettingsStore: ObservableObject {
 
     @Published var macEditorFontSize: Double {
         didSet {
-            if !Self.macEditorFontSizes.contains(macEditorFontSize) {
-                macEditorFontSize = Self.defaultMacEditorFontSize
+            let clamped = Self.clampedFontSize(macEditorFontSize)
+            if macEditorFontSize != clamped {
+                macEditorFontSize = clamped
+                return
             }
             defaults.set(macEditorFontSize, forKey: Keys.macEditorFontSize)
         }
@@ -56,6 +77,18 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    @Published var copyAddsParagraphSpacing: Bool {
+        didSet { defaults.set(copyAddsParagraphSpacing, forKey: Keys.copyAddsParagraphSpacing) }
+    }
+
+    @Published var autoDeleteEmptyNotes: Bool {
+        didSet { defaults.set(autoDeleteEmptyNotes, forKey: Keys.autoDeleteEmptyNotes) }
+    }
+
+    @Published var macTheme: MacTheme {
+        didSet { defaults.set(macTheme.rawValue, forKey: Self.macThemeDefaultsKey) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.preferredNoteMode = NoteMode(rawValue: defaults.string(forKey: Keys.preferredNoteMode) ?? "") ?? .plain
@@ -65,8 +98,8 @@ final class SettingsStore: ObservableObject {
         self.hasSeededDefaultNotes = defaults.bool(forKey: Keys.hasSeededDefaultNotes)
 
         let storedFontSize = defaults.double(forKey: Keys.macEditorFontSize)
-        if Self.macEditorFontSizes.contains(storedFontSize) {
-            self.macEditorFontSize = storedFontSize
+        if storedFontSize > 0 {
+            self.macEditorFontSize = Self.clampedFontSize(storedFontSize)
         } else {
             self.macEditorFontSize = Self.defaultMacEditorFontSize
         }
@@ -77,6 +110,10 @@ final class SettingsStore: ObservableObject {
         } else {
             self.macEditorLineHeightMultiple = Self.defaultMacEditorLineHeightMultiple
         }
+
+        self.copyAddsParagraphSpacing = defaults.object(forKey: Keys.copyAddsParagraphSpacing) as? Bool ?? false
+        self.autoDeleteEmptyNotes = defaults.object(forKey: Keys.autoDeleteEmptyNotes) as? Bool ?? true
+        self.macTheme = MacTheme(rawValue: defaults.string(forKey: Self.macThemeDefaultsKey) ?? "") ?? Self.defaultMacTheme
     }
 
     /// 用于测试：重置为默认值。
@@ -88,6 +125,13 @@ final class SettingsStore: ObservableObject {
         hasSeededDefaultNotes = false
         macEditorFontSize = Self.defaultMacEditorFontSize
         macEditorLineHeightMultiple = Self.defaultMacEditorLineHeightMultiple
+        copyAddsParagraphSpacing = false
+        autoDeleteEmptyNotes = true
+        macTheme = Self.defaultMacTheme
+    }
+
+    static func clampedFontSize(_ value: Double) -> Double {
+        min(max(value.rounded(), macEditorFontSizeRange.lowerBound), macEditorFontSizeRange.upperBound)
     }
 
     static func clampedLineHeightMultiple(_ value: Double) -> Double {
@@ -102,5 +146,7 @@ final class SettingsStore: ObservableObject {
         static let hasSeededDefaultNotes = "BKHasSeededDefaultNotes"
         static let macEditorFontSize = "BKMacEditorFontSize"
         static let macEditorLineHeightMultiple = "BKMacEditorLineHeightMultiple"
+        static let copyAddsParagraphSpacing = "BKCopyAddsParagraphSpacing"
+        static let autoDeleteEmptyNotes = "BKAutoDeleteEmptyNotes"
     }
 }

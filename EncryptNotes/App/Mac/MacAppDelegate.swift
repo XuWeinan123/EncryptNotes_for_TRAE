@@ -23,6 +23,13 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
                }) {
                 StickyNoteWindowManager.shared.showNote(note)
             }
+            if CommandLine.arguments.contains("--open-review-windows") {
+                await MainActor.run {
+                    menuBarController.openAllNotesWindow()
+                    menuBarController.openTrashWindow()
+                    menuBarController.openSettingsWindow()
+                }
+            }
             #endif
         }
     }

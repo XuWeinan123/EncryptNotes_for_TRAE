@@ -26,71 +26,110 @@ struct MacSettingsView: View {
                     Label("密钥", systemImage: "key")
                 }
         }
-        .padding(DS.s4)
-        .frame(width: 500, height: 480)
+        .padding(.horizontal, DS.s4)
+        .padding(.bottom, DS.s4)
+        .frame(
+            minWidth: 640,
+            idealWidth: 640,
+            maxWidth: 640,
+            minHeight: 360,
+            idealHeight: 660,
+            maxHeight: 660
+        )
         .background(DS.bg)
         .background(shortcutRecorder)
     }
 
     private var generalTab: some View {
         panelStack {
-            macPanel("编辑器") {
-                HStack(spacing: DS.s3) {
-                    Text("编辑字号")
-                        .font(DS.bodyLg())
-                        .foregroundColor(DS.textBody)
-                    Spacer()
-                    Picker("编辑字号", selection: fontSizeBinding) {
-                        ForEach(SettingsStore.macEditorFontSizes, id: \.self) { size in
-                            Text(String(format: "%.0f", size)).tag(size)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(width: 200)
-                }
-                .padding(.vertical, DS.s1)
+            SWPageHeader(
+                title: "通用设置",
+                subtitle: "调整编辑体验、存储位置和主题",
+                systemImage: "gearshape",
+                tint: DS.primaryDeep
+            )
 
-                VStack(alignment: .leading, spacing: DS.s2) {
-                    HStack(spacing: DS.s3) {
-                        Text("行高")
-                            .font(DS.bodyLg())
-                            .foregroundColor(DS.textBody)
-                        Spacer()
+            macPanel("编辑器") {
+                SWSettingsRow("编辑字号", subtitle: "仅影响 mac 便利贴编辑器", systemImage: "textformat.size") {
+                    VStack(alignment: .trailing, spacing: DS.s1) {
+                        Text(String(format: "%.0f", settings.macEditorFontSize))
+                            .font(DS.caption())
+                            .foregroundColor(DS.textSecondary)
+                            .monospacedDigit()
+                        Slider(
+                            value: fontSizeBinding,
+                            in: SettingsStore.macEditorFontSizeRange,
+                            step: SettingsStore.macEditorFontSizeStep
+                        )
+                        .frame(width: 150)
+                    }
+                }
+
+                SWRowDivider()
+
+                SWSettingsRow("行高", subtitle: "控制编辑器正文的阅读密度", systemImage: "line.3.horizontal.decrease") {
+                    VStack(alignment: .trailing, spacing: DS.s1) {
                         Text(String(format: "%.2fx", settings.macEditorLineHeightMultiple))
                             .font(DS.caption())
                             .foregroundColor(DS.textSecondary)
                             .monospacedDigit()
+                        Slider(
+                            value: lineHeightBinding,
+                            in: SettingsStore.macEditorLineHeightRange,
+                            step: 0.05
+                        )
+                        .frame(width: 150)
                     }
-                    Slider(
-                        value: lineHeightBinding,
-                        in: SettingsStore.macEditorLineHeightRange,
-                        step: 0.05
-                    )
                 }
-                .padding(.vertical, DS.s1)
-                helperText("仅影响 mac 便利贴编辑器")
+
+                SWRowDivider()
+
+                toggleRow("复制时增加段落空行", subtitle: "粘贴到 Typora 等 Markdown 软件时更接近段落格式", systemImage: "doc.on.clipboard", isOn: $settings.copyAddsParagraphSpacing)
+
+                SWRowDivider()
+
+                toggleRow("关闭时自动删除空笔记", subtitle: "正文为空的便利贴关闭后直接移除", systemImage: "trash", isOn: $settings.autoDeleteEmptyNotes)
             }
 
             macPanel("存储") {
-                Button(vaultStore.isUsingICloudStorage ? "打开 iCloud 文件夹" : "打开本地文件夹") {
-                    openStorageFolder()
+                SWSettingsRow(
+                    vaultStore.isUsingICloudStorage ? "iCloud 文件夹" : "本地文件夹",
+                    subtitle: vaultStore.isUsingICloudStorage ? "笔记文件直接位于 iCloud Drive 公开文件夹中。" : "当前未使用 iCloud，已回退到本地存储。",
+                    systemImage: vaultStore.isUsingICloudStorage ? "icloud" : "folder",
+                    tint: vaultStore.isUsingICloudStorage ? DS.primaryDeep : DS.pro
+                ) {
+                    Button("打开…") {
+                        openStorageFolder()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                helperText(vaultStore.isUsingICloudStorage ? "笔记文件位于当前 iCloud 容器的 notes/ 目录。" : "当前未使用 iCloud，已回退到本地存储。")
             }
 
-            macPanel("隐私保护") {
-                toggleRow("进入后台时隐藏内容", isOn: $settings.hideContentOnBackground)
-                toggleRow("回到前台时自动卸载密钥", isOn: $settings.autoUnloadKeyOnForeground)
-                helperText("自动卸载密钥不会删除笔记，只会让加密笔记回到乱码状态。")
+            macPanel("主题") {
+                SWSettingsRow("主题色", subtitle: "影响按钮、选中态和强调色", systemImage: "paintpalette", tint: DS.primaryDeep) {
+                    Picker("主题色", selection: $settings.macTheme) {
+                        ForEach(MacTheme.allCases) { theme in
+                            Text(theme.title).tag(theme)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 150)
+                }
             }
         }
     }
 
     private var shortcutTab: some View {
         panelStack {
+            SWPageHeader(
+                title: "快捷键",
+                subtitle: "录制 mac 菜单栏应用的常用操作组合键",
+                systemImage: "keyboard",
+                tint: DS.link
+            )
+
             macPanel("新建笔记") {
                 shortcutRow(
                     title: "新建笔记",
@@ -105,17 +144,19 @@ struct MacSettingsView: View {
             }
 
             macPanel("Markdown 格式") {
-                ForEach(MarkdownShortcutAction.allCases) { action in
-                    let shortcut = shortcutStore.shortcut(for: action)
-                    shortcutRow(
-                        title: action.title,
-                        value: ShortcutStore.displayStringForKey(
-                            keyCode: shortcut.keyCode,
-                            modifiers: shortcut.modifiers
-                        ),
-                        isRecording: recordingAction == action,
-                        onRecord: { recordingAction = action }
-                    )
+                LazyVGrid(columns: shortcutGridColumns, alignment: .leading, spacing: DS.s2) {
+                    ForEach(MarkdownShortcutAction.allCases) { action in
+                        let shortcut = shortcutStore.shortcut(for: action)
+                        shortcutTile(
+                            title: action.title,
+                            value: ShortcutStore.displayStringForKey(
+                                keyCode: shortcut.keyCode,
+                                modifiers: shortcut.modifiers
+                            ),
+                            isRecording: recordingAction == action,
+                            onRecord: { recordingAction = action }
+                        )
+                    }
                 }
 
                 Button("恢复默认格式快捷键") {
@@ -132,39 +173,61 @@ struct MacSettingsView: View {
 
     private var keyTab: some View {
         panelStack {
+            SWPageHeader(
+                title: "密钥",
+                subtitle: vaultStore.isKeyLoaded ? "这台 Mac 已经可以解锁加密笔记" : "加载密钥后才能查看加密笔记正文",
+                systemImage: vaultStore.isKeyLoaded ? "checkmark.shield.fill" : "lock.shield",
+                tint: vaultStore.isKeyLoaded ? DS.primaryDeep : DS.textSubtle
+            )
+
             if vaultStore.isKeyLoaded {
                 macPanel("密钥状态") {
-                    statusRow("密钥已加载到本机", systemImage: "checkmark.shield.fill", tint: DS.primary)
-
-                    Button("导出密钥文件…") {
-                        exportKey()
+                    SWSettingsRow("密钥已加载到本机", subtitle: "请妥善保存密钥文件，丢失后无法恢复加密笔记。", systemImage: "checkmark.shield.fill", tint: DS.primaryDeep) {
+                        SWStatusBadge("可解锁", style: .success)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    SWRowDivider()
 
-                    Button("移除本机密钥", role: .destructive) {
-                        unloadKey()
+                    SWSettingsRow("导出密钥文件", subtitle: "保存为 .bkwkey 文件", systemImage: "square.and.arrow.up") {
+                        Button("导出…") {
+                            exportKey()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    SWRowDivider()
+
+                    SWSettingsRow("移除本机密钥", subtitle: "不删除笔记，只让加密内容回到锁定状态", systemImage: "lock.slash", tint: DS.destructive) {
+                        Button("移除", role: .destructive) {
+                            unloadKey()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
                 }
             } else {
                 macPanel("密钥状态") {
-                    statusRow("本机未加载密钥", systemImage: "lock.shield", tint: DS.textSubtle)
-                    helperText("密钥文件只会在本机读取，不会上传。")
-
-                    Button("加载密钥文件…") {
-                        loadKey()
+                    SWSettingsRow("本机未加载密钥", subtitle: "密钥文件只会在本机读取，不会上传。", systemImage: "lock.shield", tint: DS.textSubtle) {
+                        SWStatusBadge("锁定", style: .neutral)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    SWRowDivider()
 
-                    Button("创建新的加密空间…") {
-                        createNewKey()
+                    SWSettingsRow("加载密钥文件", subtitle: "选择已有 .bkwkey 文件", systemImage: "square.and.arrow.down") {
+                        Button("加载…") {
+                            loadKey()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .tint(DS.primary)
+                    SWRowDivider()
+
+                    SWSettingsRow("创建新的加密空间", subtitle: "生成新密钥并立即保存密钥文件", systemImage: "key.fill", tint: DS.primaryDeep) {
+                        Button("创建…") {
+                            createNewKey()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .tint(DS.primary)
+                    }
                 }
             }
         }
@@ -174,9 +237,7 @@ struct MacSettingsView: View {
         Binding(
             get: { settings.macEditorFontSize },
             set: { newValue in
-                if SettingsStore.macEditorFontSizes.contains(newValue) {
-                    settings.macEditorFontSize = newValue
-                }
+                settings.macEditorFontSize = newValue
             }
         )
     }
@@ -196,68 +257,93 @@ struct MacSettingsView: View {
         .frame(width: 0, height: 0)
     }
 
-    private func panelStack<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: DS.s3) {
-                content()
-            }
-            .padding(.top, DS.s3)
-            .padding(.horizontal, DS.s1)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .scrollContentBackground(.hidden)
-        .background(DS.bg)
+    private var shortcutGridColumns: [GridItem] {
+        [
+            GridItem(.flexible(), spacing: DS.s2),
+            GridItem(.flexible(), spacing: DS.s2)
+        ]
+    }
+
+    private func panelStack<Content: View>(@ViewBuilder content: @escaping () -> Content) -> some View {
+        MacSettingsPage(content: content)
     }
 
     private func macPanel<Content: View>(
         _ title: String,
-        @ViewBuilder content: () -> Content
+        @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: DS.s3) {
-            Text(title)
-                .font(DS.title())
-                .foregroundColor(DS.textEmphasize)
-            content()
+        SWSectionPanel(title) {
+            VStack(alignment: .leading, spacing: DS.s2) {
+                content()
+            }
+            .padding(.horizontal, DS.s3)
+            .padding(.vertical, DS.s2)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(DS.cardPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .dsCardSurface()
     }
 
-    private func toggleRow(_ title: String, isOn: Binding<Bool>) -> some View {
-        Toggle(title, isOn: isOn)
-            .font(DS.bodyLg())
-            .foregroundColor(DS.textBody)
-            .toggleStyle(.switch)
-            .padding(.vertical, DS.s1)
+    private func toggleRow(_ title: String, subtitle: String? = nil, systemImage: String? = nil, isOn: Binding<Bool>) -> some View {
+        SWSettingsRow(title, subtitle: subtitle, systemImage: systemImage ?? (isOn.wrappedValue ? "checkmark.circle.fill" : "circle")) {
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+        }
     }
 
     private func shortcutRow(title: String, value: String, isRecording: Bool, onRecord: @escaping () -> Void) -> some View {
-        HStack(spacing: DS.s3) {
+        shortcutTile(title: title, value: value, isRecording: isRecording, onRecord: onRecord)
+    }
+
+    private func shortcutTile(title: String, value: String, isRecording: Bool, onRecord: @escaping () -> Void) -> some View {
+        HStack(spacing: DS.s2) {
+            Image(systemName: isRecording ? "record.circle" : "keyboard")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(isRecording ? DS.primary : DS.textSubtle)
+                .frame(width: 24, height: 24)
+                .background((isRecording ? DS.primary : DS.textSubtle).opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+
             Text(title)
-                .font(DS.bodyLg())
-                .foregroundColor(DS.textBody)
-            Spacer()
+                .font(DS.body())
+                .foregroundColor(DS.textStrong)
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
+
+            Spacer(minLength: DS.s1)
+
             Text(value)
                 .font(DS.caption())
                 .foregroundColor(isRecording ? DS.primary : DS.textSecondary)
                 .monospacedDigit()
-            Button(isRecording ? "录制中…" : "录制…") {
+                .lineLimit(1)
+
+            Button {
                 onRecord()
+            } label: {
+                Label(isRecording ? "录制中" : "录制", systemImage: isRecording ? "record.circle" : "record.circle")
+                    .labelStyle(.iconOnly)
+                    .frame(width: 22, height: 22)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+            .frame(width: 28, height: 28)
+            .help(isRecording ? "正在录制" : "录制快捷键")
         }
-        .padding(.vertical, DS.s1)
+        .padding(.horizontal, DS.s2)
+        .padding(.vertical, DS.s2)
+        .frame(minHeight: 40)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(isRecording ? DS.primaryContainer : DS.surfaceSunken)
+        .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
+                .stroke(isRecording ? DS.primary.opacity(0.26) : DS.line, lineWidth: 0.5)
+        )
     }
 
     private func statusRow(_ title: String, systemImage: String, tint: Color) -> some View {
-        HStack(spacing: DS.s2) {
-            Image(systemName: systemImage)
-                .foregroundColor(tint)
-            Text(title)
-                .font(DS.bodyLg())
-                .foregroundColor(DS.textBody)
+        SWSettingsRow(title, systemImage: systemImage, tint: tint) {
+            EmptyView()
         }
     }
 
@@ -266,6 +352,7 @@ struct MacSettingsView: View {
             .font(DS.caption())
             .foregroundColor(DS.textSubtle)
             .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, DS.s1)
     }
 
     private func openStorageFolder() {
@@ -278,9 +365,13 @@ struct MacSettingsView: View {
             return
         }
 
-        let notesURL = containerURL.appendingPathComponent("notes")
-        let targetURL = FileManager.default.fileExists(atPath: notesURL.path) ? notesURL : containerURL
-        NSWorkspace.shared.activateFileViewerSelecting([targetURL])
+        if !NSWorkspace.shared.open(containerURL) {
+            let alert = NSAlert()
+            alert.messageText = "无法打开文件夹"
+            alert.informativeText = "Finder 未能打开：\(containerURL.path)"
+            alert.addButton(withTitle: "确定")
+            alert.runModal()
+        }
     }
 
     private func loadKey() {
@@ -351,6 +442,26 @@ struct MacSettingsView: View {
                 }
             }
         }
+    }
+}
+
+private struct MacSettingsPage<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        contentStack
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(DS.bg)
+    }
+
+    private var contentStack: some View {
+        VStack(alignment: .leading, spacing: DS.s3) {
+            content()
+        }
+        .padding(.top, DS.s3)
+        .padding(.horizontal, DS.s3)
+        .padding(.bottom, DS.s4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 

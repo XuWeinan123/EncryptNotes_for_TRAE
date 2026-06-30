@@ -1,16 +1,16 @@
 import Foundation
 
-enum NoteFileMode: String, Codable, Sendable {
+nonisolated enum NoteFileMode: String, Codable, Sendable {
     case plain
     case encrypted
 }
 
-enum NoteFileLocation: String, Codable, Sendable {
+nonisolated enum NoteFileLocation: String, Codable, Sendable {
     case notes
     case trash
 }
 
-struct NoteIndexEntry: Codable, Equatable, Sendable {
+nonisolated struct NoteIndexEntry: Codable, Equatable, Sendable {
     let noteId: String
     let fileName: String
     let mode: NoteFileMode
@@ -47,7 +47,7 @@ struct NoteIndexEntry: Codable, Equatable, Sendable {
     }
 }
 
-struct NoteIndex: Codable, Sendable {
+nonisolated struct NoteIndex: Codable, Sendable {
     let version: Int
     let app: String
     let type: String

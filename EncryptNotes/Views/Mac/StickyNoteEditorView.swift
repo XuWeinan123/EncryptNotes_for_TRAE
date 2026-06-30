@@ -9,6 +9,8 @@ struct StickyNoteEditorView: View {
     @ObservedObject private var settings = SettingsStore.shared
     @ObservedObject private var syncStore = SyncStatusStore.shared
     @StateObject private var viewModel: StickyNoteEditorViewModel
+    @State private var isToolbarHovering = false
+    @State private var isFindBarVisible = false
 
     init(note: Note, isPreview: Bool = false) {
         _viewModel = StateObject(wrappedValue: StickyNoteEditorViewModel(note: note, isPreview: isPreview))
@@ -25,10 +27,30 @@ struct StickyNoteEditorView: View {
                 onChange: { viewModel.textDidChange($0) },
                 onSaveShortcut: { viewModel.saveImmediately() },
                 onApplyShortcut: { viewModel.saveImmediately() },
-                onFitToContent: { viewModel.fitWindowToContent() }
+                onFitToContent: { viewModel.fitWindowToContent() },
+                onCopyShortcut: { viewModel.copyNoteText() },
+                onFindShortcut: { toggleFindInterface() },
+                onIncreaseFontSize: { adjustFontSize(by: 1) },
+                onDecreaseFontSize: { adjustFontSize(by: -1) },
+                onFindVisibilityChange: { isVisible in
+                    isFindBarVisible = isVisible
+                    updateSystemToolbarBackground(
+                        isActive: isVisible || isToolbarHovering,
+                        showsSeparator: isVisible
+                    )
+                }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, MacStickyEditorLayout.editorHorizontalInset)
+
+            VStack(spacing: 0) {
+                MacToolbarHoverRegion { hovering in
+                    setToolbarHovering(hovering)
+                }
+                .frame(height: MacStickyEditorLayout.toolbarHoverRegionHeight)
+
+                Spacer(minLength: 0)
+            }
+            .allowsHitTesting(true)
 
             if !syncStore.isNetworkAvailable {
                 Text("无网络")
@@ -62,6 +84,13 @@ struct StickyNoteEditorView: View {
                 .help(viewModel.didCopy ? "已复制" : "复制")
 
                 Menu {
+                    Button(action: { toggleFindInterface() }) {
+                        Label("搜索", systemImage: "magnifyingglass")
+                    }
+                    .keyboardShortcut("f", modifiers: .command)
+
+                    Divider()
+
                     Button(action: { viewModel.fitWindowToContent() }) {
                         Label("适应内容", systemImage: "arrow.up.left.and.arrow.down.right")
                     }
@@ -80,7 +109,7 @@ struct StickyNoteEditorView: View {
                 .menuIndicator(.hidden)
                 .help("更多")
             }
-            ToolbarSpacer(.fixed)
+            ToolbarSpacer()
             ToolbarItem {
                 if viewModel.isPinned {
                     Button(action: { viewModel.togglePin() }) {
@@ -115,19 +144,203 @@ struct StickyNoteEditorView: View {
             )
         }
     }
+
+    private func adjustFontSize(by delta: Double) {
+        settings.macEditorFontSize = SettingsStore.clampedFontSize(settings.macEditorFontSize + delta)
+    }
+
+    private func setToolbarHovering(_ hovering: Bool) {
+        guard isToolbarHovering != hovering else { return }
+        isToolbarHovering = hovering
+        updateSystemToolbarBackground(
+            isActive: hovering || isFindBarVisible,
+            showsSeparator: isFindBarVisible
+        )
+    }
+
+    private func updateSystemToolbarBackground(isActive: Bool, showsSeparator: Bool) {
+        guard let window = editorWindow() else { return }
+        AutoFocusTextView.setFindToolbarActive(isActive, showsSeparator: showsSeparator, in: window)
+    }
+
+    private func toggleFindInterface() {
+        guard let window = NSApp.keyWindow else { return }
+        guard let textView = editorTextView(in: window) else {
+            let sender = FindPanelActionSender(tag: NSTextFinder.Action.showFindInterface.rawValue)
+            AutoFocusTextView.setFindToolbarActive(true, showsSeparator: true, in: window)
+            NSApp.sendAction(#selector(NSTextView.performFindPanelAction(_:)), to: nil, from: sender)
+            return
+        }
+
+        let scrollView = textView.enclosingScrollView as? ToolbarInsetScrollView
+        let action: NSTextFinder.Action = scrollView?.isFindBarVisible == true
+            ? .hideFindInterface
+            : .showFindInterface
+        let sender = FindPanelActionSender(tag: action.rawValue)
+
+        AutoFocusTextView.setFindToolbarActive(
+            action == .showFindInterface,
+            showsSeparator: action == .showFindInterface,
+            in: window
+        )
+        textView.performFindPanelAction(sender)
+        DispatchQueue.main.async {
+            scrollView?.syncFindToolbarAppearance()
+        }
+    }
+
+    private func editorTextView(in window: NSWindow) -> AutoFocusTextView? {
+        if let textView = window.firstResponder as? AutoFocusTextView {
+            return textView
+        }
+        return window.contentView?.firstDescendant(of: AutoFocusTextView.self)
+    }
+
+    private func editorWindow() -> NSWindow? {
+        NSApp.windows.first { $0.identifier?.rawValue == viewModel.note.id } ?? NSApp.keyWindow
+    }
+}
+
+private final class FindPanelActionSender: NSObject {
+    @objc let tag: Int
+
+    init(tag: Int) {
+        self.tag = tag
+    }
+}
+
+private extension NSView {
+    func firstDescendant<T: NSView>(of type: T.Type) -> T? {
+        if let match = self as? T {
+            return match
+        }
+        for subview in subviews {
+            if let match = subview.firstDescendant(of: type) {
+                return match
+            }
+        }
+        return nil
+    }
 }
 
 enum MacStickyEditorLayout {
     static let editorHorizontalInset = DS.s4
     static let editorBottomInset: CGFloat = 28
     static let widthMultiplier: CGFloat = 30
+    static let glyphSafetyInset: CGFloat = 3
+    static let toolbarHoverRegionHeight: CGFloat = 72
 
     static func horizontalPadding(textContainerInsetWidth: CGFloat) -> CGFloat {
-        editorHorizontalInset * 2 + textContainerInsetWidth * 2 + 8
+        textContainerInsetWidth * 2 + 8
     }
 
     static func textContainerInset(fontSize: CGFloat) -> NSSize {
-        MacMarkdownHighlighter.textContainerInset(size: fontSize)
+        let baseInset = MacMarkdownHighlighter.textContainerInset(size: fontSize)
+        return NSSize(
+            width: baseInset.width + editorHorizontalInset,
+            height: baseInset.height
+        )
+    }
+}
+
+private struct MacToolbarHoverRegion: NSViewRepresentable {
+    let onHover: (Bool) -> Void
+
+    func makeNSView(context: Context) -> ToolbarHoverTrackingView {
+        let view = ToolbarHoverTrackingView()
+        view.onHover = onHover
+        return view
+    }
+
+    func updateNSView(_ nsView: ToolbarHoverTrackingView, context: Context) {
+        nsView.onHover = onHover
+    }
+}
+
+private final class ToolbarHoverTrackingView: NSView {
+    var onHover: ((Bool) -> Void)?
+    private var trackingAreaRef: NSTrackingArea?
+    private var pendingHoverOn: DispatchWorkItem?
+    private var pendingHoverOff: DispatchWorkItem?
+    private var isHovering = false
+
+    override var mouseDownCanMoveWindow: Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingAreaRef {
+            removeTrackingArea(trackingAreaRef)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        trackingAreaRef = area
+        addTrackingArea(area)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        scheduleHoverOn()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        scheduleHoverOff()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            pendingHoverOn?.cancel()
+            pendingHoverOn = nil
+            pendingHoverOff?.cancel()
+            pendingHoverOff = nil
+            setHovering(false)
+        }
+    }
+
+    private func scheduleHoverOn() {
+        pendingHoverOff?.cancel()
+        pendingHoverOff = nil
+        pendingHoverOn?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard self.containsCurrentMouseLocation() else { return }
+            self.setHovering(true)
+        }
+        pendingHoverOn = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.04, execute: item)
+    }
+
+    private func scheduleHoverOff() {
+        pendingHoverOn?.cancel()
+        pendingHoverOn = nil
+        pendingHoverOff?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard !self.containsCurrentMouseLocation() else { return }
+            self.setHovering(false)
+        }
+        pendingHoverOff = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: item)
+    }
+
+    private func containsCurrentMouseLocation() -> Bool {
+        guard let window else { return false }
+        let pointInWindow = window.mouseLocationOutsideOfEventStream
+        let pointInView = convert(pointInWindow, from: nil)
+        return bounds.contains(pointInView)
+    }
+
+    private func setHovering(_ hovering: Bool) {
+        guard isHovering != hovering else { return }
+        isHovering = hovering
+        onHover?(hovering)
     }
 }
 
@@ -142,9 +355,9 @@ final class StickyNoteEditorViewModel: ObservableObject {
 
     private let vaultStore = VaultStore.shared
     private let windowStore = MacNoteWindowStore.shared
+    private let settings = SettingsStore.shared
     private let syncStore = SyncStatusStore.shared
     private let isPreview: Bool
-    private let wasInitiallyEmpty: Bool
     private var saveTask: Task<Void, Never>?
     private var copyResetTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
@@ -157,7 +370,6 @@ final class StickyNoteEditorViewModel: ObservableObject {
         self.note = note
         self.text = note.body
         self.isPreview = isPreview
-        self.wasInitiallyEmpty = note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         self.isPinned = windowStore.windowState(for: note.id)?.isPinned ?? true
 
         $isPinned
@@ -181,8 +393,11 @@ final class StickyNoteEditorViewModel: ObservableObject {
     }
 
     func copyNoteText() {
+        let copiedText = settings.copyAddsParagraphSpacing
+            ? MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
+            : text
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        NSPasteboard.general.setString(copiedText, forType: .string)
 
         didCopy = true
         copyResetTask?.cancel()
@@ -290,7 +505,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
             return
         }
 
-        guard wasInitiallyEmpty && isContentEmpty else {
+        guard settings.autoDeleteEmptyNotes && isContentEmpty else {
             save()
             return
         }
@@ -336,10 +551,19 @@ private final class ToolbarInsetScrollView: NSScrollView {
     var baseInsets = NSEdgeInsets() {
         didSet { applyToolbarTopInset() }
     }
+    var onFindVisibilityChange: ((Bool) -> Void)?
+    private var lastFindBarVisibility: Bool?
+
+    override var isFindBarVisible: Bool {
+        didSet {
+            syncFindToolbarAppearance()
+        }
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         applyToolbarTopInset()
+        syncFindToolbarAppearance()
     }
 
     override func layout() {
@@ -348,13 +572,18 @@ private final class ToolbarInsetScrollView: NSScrollView {
             syncDocumentSize(textView)
         }
         applyToolbarTopInset()
+        syncFindToolbarAppearance()
     }
 
     func syncDocumentSize(_ textView: NSTextView? = nil) {
         guard let textView = textView ?? documentView as? NSTextView else { return }
         guard let textContainer = textView.textContainer else { return }
         let width = max(1, contentView.bounds.width)
-        textContainer.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+        let textWidth = max(
+            1,
+            width - textView.textContainerInset.width * 2 - MacStickyEditorLayout.glyphSafetyInset
+        )
+        textContainer.containerSize = NSSize(width: textWidth, height: .greatestFiniteMagnitude)
         textView.layoutManager?.ensureLayout(for: textContainer)
 
         let usedHeight = textView.layoutManager?.usedRect(for: textContainer).height ?? 0
@@ -365,6 +594,21 @@ private final class ToolbarInsetScrollView: NSScrollView {
         let frame = NSRect(x: 0, y: 0, width: width, height: height)
         if textView.frame != frame {
             textView.frame = frame
+        }
+    }
+
+    func syncFindToolbarAppearance() {
+        guard window != nil else { return }
+        guard lastFindBarVisibility != isFindBarVisible else { return }
+        lastFindBarVisibility = isFindBarVisible
+        if let onFindVisibilityChange {
+            onFindVisibilityChange(isFindBarVisible)
+        } else {
+            AutoFocusTextView.setFindToolbarActive(
+                isFindBarVisible,
+                showsSeparator: isFindBarVisible,
+                in: window
+            )
         }
     }
 
@@ -401,6 +645,11 @@ struct MacTextView: NSViewRepresentable {
     let onSaveShortcut: () -> Void
     let onApplyShortcut: () -> Void
     let onFitToContent: () -> Void
+    let onCopyShortcut: () -> Void
+    let onFindShortcut: () -> Void
+    let onIncreaseFontSize: () -> Void
+    let onDecreaseFontSize: () -> Void
+    let onFindVisibilityChange: (Bool) -> Void
 
     init(
         text: Binding<String>,
@@ -411,7 +660,12 @@ struct MacTextView: NSViewRepresentable {
         onChange: @escaping (String) -> Void,
         onSaveShortcut: @escaping () -> Void,
         onApplyShortcut: @escaping () -> Void,
-        onFitToContent: @escaping () -> Void
+        onFitToContent: @escaping () -> Void,
+        onCopyShortcut: @escaping () -> Void,
+        onFindShortcut: @escaping () -> Void,
+        onIncreaseFontSize: @escaping () -> Void,
+        onDecreaseFontSize: @escaping () -> Void,
+        onFindVisibilityChange: @escaping (Bool) -> Void
     ) {
         self._text = text
         self.placeholder = placeholder
@@ -422,6 +676,11 @@ struct MacTextView: NSViewRepresentable {
         self.onSaveShortcut = onSaveShortcut
         self.onApplyShortcut = onApplyShortcut
         self.onFitToContent = onFitToContent
+        self.onCopyShortcut = onCopyShortcut
+        self.onFindShortcut = onFindShortcut
+        self.onIncreaseFontSize = onIncreaseFontSize
+        self.onDecreaseFontSize = onDecreaseFontSize
+        self.onFindVisibilityChange = onFindVisibilityChange
     }
 
     func makeCoordinator() -> Coordinator {
@@ -438,6 +697,7 @@ struct MacTextView: NSViewRepresentable {
         scrollView.autoresizesSubviews = true
         scrollView.autoresizingMask = [.width, .height]
         scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.onFindVisibilityChange = onFindVisibilityChange
 
         let textView = AutoFocusTextView()
         textView.coordinator = context.coordinator
@@ -465,6 +725,7 @@ struct MacTextView: NSViewRepresentable {
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.smartInsertDeleteEnabled = false
+        textView.usesFindBar = true
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.heightTracksTextView = false
         textView.layoutManager?.usesFontLeading = false
@@ -492,6 +753,19 @@ struct MacTextView: NSViewRepresentable {
 
         context.coordinator.parent = self
         scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.onFindVisibilityChange = onFindVisibilityChange
+
+        // IME composition uses marked text; rewriting textStorage here cancels Chinese candidates.
+        if textView.hasMarkedText() {
+            textView.textContainerInset = MacStickyEditorLayout.textContainerInset(fontSize: fontSize)
+            scrollView.syncDocumentSize(textView)
+            if textView.placeholderLabel.string != placeholder {
+                textView.placeholderLabel.string = placeholder
+            }
+            updatePlaceholderVisibility(textView)
+            updatePlaceholderStyle(textView, fontSize: fontSize)
+            return
+        }
 
         if textView.isUpdating { return }
         textView.isUpdating = true
@@ -581,8 +855,15 @@ extension MacTextView {
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? AutoFocusTextView, !textView.isUpdating else { return }
+            // Defer binding writes and highlighting until the IME commits marked text.
+            if textView.hasMarkedText() {
+                parent.updatePlaceholderVisibility(textView)
+                (textView.enclosingScrollView as? ToolbarInsetScrollView)?.syncDocumentSize(textView)
+                return
+            }
+
             textView.isUpdating = true
-            let newText = textView.string ?? ""
+            let newText = textView.string
             parent.onChange(newText)
             lastText = newText
             MacMarkdownHighlighter.applyMarkdownHighlighting(to: textView, lineHeightMultiple: parent.lineHeightMultiple)
@@ -636,6 +917,14 @@ final class AutoFocusTextView: NSTextView {
         return true
     }
 
+    override func performFindPanelAction(_ sender: Any?) {
+        updateToolbarAppearanceForFindAction(sender)
+        super.performFindPanelAction(sender)
+        DispatchQueue.main.async { [weak self] in
+            (self?.enclosingScrollView as? ToolbarInsetScrollView)?.syncFindToolbarAppearance()
+        }
+    }
+
     override func keyDown(with event: NSEvent) {
         guard let chars = event.charactersIgnoringModifiers, !chars.isEmpty else {
             super.keyDown(with: event)
@@ -651,10 +940,26 @@ final class AutoFocusTextView: NSTextView {
         let cmdShiftOnly = cmd && shift && !ctrl && !opt
         let cmdOptOnly = cmd && opt && !ctrl && !shift
 
+        if !cmd && !ctrl && !opt && !shift && event.keyCode == 36 {
+            if continueMarkdownList() { return }
+        }
+
         if let action = ShortcutStore.shared.markdownAction(matching: event) {
             applyFormat(action.command); return
         }
 
+        if cmdShiftOnly && chars.lowercased() == "c" {
+            coordinator?.parent.onCopyShortcut(); return
+        }
+        if cmdOnly && chars.lowercased() == "f" {
+            coordinator?.parent.onFindShortcut(); return
+        }
+        if cmd && !ctrl && !opt && (chars == "+" || chars == "=") {
+            coordinator?.parent.onIncreaseFontSize(); return
+        }
+        if cmdOnly && chars == "-" {
+            coordinator?.parent.onDecreaseFontSize(); return
+        }
         if cmdOnly && chars == "s" {
             coordinator?.parent.onSaveShortcut(); return
         }
@@ -668,24 +973,69 @@ final class AutoFocusTextView: NSTextView {
         super.keyDown(with: event)
     }
 
+    static func setFindToolbarActive(_ isActive: Bool, showsSeparator: Bool, in window: NSWindow?) {
+        guard let window else { return }
+        window.titlebarAppearsTransparent = !isActive
+        window.backgroundColor = isActive ? .white : .textBackgroundColor
+        window.titlebarSeparatorStyle = showsSeparator ? .line : .automatic
+    }
+
+    private func updateToolbarAppearanceForFindAction(_ sender: Any?) {
+        guard let tag = findActionTag(from: sender) else { return }
+        if tag == NSTextFinder.Action.showFindInterface.rawValue {
+            Self.setFindToolbarActive(true, showsSeparator: true, in: window)
+        } else if tag == NSTextFinder.Action.hideFindInterface.rawValue {
+            Self.setFindToolbarActive(false, showsSeparator: false, in: window)
+        }
+    }
+
+    private func findActionTag(from sender: Any?) -> Int? {
+        if let sender = sender as? NSMenuItem {
+            return sender.tag
+        }
+        if let sender = sender as? NSControl {
+            return sender.tag
+        }
+        if let sender = sender as? NSObject,
+           sender.responds(to: #selector(getter: FindPanelActionSender.tag)) {
+            return sender.value(forKey: "tag") as? Int
+        }
+        return nil
+    }
+
+    private func continueMarkdownList() -> Bool {
+        guard !hasMarkedText() else { return false }
+        guard let result = MacMarkdownFormatter.continueListIfNeeded(in: string, selection: selectedRange()) else {
+            return false
+        }
+        applyTextResult(result.text, selection: result.selection)
+        return true
+    }
+
     private func applyFormat(_ command: MacMarkdownFormatCommand) {
-        let currentText = self.string ?? ""
+        guard !hasMarkedText() else { return }
+
+        let currentText = self.string
         let selection = self.selectedRange()
         let result = MacMarkdownFormatter.apply(command: command, to: currentText, selection: selection)
 
+        applyTextResult(result.text, selection: result.selection)
+    }
+
+    private func applyTextResult(_ text: String, selection: NSRange) {
         isUpdating = true
         let fontSize = (coordinator?.parent.fontSize) ?? 14
         let lineHeightMultiple = (coordinator?.parent.lineHeightMultiple) ?? CGFloat(SettingsStore.defaultMacEditorLineHeightMultiple)
-        let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: result.text, fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
+        let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: text, fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
         textStorage?.setAttributedString(attributed)
-        self.setSelectedRange(result.selection)
+        setSelectedRange(selection)
         didChangeText()
-        coordinator?.parent.onChange(result.text)
+        coordinator?.parent.onChange(text)
         MacMarkdownHighlighter.applyMarkdownHighlighting(to: self, lineHeightMultiple: lineHeightMultiple)
         (enclosingScrollView as? ToolbarInsetScrollView)?.syncDocumentSize(self)
         typingAttributes = MacTextView.Coordinator.typingAttributes(fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
         if let placeholder = self.subviews.first(where: { $0 is PlaceholderLabel }) as? PlaceholderLabel {
-            placeholder.isHidden = !result.text.isEmpty
+            placeholder.isHidden = !text.isEmpty
         }
         isUpdating = false
     }
@@ -766,9 +1116,11 @@ final class PlaceholderLabel: NSTextField {
 extension MacMarkdownHighlighter {
     static func applyMarkdownHighlighting(to textView: NSTextView, lineHeightMultiple: CGFloat) {
         guard let textStorage = textView.textStorage else { return }
+        guard !textView.hasMarkedText() else { return }
+
         let selectedRanges = textView.selectedRanges
 
-        let text = textView.string ?? ""
+        let text = textView.string
         let fontSize = textView.font?.pointSize ?? CGFloat(SettingsStore.shared.macEditorFontSize)
 
         let bodyFont = bodyFont(size: fontSize)

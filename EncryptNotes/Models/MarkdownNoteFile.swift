@@ -1,6 +1,6 @@
 import Foundation
 
-struct MarkdownNoteFile: Sendable {
+nonisolated struct MarkdownNoteFile: Sendable {
     let noteId: String
     let createdAt: Date
     var updatedAt: Date
@@ -150,25 +150,20 @@ struct MarkdownNoteFile: Sendable {
     }
 }
 
-private let _iso8601FormatterWithFractional: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return f
-}()
-
-private let _iso8601FormatterNoFractional: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime]
-    return f
-}()
-
-private func iso8601Date(from string: String) -> Date? {
-    if let d = _iso8601FormatterWithFractional.date(from: string) {
+nonisolated private func iso8601Date(from string: String) -> Date? {
+    let formatterWithFractional = ISO8601DateFormatter()
+    formatterWithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let d = formatterWithFractional.date(from: string) {
         return d
     }
-    return _iso8601FormatterNoFractional.date(from: string)
+
+    let formatterNoFractional = ISO8601DateFormatter()
+    formatterNoFractional.formatOptions = [.withInternetDateTime]
+    return formatterNoFractional.date(from: string)
 }
 
-private func iso8601String(from date: Date) -> String {
-    _iso8601FormatterWithFractional.string(from: date)
+nonisolated private func iso8601String(from date: Date) -> String {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter.string(from: date)
 }

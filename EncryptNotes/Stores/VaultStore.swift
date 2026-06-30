@@ -7,7 +7,7 @@ import CryptoKit
 import UIKit
 #endif
 
-enum VaultState: Equatable {
+nonisolated enum VaultState: Equatable {
     case loading
     case ready
     case error(message: String)
@@ -22,7 +22,7 @@ enum VaultState: Equatable {
     }
 }
 
-struct EncryptedNoteInfo: Identifiable, Equatable {
+nonisolated struct EncryptedNoteInfo: Identifiable, Equatable {
     let id: String
     let url: URL
     let ciphertextPreview: String
@@ -62,6 +62,11 @@ final class VaultStore: ObservableObject {
         let lockedEncryptedNotes: [EncryptedNoteInfo]
         let trashNotes: [TrashNote]
         let noteIndex: NoteIndex
+    }
+
+    private enum KeyReloadMode {
+        case keychain
+        case explicit(CryptoKit.SymmetricKey?)
     }
 
     init(storage: VaultStorage? = nil) {
@@ -146,14 +151,11 @@ final class VaultStore: ObservableObject {
 
     func initialize() async {
         do {
-            try await storage.initializeVault()
-            await purgeExpiredTrash()
-
-            var loadedIndex = (try? storage.loadIndex()) ?? NoteIndex()
+            let loadedIndex = try await Task.detached(priority: .userInitiated) { [storage] in
+                try await Self.prepareIndex(storage: storage, fallbackIndex: NoteIndex(), initializeStorage: true)
+            }.value
             let vId = vaultId ?? UUID().uuidString
             vaultId = vId
-
-            try await reconcileIndexWithFiles(&loadedIndex)
             noteIndex = loadedIndex
 
             await loadAllNotes()
@@ -164,17 +166,42 @@ final class VaultStore: ObservableObject {
         }
     }
 
-    private func reconcileIndexWithFiles(_ index: inout NoteIndex) async throws {
+    nonisolated private static func prepareIndex(
+        storage: VaultStorage,
+        fallbackIndex: NoteIndex,
+        initializeStorage: Bool
+    ) async throws -> NoteIndex {
+        if initializeStorage {
+            try await storage.initializeVault()
+        }
+
+        var index = (try? storage.loadIndex()) ?? fallbackIndex
+        try reconcileIndexWithFiles(&index, storage: storage)
+        _ = purgeExpiredTrash(in: &index, storage: storage)
+        try storage.saveIndex(index)
+        return index
+    }
+
+    nonisolated private static func reconcileIndexWithFiles(_ index: inout NoteIndex, storage: VaultStorage) throws {
         let notesURLs = (try? storage.listMarkdownFiles(in: .notes)) ?? []
         let trashURLs = (try? storage.listMarkdownFiles(in: .trash)) ?? []
+        let indexedEntriesByLocationAndFile = Dictionary(
+            index.entries.map { ("\($0.location.rawValue)/\($0.fileName)", $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
 
         var seenIds = Set<String>()
 
         for url in notesURLs {
+            if let entry = indexedEntriesByLocationAndFile["\(NoteFileLocation.notes.rawValue)/\(url.lastPathComponent)"] {
+                seenIds.insert(entry.noteId)
+                continue
+            }
+
             guard let mdFile = try? storage.loadMarkdownFile(at: url) else { continue }
             seenIds.insert(mdFile.noteId)
             let fileName = url.lastPathComponent
-            if index.entry(for: mdFile.noteId) == nil {
+            if !index.entries.contains(where: { $0.noteId == mdFile.noteId }) {
                 let mode: NoteFileMode = mdFile.isEncrypted ? .encrypted : .plain
                 index.upsert(NoteIndexEntry(
                     noteId: mdFile.noteId,
@@ -186,12 +213,16 @@ final class VaultStore: ObservableObject {
         }
 
         for url in trashURLs {
+            if let entry = indexedEntriesByLocationAndFile["\(NoteFileLocation.trash.rawValue)/\(url.lastPathComponent)"] {
+                seenIds.insert(entry.noteId)
+                continue
+            }
+
             guard let mdFile = try? storage.loadMarkdownFile(at: url) else { continue }
             seenIds.insert(mdFile.noteId)
             let fileName = url.lastPathComponent
-            if index.entry(for: mdFile.noteId) == nil {
+            if !index.entries.contains(where: { $0.noteId == mdFile.noteId }) {
                 let mode: NoteFileMode = mdFile.isEncrypted ? .encrypted : .plain
-                let now = Date()
                 index.upsert(NoteIndexEntry(
                     noteId: mdFile.noteId,
                     fileName: fileName,
@@ -205,8 +236,6 @@ final class VaultStore: ObservableObject {
         }
 
         index.entries.removeAll { !seenIds.contains($0.noteId) }
-
-        try storage.saveIndex(index)
     }
 
     private func loadAllNotes() async {
@@ -239,6 +268,7 @@ final class VaultStore: ObservableObject {
             lockedEncryptedNotes = snapshot.lockedEncryptedNotes
             trashNotes = snapshot.trashNotes
             noteIndex = snapshot.noteIndex
+            state = .ready
         } catch {
             state = .error(message: error.localizedDescription)
         }
@@ -255,7 +285,7 @@ final class VaultStore: ObservableObject {
         var decryptedNotes: [Note] = []
         var lockedEncryptedNotes: [EncryptedNoteInfo] = []
         var trashNotes: [TrashNote] = []
-        var updatedIndex = index
+        let updatedIndex = index
 
         for entry in index.entries {
             guard let url = urlForEntry(entry, storage: storage) else { continue }
@@ -333,9 +363,50 @@ final class VaultStore: ObservableObject {
     }
 
     nonisolated private static func urlForEntry(_ entry: NoteIndexEntry, storage: VaultStorage) -> URL? {
-        let dir: NoteFileLocation = entry.location
         guard let container = storage.containerURL else { return nil }
-        return container.appendingPathComponent(dir.rawValue).appendingPathComponent(entry.fileName)
+        return entry.location == .notes
+            ? container.appendingPathComponent(entry.fileName)
+            : container.appendingPathComponent(entry.location.rawValue).appendingPathComponent(entry.fileName)
+    }
+
+    nonisolated private static func urlForFileName(_ fileName: String, location: NoteFileLocation = .notes, storage: VaultStorage) -> URL? {
+        guard let container = storage.containerURL else { return nil }
+        return location == .notes
+            ? container.appendingPathComponent(fileName)
+            : container.appendingPathComponent(location.rawValue).appendingPathComponent(fileName)
+    }
+
+    nonisolated private static func noteTitle(from body: String) -> String {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "空笔记" }
+        let firstLine = trimmed.components(separatedBy: .newlines)
+            .first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? "空笔记"
+        return firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    nonisolated private static func fileName(for noteId: String, body: String) -> String {
+        let title = noteTitle(from: body)
+        let invalidScalars = CharacterSet(charactersIn: "/\\:?%*|\"<>")
+            .union(.newlines)
+            .union(.controlCharacters)
+        let cleanedScalars = title.unicodeScalars.map { scalar in
+            invalidScalars.contains(scalar) ? UnicodeScalar(45)! : scalar
+        }
+        var cleaned = String(String.UnicodeScalarView(cleanedScalars))
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"-+"#, with: "-", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: " .-"))
+
+        if cleaned.isEmpty {
+            cleaned = "空笔记"
+        }
+
+        let maxTitleLength = 72
+        if cleaned.count > maxTitleLength {
+            cleaned = String(cleaned.prefix(maxTitleLength)).trimmingCharacters(in: CharacterSet(charactersIn: " .-"))
+        }
+
+        return "\(cleaned)-\(noteId).md"
     }
 
     nonisolated private static func loadTrashNote(entry: NoteIndexEntry, url: URL, key: SymmetricKey?, storage: VaultStorage) -> TrashNote? {
@@ -399,11 +470,12 @@ final class VaultStore: ObservableObject {
                 updatedAt: date,
                 body: body
             )
-            if let url = storage.noteFileURL(for: noteId) {
+            let fileName = Self.fileName(for: noteId, body: body)
+            if let url = Self.urlForFileName(fileName, storage: storage) {
                 try? storage.saveMarkdownFile(mdFile, at: url)
                 noteIndex.upsert(NoteIndexEntry(
                     noteId: noteId,
-                    fileName: "\(noteId).md",
+                    fileName: fileName,
                     mode: .plain,
                     location: .notes
                 ))
@@ -431,7 +503,7 @@ final class VaultStore: ObservableObject {
         try keychainStore.saveKey(keyMaterial, forVaultId: vId)
         currentKey = key
 
-        await reloadAllNotes()
+        await reloadAllNotes(keyReloadMode: .explicit(key))
 
         needsKeyExport = true
         settings.preferredNoteMode = .encrypted
@@ -469,7 +541,7 @@ final class VaultStore: ObservableObject {
         vaultId = vId
         currentKey = key
 
-        await reloadAllNotes()
+        await reloadAllNotes(keyReloadMode: .explicit(key))
 
         settings.preferredNoteMode = .encrypted
         return true
@@ -481,7 +553,7 @@ final class VaultStore: ObservableObject {
         currentKey = nil
         decryptedNotes = []
 
-        await reloadAllNotes()
+        await reloadAllNotes(keyReloadMode: .explicit(nil))
         settings.preferredNoteMode = .plain
 
         if let tag = selectedTag, !allTags.contains(where: { $0.tag == tag }) {
@@ -508,25 +580,31 @@ final class VaultStore: ObservableObject {
         try keychainStore.saveKey(keyMaterial, forVaultId: vId)
         currentKey = key
 
-        await reloadAllNotes()
+        await reloadAllNotes(keyReloadMode: .explicit(key))
 
         needsKeyExport = true
         settings.preferredNoteMode = .encrypted
     }
 
-    private func reloadAllNotes() async {
+    private func reloadAllNotes(keyReloadMode: KeyReloadMode = .keychain) async {
         do {
-            var loadedIndex = (try? storage.loadIndex()) ?? noteIndex
-            try await reconcileIndexWithFiles(&loadedIndex)
+            let loadedIndex = try await Task.detached(priority: .userInitiated) { [storage, noteIndex] in
+                try await Self.prepareIndex(storage: storage, fallbackIndex: noteIndex, initializeStorage: false)
+            }.value
             noteIndex = loadedIndex
 
             let loadedKey: CryptoKit.SymmetricKey?
-            if let vId = vaultId,
-               let keyMaterial = try? keychainStore.loadKey(forVaultId: vId),
-               let key = try? keyManager.keyFromBase64(keyMaterial) {
+            switch keyReloadMode {
+            case .keychain:
+                if let vId = vaultId,
+                   let keyMaterial = try? keychainStore.loadKey(forVaultId: vId),
+                   let key = try? keyManager.keyFromBase64(keyMaterial) {
+                    loadedKey = key
+                } else {
+                    loadedKey = nil
+                }
+            case .explicit(let key):
                 loadedKey = key
-            } else {
-                loadedKey = nil
             }
 
             let preferredMode = settings.preferredNoteMode
@@ -547,6 +625,18 @@ final class VaultStore: ObservableObject {
             noteIndex = snapshot.noteIndex
         } catch {
             state = .error(message: error.localizedDescription)
+        }
+    }
+
+    func refreshFromStorage() async {
+        SyncStatusStore.shared.setSyncing()
+        await reloadAllNotes()
+
+        if case .error(let message) = state {
+            SyncStatusStore.shared.setFailed(message: message)
+        } else {
+            state = .ready
+            SyncStatusStore.shared.setSaved()
         }
     }
 
@@ -590,14 +680,15 @@ final class VaultStore: ObservableObject {
             body: finalBody
         )
 
-        guard let url = storage.noteFileURL(for: noteId) else {
+        let fileName = Self.fileName(for: noteId, body: body)
+        guard let url = Self.urlForFileName(fileName, storage: storage) else {
             throw StorageError.iCloudUnavailable
         }
         try storage.saveMarkdownFile(mdFile, at: url)
 
         let entry = NoteIndexEntry(
             noteId: noteId,
-            fileName: "\(noteId).md",
+            fileName: fileName,
             mode: isEncrypted ? .encrypted : .plain,
             location: .notes
         )
@@ -633,12 +724,20 @@ final class VaultStore: ObservableObject {
             finalBody = body
         }
 
-        guard let url = storage.noteFileURL(for: note.id) else {
+        let currentEntry = noteIndex.entry(for: note.id)
+        guard let currentURL = currentEntry.flatMap({ Self.urlForEntry($0, storage: storage) }) ?? storage.noteFileURL(for: note.id) else {
             throw StorageError.iCloudUnavailable
         }
 
-        if let diskFile = try? storage.loadMarkdownFile(at: url), diskFile.updatedAt > note.updatedAt {
-            _ = try storage.createConflictCopy(for: url)
+        let newFileName = Self.fileName(for: note.id, body: body)
+        guard let targetURL = Self.urlForFileName(newFileName, storage: storage) else {
+            throw StorageError.iCloudUnavailable
+        }
+
+        if let diskFile = try? storage.loadMarkdownFile(at: currentURL),
+           diskFile.updatedAt > note.updatedAt,
+           diskFile.body != finalBody {
+            _ = try storage.createConflictCopy(for: currentURL)
         }
 
         let mdFile = MarkdownNoteFile(
@@ -647,10 +746,22 @@ final class VaultStore: ObservableObject {
             updatedAt: now,
             body: finalBody
         )
-        try storage.saveMarkdownFile(mdFile, at: url)
+        try storage.saveMarkdownFile(mdFile, at: targetURL)
+
+        if currentURL != targetURL && FileManager.default.fileExists(atPath: currentURL.path) {
+            try? storage.permanentlyDeleteFile(at: currentURL)
+        }
 
         if let entry = noteIndex.entry(for: note.id) {
-            noteIndex.upsert(entry)
+            noteIndex.upsert(NoteIndexEntry(
+                noteId: entry.noteId,
+                fileName: newFileName,
+                mode: entry.mode,
+                location: entry.location,
+                deletedAt: entry.deletedAt,
+                purgeAfter: entry.purgeAfter,
+                originalLocation: entry.originalLocation
+            ))
             try? storage.saveIndex(noteIndex)
         }
 
@@ -677,9 +788,8 @@ final class VaultStore: ObservableObject {
         let now = Date()
         let purgeAfter = now.addingTimeInterval(30 * 86400)
 
-        guard let srcURL = (note.isEncrypted ? storage.noteFileURL(for: note.id) : storage.noteFileURL(for: note.id)) else {
-            throw StorageError.iCloudUnavailable
-        }
+        let entry = noteIndex.entry(for: note.id)
+        guard let srcURL = entry.flatMap({ Self.urlForEntry($0, storage: storage) }) ?? storage.noteFileURL(for: note.id) else { throw StorageError.iCloudUnavailable }
         guard FileManager.default.fileExists(atPath: srcURL.path) else { return }
         guard let trashURL = storage.trashFileURL(for: note.id) else {
             throw StorageError.iCloudUnavailable
@@ -695,7 +805,7 @@ final class VaultStore: ObservableObject {
         try storage.saveMarkdownFile(trashFile, at: trashURL)
         try storage.permanentlyDeleteFile(at: srcURL)
 
-        if let entry = noteIndex.entry(for: note.id) {
+        if let entry {
             noteIndex.upsert(NoteIndexEntry(
                 noteId: entry.noteId,
                 fileName: "\(note.id).md",
@@ -718,7 +828,7 @@ final class VaultStore: ObservableObject {
     func discardEmptyNote(_ note: Note) async throws {
         guard note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
-        if let url = storage.noteFileURL(for: note.id),
+        if let url = noteIndex.entry(for: note.id).flatMap({ Self.urlForEntry($0, storage: storage) }) ?? storage.noteFileURL(for: note.id),
            FileManager.default.fileExists(atPath: url.path) {
             try storage.permanentlyDeleteFile(at: url)
         }
@@ -769,12 +879,14 @@ final class VaultStore: ObservableObject {
         guard let srcURL = storage.trashFileURL(for: trashNote.id) else {
             throw StorageError.iCloudUnavailable
         }
-        guard let dstURL = storage.noteFileURL(for: trashNote.id) else {
-            throw StorageError.iCloudUnavailable
-        }
         guard FileManager.default.fileExists(atPath: srcURL.path) else { return }
 
         let mdFile = try storage.loadMarkdownFile(at: srcURL)
+        let restoredBody = trashNote.body ?? "加密笔记"
+        let restoredFileName = Self.fileName(for: trashNote.id, body: restoredBody)
+        guard let dstURL = Self.urlForFileName(restoredFileName, storage: storage) else {
+            throw StorageError.iCloudUnavailable
+        }
         let restoredFile = MarkdownNoteFile(
             noteId: mdFile.noteId,
             createdAt: mdFile.createdAt,
@@ -787,7 +899,7 @@ final class VaultStore: ObservableObject {
         if let entry = noteIndex.entry(for: trashNote.id) {
             noteIndex.upsert(NoteIndexEntry(
                 noteId: entry.noteId,
-                fileName: "\(trashNote.id).md",
+                fileName: restoredFileName,
                 mode: entry.mode,
                 location: .notes
             ))
@@ -813,9 +925,29 @@ final class VaultStore: ObservableObject {
     }
 
     func purgeExpiredTrash() async {
-        let now = Date()
+        do {
+            let loadedIndex = try await Task.detached(priority: .utility) { [storage, noteIndex] in
+                var index = noteIndex
+                let changed = Self.purgeExpiredTrash(in: &index, storage: storage)
+                if changed {
+                    try storage.saveIndex(index)
+                }
+                return index
+            }.value
+            noteIndex = loadedIndex
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    @discardableResult
+    nonisolated private static func purgeExpiredTrash(
+        in index: inout NoteIndex,
+        storage: VaultStorage,
+        now: Date = Date()
+    ) -> Bool {
         var purgedIds: [String] = []
-        for entry in noteIndex.entries where entry.location == .trash {
+        for entry in index.entries where entry.location == .trash {
             if let purgeAfter = entry.purgeAfter, purgeAfter <= now {
                 if let url = storage.trashFileURL(for: entry.noteId) {
                     try? storage.permanentlyDeleteFile(at: url)
@@ -825,10 +957,11 @@ final class VaultStore: ObservableObject {
         }
         if !purgedIds.isEmpty {
             for id in purgedIds {
-                noteIndex.removeEntry(for: id)
+                index.removeEntry(for: id)
             }
-            try? storage.saveIndex(noteIndex)
+            return true
         }
+        return false
     }
 
     private func reloadTrashOnly() async {
@@ -935,13 +1068,17 @@ final class VaultStore: ObservableObject {
 
     func handleEnterForeground() async {
         await purgeExpiredTrash()
+        #if os(macOS)
+        return
+        #else
         if settings.autoUnloadKeyOnForeground {
             try? await unloadKey()
         }
+        #endif
     }
 }
 
-enum NoteListItem: Identifiable, Equatable {
+nonisolated enum NoteListItem: Identifiable, Equatable {
     case readable(Note)
     case locked(EncryptedNoteInfo)
 
@@ -953,7 +1090,7 @@ enum NoteListItem: Identifiable, Equatable {
     }
 }
 
-enum VaultError: Error, LocalizedError {
+nonisolated enum VaultError: Error, LocalizedError {
     case notReady
     case keyNotLoaded
 

@@ -172,4 +172,52 @@ final class MacMarkdownFormatterTests: XCTestCase {
         XCTAssertEqual(result.text, "hello")
         XCTAssertEqual(result.selection, NSRange(location: 0, length: 5))
     }
+
+    // MARK: - List continuation
+
+    func testNumberedListReturnContinuesWithNextNumber() {
+        let text = "1. hello"
+        let result = MacMarkdownFormatter.continueListIfNeeded(
+            in: text,
+            selection: NSRange(location: (text as NSString).length, length: 0)
+        )
+        XCTAssertEqual(result?.text, "1. hello\n2. ")
+        XCTAssertEqual(result?.selection, NSRange(location: 12, length: 0))
+    }
+
+    func testBulletListReturnContinuesSameMarker() {
+        let text = "- hello"
+        let result = MacMarkdownFormatter.continueListIfNeeded(
+            in: text,
+            selection: NSRange(location: (text as NSString).length, length: 0)
+        )
+        XCTAssertEqual(result?.text, "- hello\n- ")
+    }
+
+    func testEmptyGeneratedListMarkerExitsList() {
+        let text = "1. hello\n2. "
+        let result = MacMarkdownFormatter.continueListIfNeeded(
+            in: text,
+            selection: NSRange(location: (text as NSString).length, length: 0)
+        )
+        XCTAssertEqual(result?.text, "1. hello\n")
+        XCTAssertEqual(result?.selection, NSRange(location: 9, length: 0))
+    }
+
+    func testListContinuationSkipsFencedCodeBlocks() {
+        let text = "```\n1. code"
+        let result = MacMarkdownFormatter.continueListIfNeeded(
+            in: text,
+            selection: NSRange(location: (text as NSString).length, length: 0)
+        )
+        XCTAssertNil(result)
+    }
+
+    // MARK: - Copy spacing
+
+    func testCopySpacingAddsBlankLinesBetweenParagraphLines() {
+        let text = "第一段\n第二段\n\n- item\n- item2\n\n```swift\nlet x = 1\nlet y = 2\n```"
+        let result = MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
+        XCTAssertEqual(result, "第一段\n\n第二段\n\n- item\n- item2\n\n```swift\nlet x = 1\nlet y = 2\n```")
+    }
 }

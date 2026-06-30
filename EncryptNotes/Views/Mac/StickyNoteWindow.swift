@@ -153,12 +153,8 @@ final class StickyNoteWindowManager: NSObject {
 
     func fitWindowToContent(noteId: String, text: String, fontSize: CGFloat) {
         guard let window = noteWindows[noteId] else { return }
-        let textContainerInset = NSSize(
-            width: 4,
-            height: ceil(fontSize * 0.3)
-        )
-        let horizontalPadding = MacStickyEditorLayout.editorHorizontalInset * 2
-            + textContainerInset.width * 2 + 8
+        let textContainerInset = MacStickyEditorLayout.textContainerInset(fontSize: fontSize)
+        let horizontalPadding = MacStickyEditorLayout.horizontalPadding(textContainerInsetWidth: textContainerInset.width)
         let targetWidth = fontSize * MacStickyEditorLayout.widthMultiplier + horizontalPadding
 
         let textWidth = max(10, targetWidth - horizontalPadding)
@@ -166,8 +162,8 @@ final class StickyNoteWindowManager: NSObject {
         let verticalPadding = textContainerInset.height * 2 + DS.s4 + MacStickyEditorLayout.editorBottomInset
         let contentHeight = measuredHeight + verticalPadding
 
-        var targetHeight = max(targetWidth / 2, contentHeight)
-        targetHeight = min(targetWidth * 2, targetHeight)
+        var targetHeight = max(targetWidth * 0.75, contentHeight)
+        targetHeight = min(targetWidth * 4 / 3, targetHeight)
 
         let finalWidth = max(Self.minimumContentSize.width, targetWidth)
         let finalHeight = max(Self.minimumContentSize.height, targetHeight)

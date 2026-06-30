@@ -3,20 +3,18 @@ import Foundation
 final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
     static let shared = LocalFallbackStorage()
 
-    private let fileManager = FileManager.default
+    private let _containerURL: URL?
 
-    private var _containerURL: URL?
-
-    var containerURL: URL? {
+    nonisolated var containerURL: URL? {
         _containerURL
     }
 
-    var isAvailable: Bool {
+    nonisolated var isAvailable: Bool {
         true
     }
 
     private init() {
-        let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         _containerURL = documentsURL.appendingPathComponent("BieKanWo")
     }
 
@@ -27,14 +25,13 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
 
         let directories = [
             container,
-            container.appendingPathComponent("notes"),
             container.appendingPathComponent("trash"),
-            container.appendingPathComponent("meta")
+            container.appendingPathComponent(".meta")
         ]
 
         for directory in directories {
-            if !fileManager.fileExists(atPath: directory.path) {
-                try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            if !FileManager.default.fileExists(atPath: directory.path) {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             }
         }
     }
@@ -44,7 +41,7 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
             throw StorageError.directoryCreationFailed
         }
 
-        guard fileManager.fileExists(atPath: url.path) else {
+        guard FileManager.default.fileExists(atPath: url.path) else {
             return nil
         }
 
@@ -62,14 +59,15 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
     }
 
     func listMarkdownFiles(in location: NoteFileLocation) throws -> [URL] {
-        guard let dirURL = containerURL?.appendingPathComponent(location.rawValue) else {
+        guard let container = containerURL else {
             throw StorageError.directoryCreationFailed
         }
+        let dirURL = location == .notes ? container : container.appendingPathComponent(location.rawValue)
         return try listMarkdownFilesInDirectory(dirURL)
     }
 
     func loadMarkdownFile(at url: URL) throws -> MarkdownNoteFile {
-        guard fileManager.fileExists(atPath: url.path) else {
+        guard FileManager.default.fileExists(atPath: url.path) else {
             throw StorageError.fileNotFound
         }
         let data = try Data(contentsOf: url)
@@ -82,24 +80,24 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
     }
 
     func moveFile(from srcURL: URL, to dstURL: URL) throws {
-        guard fileManager.fileExists(atPath: srcURL.path) else {
+        guard FileManager.default.fileExists(atPath: srcURL.path) else {
             throw StorageError.fileNotFound
         }
         let dstDir = dstURL.deletingLastPathComponent()
-        if !fileManager.fileExists(atPath: dstDir.path) {
-            try fileManager.createDirectory(at: dstDir, withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: dstDir.path) {
+            try FileManager.default.createDirectory(at: dstDir, withIntermediateDirectories: true)
         }
-        if fileManager.fileExists(atPath: dstURL.path) {
-            try fileManager.removeItem(at: dstURL)
+        if FileManager.default.fileExists(atPath: dstURL.path) {
+            try FileManager.default.removeItem(at: dstURL)
         }
-        try fileManager.moveItem(at: srcURL, to: dstURL)
+        try FileManager.default.moveItem(at: srcURL, to: dstURL)
     }
 
     func permanentlyDeleteFile(at url: URL) throws {
-        guard fileManager.fileExists(atPath: url.path) else {
+        guard FileManager.default.fileExists(atPath: url.path) else {
             throw StorageError.fileNotFound
         }
-        try fileManager.removeItem(at: url)
+        try FileManager.default.removeItem(at: url)
     }
 
     func createConflictCopy(for url: URL) throws -> URL {
@@ -109,8 +107,8 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
         let timestamp = Int(Date().timeIntervalSince1970)
         let filename = url.deletingPathExtension().lastPathComponent
         let conflictFilename = "\(filename)-conflict-\(timestamp).md"
-        let conflictURL = container.appendingPathComponent("notes").appendingPathComponent(conflictFilename)
-        try fileManager.copyItem(at: url, to: conflictURL)
+        let conflictURL = container.appendingPathComponent(conflictFilename)
+        try FileManager.default.copyItem(at: url, to: conflictURL)
         return conflictURL
     }
 }

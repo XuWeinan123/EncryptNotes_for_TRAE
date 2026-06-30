@@ -1,6 +1,6 @@
 import Foundation
 
-struct Note: Identifiable, Equatable, Sendable {
+nonisolated struct Note: Identifiable, Equatable, Sendable {
     let id: String
     var body: String
     let createdAt: Date

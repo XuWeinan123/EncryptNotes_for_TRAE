@@ -7,19 +7,28 @@ struct TrashView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("回收站")
-                    .font(DS.title())
-                    .foregroundColor(DS.textEmphasize)
+            SWPageHeader(
+                title: "回收站",
+                subtitle: vaultStore.trashNotes.isEmpty ? "这里暂时没有已删除笔记" : "删除的笔记会在这里保留 30 天",
+                systemImage: "trash",
+                tint: vaultStore.trashNotes.isEmpty ? DS.textSubtle : DS.destructive
+            )
+            .padding(DS.s3)
+
+            HStack(spacing: DS.s2) {
+                SWStatusBadge("\(vaultStore.trashNotes.count) 条", systemImage: "doc.text", style: vaultStore.trashNotes.isEmpty ? .neutral : .error)
                 Spacer()
-                Button("清空回收站", role: .destructive) {
+                Button(role: .destructive) {
                     showingEmptyTrashConfirmation = true
+                } label: {
+                    Label("清空", systemImage: "trash")
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(vaultStore.trashNotes.isEmpty)
             }
-            .padding(DS.s3)
+            .padding(.horizontal, DS.s3)
+            .padding(.bottom, DS.s3)
             .background(DS.surfaceRaised)
             .overlay(alignment: .bottom) {
                 Rectangle()
@@ -60,52 +69,25 @@ struct TrashView: View {
     }
 
     private var emptyRow: some View {
-        VStack(spacing: DS.s2) {
-            Image(systemName: "trash")
-                .font(.system(size: 28, weight: .regular))
-                .foregroundColor(DS.textSubtle)
-            Text("回收站为空")
-                .font(DS.body())
-                .foregroundColor(DS.textSecondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(DS.s6)
-        .dsInputSurface()
+        SWEmptyState(
+            title: "回收站为空",
+            message: "删除的笔记会在这里保留 30 天",
+            systemImage: "trash"
+        )
     }
 
     @ViewBuilder
     private func trashRow(for trashNote: TrashNote) -> some View {
-        HStack(alignment: .top, spacing: DS.s3) {
-            Image(systemName: trashNote.isEncrypted ? "lock.fill" : "doc.text")
-                .foregroundColor(trashNote.isEncrypted ? DS.primaryDeep : DS.textSubtle)
-                .font(.system(size: 12))
-                .frame(width: 18)
-                .padding(.top, DS.s1)
-
-            VStack(alignment: .leading, spacing: DS.s1) {
-                if let body = trashNote.body {
-                    Text(firstLine(of: body))
-                        .font(DS.body())
-                        .foregroundColor(DS.textStrong)
-                        .lineLimit(1)
-                } else if trashNote.isEncrypted {
-                    Text("加密笔记")
-                        .font(DS.body())
-                        .foregroundColor(DS.textSecondary)
-                } else {
-                    Text("(无内容)")
-                        .font(DS.body())
-                        .foregroundColor(DS.textSubtle)
-                }
-
-                Text("删除于 \(timeString(from: trashNote.deletedAt))")
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSubtle)
-            }
-
-            Spacer()
-
+        SWNoteListRow(
+            title: trashTitle(for: trashNote),
+            subtitle: "删除于 \(timeString(from: trashNote.deletedAt))",
+            systemImage: trashNote.isEncrypted ? "lock.fill" : "doc.text",
+            tint: trashNote.isEncrypted ? DS.primaryDeep : DS.textSubtle
+        ) {
             HStack(spacing: DS.s1) {
+                SWStatusBadge(trashNote.isEncrypted ? "加密" : "明文", systemImage: trashNote.isEncrypted ? "lock.fill" : "doc.text", style: trashNote.isEncrypted ? .success : .neutral)
+                SWStatusBadge("剩 \(trashNote.remainingDays) 天", systemImage: "clock", style: .warning)
+
                 Button("恢复") {
                     Task {
                         try? await vaultStore.restoreTrashNote(trashNote)
@@ -123,9 +105,16 @@ struct TrashView: View {
                 .controlSize(.small)
             }
         }
-        .padding(.horizontal, DS.s2)
-        .padding(.vertical, DS.s2)
-        .dsInputSurface()
+    }
+
+    private func trashTitle(for trashNote: TrashNote) -> String {
+        if let body = trashNote.body {
+            return firstLine(of: body)
+        } else if trashNote.isEncrypted {
+            return "加密笔记"
+        } else {
+            return "(无内容)"
+        }
     }
 
     private func firstLine(of body: String) -> String {

@@ -12,10 +12,14 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
     private let windowStore = MacNoteWindowStore.shared
     private let shortcutStore = ShortcutStore.shared
     private let settings = SettingsStore.shared
+    private let syncStore = SyncStatusStore.shared
+    private let automaticRefreshInterval: TimeInterval = 30
 
     private var allNotesWindow: NSWindow?
     private var trashWindow: NSWindow?
     private var settingsWindow: NSWindow?
+    private var automaticRefreshTimer: Timer?
+    private var isRefreshing = false
 
     private override init() {
         super.init()
@@ -38,6 +42,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         statusItem?.menu = menu
 
         buildMenu(menu)
+        startAutomaticRefresh()
 
         NotificationCenter.default.addObserver(
             self,
@@ -45,6 +50,11 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
             name: .macNewNote,
             object: nil
         )
+    }
+
+    deinit {
+        automaticRefreshTimer?.invalidate()
+        NotificationCenter.default.removeObserver(self)
     }
 
     private func configureStatusButton(_ button: NSStatusBarButton) {
@@ -80,6 +90,16 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         newNoteItem.keyEquivalentModifierMask = [.control, .command]
         newNoteItem.target = self
         menu.addItem(newNoteItem)
+
+        let refreshItem = NSMenuItem(
+            title: isRefreshing ? "正在刷新 iCloud 文件夹…" : "刷新 iCloud 文件夹",
+            action: #selector(refreshICloudFolder),
+            keyEquivalent: "r"
+        )
+        refreshItem.keyEquivalentModifierMask = [.command]
+        refreshItem.target = self
+        refreshItem.isEnabled = !isRefreshing
+        menu.addItem(refreshItem)
 
         menu.addItem(.separator())
 
@@ -169,6 +189,36 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         }
     }
 
+    @objc private func refreshICloudFolder() {
+        Task {
+            await refreshICloudFolder(showFailureAlert: true)
+        }
+    }
+
+    private func startAutomaticRefresh() {
+        guard automaticRefreshTimer == nil else { return }
+        automaticRefreshTimer = Timer.scheduledTimer(withTimeInterval: automaticRefreshInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.refreshICloudFolder(showFailureAlert: false)
+            }
+        }
+    }
+
+    private func refreshICloudFolder(showFailureAlert: Bool) async {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        statusItem?.menu?.update()
+
+        await vaultStore.refreshFromStorage()
+
+        isRefreshing = false
+        statusItem?.menu?.update()
+
+        if showFailureAlert, case .failed(let message) = syncStore.status {
+            showError(message: message)
+        }
+    }
+
     @objc private func openNote(_ sender: NSMenuItem) {
         guard let noteId = sender.representedObject as? String,
               let note = vaultStore.readableNotes.first(where: { $0.id == noteId }) else { return }
@@ -218,10 +268,14 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
     }
 
     @objc private func showAllNotes() {
+        openAllNotesWindow()
+    }
+
+    func openAllNotesWindow() {
         if allNotesWindow == nil {
             let hostingView = NSHostingView(rootView: AllNotesView())
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 480, height: 600),
+                contentRect: NSRect(x: 0, y: 0, width: 640, height: 720),
                 styleMask: [.titled, .closable, .resizable, .miniaturizable],
                 backing: .buffered,
                 defer: false
@@ -238,10 +292,14 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
     }
 
     @objc private func showTrash() {
+        openTrashWindow()
+    }
+
+    func openTrashWindow() {
         if trashWindow == nil {
             let hostingView = NSHostingView(rootView: TrashView())
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 480, height: 600),
+                contentRect: NSRect(x: 0, y: 0, width: 640, height: 720),
                 styleMask: [.titled, .closable, .resizable, .miniaturizable],
                 backing: .buffered,
                 defer: false
@@ -279,13 +337,15 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         if settingsWindow == nil {
             let hostingView = NSHostingView(rootView: MacSettingsView())
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 460, height: 400),
-                styleMask: [.titled, .closable, .resizable],
+                contentRect: NSRect(x: 0, y: 0, width: 640, height: 660),
+                styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
             )
             window.title = "设置"
             window.contentView = hostingView
+            window.contentMinSize = NSSize(width: 640, height: 660)
+            window.contentMaxSize = NSSize(width: 640, height: 660)
             window.center()
             window.isReleasedWhenClosed = false
             window.delegate = self

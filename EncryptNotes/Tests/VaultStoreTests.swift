@@ -3,6 +3,14 @@ import CryptoKit
 @testable import EncryptNotes
 
 final class VaultStoreTests: XCTestCase {
+    private func savedNoteURL(in tmpDir: URL, noteId: String) throws -> URL {
+        let files = try FileManager.default.contentsOfDirectory(at: tmpDir, includingPropertiesForKeys: nil)
+        guard let url = files.first(where: { $0.pathExtension == "md" && $0.lastPathComponent.contains(noteId) }) else {
+            XCTFail("应能找到包含 noteId 的 Markdown 文件")
+            throw CocoaError(.fileNoSuchFile)
+        }
+        return url
+    }
 
     @MainActor
     func testCreatePlainNoteWithoutKey() async throws {
@@ -18,7 +26,8 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertFalse(store.plainNotes.first?.isEncrypted ?? true)
 
         let noteId = store.plainNotes.first!.id
-        let mdURL = tmpDir.appendingPathComponent("notes").appendingPathComponent("\(noteId).md")
+        let mdURL = try savedNoteURL(in: tmpDir, noteId: noteId)
+        XCTAssertTrue(mdURL.lastPathComponent.hasPrefix("未导入密钥时添加的笔记-"))
         let mdData = try Data(contentsOf: mdURL)
         let mdContent = String(data: mdData, encoding: .utf8) ?? ""
         XCTAssertTrue(mdContent.contains("未导入密钥时添加的笔记"), "Markdown 文件应包含正文")
@@ -60,7 +69,8 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertTrue(store.decryptedNotes.first?.isEncrypted ?? false)
 
         let noteId = store.decryptedNotes.first!.id
-        let mdURL = tmpDir.appendingPathComponent("notes").appendingPathComponent("\(noteId).md")
+        let mdURL = try savedNoteURL(in: tmpDir, noteId: noteId)
+        XCTAssertTrue(mdURL.lastPathComponent.hasPrefix("加密笔记内容-"))
         let mdData = try Data(contentsOf: mdURL)
         let mdContent = String(data: mdData, encoding: .utf8) ?? ""
         XCTAssertTrue(mdContent.contains("bkwenc:v1:"), "加密笔记文件 body 应为密文")
@@ -198,13 +208,13 @@ final class VaultStoreTests: XCTestCase {
         store.configureForTesting(vaultId: "v")
 
         let plainNote = try await store.createNote(body: "待删除", isEncrypted: false)
-        let noteURL = tmpDir.appendingPathComponent("notes").appendingPathComponent("\(plainNote.id).md")
+        let noteURL = try savedNoteURL(in: tmpDir, noteId: plainNote.id)
         XCTAssertTrue(FileManager.default.fileExists(atPath: noteURL.path))
 
         try await store.deleteNote(plainNote)
 
         XCTAssertTrue(store.plainNotes.isEmpty, "主列表应已移除")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: noteURL.path), "notes/ 中文件应已删除")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: noteURL.path), "根目录中的笔记文件应已删除")
         let trashURL = tmpDir.appendingPathComponent("trash").appendingPathComponent("\(plainNote.id).md")
         XCTAssertTrue(FileManager.default.fileExists(atPath: trashURL.path), "trash/ 中应有文件")
 
@@ -411,9 +421,8 @@ private final class TemporaryStorage: VaultStorage, @unchecked Sendable {
         self._containerURL = baseURL
         let directories = [
             baseURL,
-            baseURL.appendingPathComponent("notes"),
             baseURL.appendingPathComponent("trash"),
-            baseURL.appendingPathComponent("meta")
+            baseURL.appendingPathComponent(".meta")
         ]
         for directory in directories {
             if !fileManager.fileExists(atPath: directory.path) {
@@ -425,9 +434,8 @@ private final class TemporaryStorage: VaultStorage, @unchecked Sendable {
     func initializeVault() async throws {
         let directories = [
             _containerURL,
-            _containerURL.appendingPathComponent("notes"),
             _containerURL.appendingPathComponent("trash"),
-            _containerURL.appendingPathComponent("meta")
+            _containerURL.appendingPathComponent(".meta")
         ]
         for directory in directories {
             if !fileManager.fileExists(atPath: directory.path) {

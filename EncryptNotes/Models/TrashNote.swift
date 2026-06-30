@@ -1,6 +1,6 @@
 import Foundation
 
-struct TrashNote: Identifiable, Equatable, Sendable {
+nonisolated struct TrashNote: Identifiable, Equatable, Sendable {
     let id: String
     let isEncrypted: Bool
     let createdAt: Date

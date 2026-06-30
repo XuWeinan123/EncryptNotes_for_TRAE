@@ -16,6 +16,11 @@ struct MacMarkdownFormatResult: Equatable {
     let selection: NSRange
 }
 
+struct MacMarkdownListContinuationResult: Equatable {
+    let text: String
+    let selection: NSRange
+}
+
 final class MacMarkdownFormatter {
 
     static func apply(command: MacMarkdownFormatCommand, to text: String, selection: NSRange) -> MacMarkdownFormatResult {
@@ -121,5 +126,114 @@ final class MacMarkdownFormatter {
         if range.location >= nsText.length { return "" }
         let safeLength = min(range.length, nsText.length - range.location)
         return nsText.substring(with: NSRange(location: range.location, length: safeLength))
+    }
+
+    static func continueListIfNeeded(in text: String, selection: NSRange) -> MacMarkdownListContinuationResult? {
+        guard selection.length == 0 else { return nil }
+        let nsText = text as NSString
+        let cursor = max(0, min(selection.location, nsText.length))
+        guard !isInsideFencedCodeBlock(text: text, cursor: cursor) else { return nil }
+
+        let lineRange = nsText.lineRange(for: NSRange(location: cursor, length: 0))
+        let lineStart = lineRange.location
+        let lineLengthToCursor = max(0, cursor - lineStart)
+        let currentLine = nsText.substring(with: NSRange(location: lineStart, length: lineLengthToCursor))
+        guard let marker = ListMarker(line: currentLine) else { return nil }
+
+        if marker.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let newText = nsText.substring(to: lineStart) + nsText.substring(from: cursor)
+            return MacMarkdownListContinuationResult(
+                text: newText,
+                selection: NSRange(location: lineStart, length: 0)
+            )
+        }
+
+        let nextMarker = marker.nextMarker
+        let insertion = "\n\(marker.indent)\(nextMarker)"
+        let newText = nsText.substring(to: cursor) + insertion + nsText.substring(from: cursor)
+        return MacMarkdownListContinuationResult(
+            text: newText,
+            selection: NSRange(location: cursor + (insertion as NSString).length, length: 0)
+        )
+    }
+
+    static func stringByAddingMarkdownParagraphSpacing(to text: String) -> String {
+        let lines = text.components(separatedBy: "\n")
+        guard lines.count > 1 else { return text }
+
+        var output: [String] = []
+        var inFence = false
+
+        for index in lines.indices {
+            let line = lines[index]
+            output.append(line)
+
+            if isFenceLine(line) {
+                inFence.toggle()
+                continue
+            }
+
+            guard !inFence, index < lines.index(before: lines.endIndex) else { continue }
+            let nextLine = lines[lines.index(after: index)]
+            if isNormalParagraphLine(line), isNormalParagraphLine(nextLine) {
+                output.append("")
+            }
+        }
+
+        return output.joined(separator: "\n")
+    }
+
+    private static func isInsideFencedCodeBlock(text: String, cursor: Int) -> Bool {
+        let nsText = text as NSString
+        let prefix = nsText.substring(to: max(0, min(cursor, nsText.length)))
+        var inFence = false
+        for line in prefix.components(separatedBy: "\n") {
+            if isFenceLine(line) {
+                inFence.toggle()
+            }
+        }
+        return inFence
+    }
+
+    private static func isFenceLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        return trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~")
+    }
+
+    private static func isNormalParagraphLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return false }
+        if isFenceLine(line) { return false }
+        if trimmed.hasPrefix("#") || trimmed.hasPrefix(">") { return false }
+        if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") || trimmed.hasPrefix("+ ") { return false }
+        if trimmed.hasPrefix("|") { return false }
+        if trimmed.range(of: #"^\d+[\.\)]\s+"#, options: .regularExpression) != nil { return false }
+        return true
+    }
+
+    private struct ListMarker {
+        let indent: String
+        let nextMarker: String
+        let content: String
+
+        init?(line: String) {
+            let pattern = #"^(\s*)(?:(\d+)([\.\)])|([-+*]))\s+(.*)$"#
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+            let nsLine = line as NSString
+            guard let match = regex.firstMatch(in: line, range: NSRange(location: 0, length: nsLine.length)) else { return nil }
+
+            indent = nsLine.substring(with: match.range(at: 1))
+            content = nsLine.substring(with: match.range(at: 5))
+
+            if match.range(at: 2).location != NSNotFound {
+                let number = Int(nsLine.substring(with: match.range(at: 2))) ?? 0
+                let delimiter = nsLine.substring(with: match.range(at: 3))
+                nextMarker = "\(number + 1)\(delimiter) "
+            } else if match.range(at: 4).location != NSNotFound {
+                nextMarker = nsLine.substring(with: match.range(at: 4)) + " "
+            } else {
+                return nil
+            }
+        }
     }
 }

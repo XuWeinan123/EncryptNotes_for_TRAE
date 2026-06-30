@@ -1,6 +1,6 @@
 import Foundation
 
-struct VaultKey: Codable {
+nonisolated struct VaultKey: Codable {
     let version: Int
     let app: String
     let type: String

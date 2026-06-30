@@ -1,7 +1,7 @@
 import Foundation
 import CryptoKit
 
-enum CryptoServiceError: Error, LocalizedError {
+nonisolated enum CryptoServiceError: Error, LocalizedError {
     case encryptionFailed
     case decryptionFailed
     case invalidCiphertext
@@ -21,7 +21,7 @@ enum CryptoServiceError: Error, LocalizedError {
     }
 }
 
-final class CryptoService {
+nonisolated final class CryptoService {
     static let shared = CryptoService()
 
     static let encryptedPrefix = "bkwenc:v1:"
@@ -85,14 +85,14 @@ final class CryptoService {
 }
 
 private extension Data {
-    func base64URLEncodedString() -> String {
+    nonisolated func base64URLEncodedString() -> String {
         base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .trimmingCharacters(in: CharacterSet(charactersIn: "="))
     }
 
-    init?(base64URLEncoded string: String) {
+    nonisolated init?(base64URLEncoded string: String) {
         var base64 = string
             .replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")

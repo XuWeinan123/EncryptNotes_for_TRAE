@@ -9,31 +9,54 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
+            SWPanelStack {
+                SWSectionPanel {
                     NavigationLink {
                         KeyManagementView()
                     } label: {
-                        Label("密钥管理", systemImage: "lock")
+                        SWSettingsRow("密钥管理", subtitle: "导入、导出或重置保险库密钥", systemImage: "lock") {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
                     }
+                    .buttonStyle(.plain)
+                    SWRowDivider()
                     NavigationLink {
                         PrivacySettingsView()
                     } label: {
-                        Label("隐私保护", systemImage: "hand.raised")
+                        SWSettingsRow("隐私保护", subtitle: "控制后台隐藏与自动卸载密钥", systemImage: "hand.raised") {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
                     }
+                    .buttonStyle(.plain)
+                    SWRowDivider()
                     NavigationLink {
                         TrashSettingsView(showTrash: $showTrash, isPresented: $isPresented)
                     } label: {
-                        Label("回收站设置", systemImage: "trash")
+                        SWSettingsRow("回收站设置", subtitle: "查看、清理或清空已删除笔记", systemImage: "trash", tint: DS.destructive) {
+                            HStack(spacing: DS.s2) {
+                                if vaultStore.trashCount > 0 {
+                                    SWStatusBadge("\(vaultStore.trashCount)", style: .neutral)
+                                }
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .semibold))
+                            }
+                        }
                     }
+                    .buttonStyle(.plain)
+                    SWRowDivider()
                     NavigationLink {
                         AboutView()
                     } label: {
-                        Label("关于", systemImage: "info.circle")
+                        SWSettingsRow("关于", subtitle: "版本、同步与安全说明", systemImage: "info.circle", tint: DS.link) {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
                     }
+                    .buttonStyle(.plain)
                 }
             }
-            .listStyle(.insetGrouped)
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
             .dsLiquidGlassToolbar()
@@ -61,63 +84,74 @@ private struct KeyManagementView: View {
     @State private var showResetSecondConfirmation = false
 
     var body: some View {
-        List {
-            Section {
-                HStack {
-                    Label(
-                        "密钥状态",
-                        systemImage: vaultStore.isKeyLoaded ? "lock.open.fill" : "lock.fill"
-                    )
-                    Spacer()
-                    Text(vaultStore.isKeyLoaded ? "已加载" : "未加载")
-                        .foregroundStyle(.secondary)
+        SWPanelStack {
+            SWSectionPanel {
+                SWSettingsRow(
+                    "密钥状态",
+                    subtitle: vaultStore.isKeyLoaded ? "这台设备可以查看加密笔记" : "加密笔记会保持锁定状态",
+                    systemImage: vaultStore.isKeyLoaded ? "lock.open.fill" : "lock.fill",
+                    tint: vaultStore.isKeyLoaded ? DS.primaryDeep : DS.textSubtle
+                ) {
+                    SWStatusBadge(vaultStore.isKeyLoaded ? "已加载" : "未加载", style: vaultStore.isKeyLoaded ? .success : .neutral)
                 }
             }
 
             if vaultStore.isKeyLoaded {
-                Section {
+                SWSectionPanel("密钥操作") {
                     Button {
                         exportKeyFile()
                     } label: {
-                        Label("导出密钥", systemImage: "square.and.arrow.up")
+                        SWSettingsRow("导出密钥", subtitle: "保存为 .bkwkey 文件", systemImage: "square.and.arrow.up") {
+                            EmptyView()
+                        }
                     }
+                    .buttonStyle(.plain)
+                    SWRowDivider()
                     Button(role: .destructive) {
                         showUnloadConfirmation = true
                     } label: {
-                        Label("卸载本机密钥", systemImage: "lock.slash")
+                        SWSettingsRow("卸载本机密钥", subtitle: "不删除笔记，只让加密内容回到锁定状态", systemImage: "lock.slash", tint: DS.destructive) {
+                            EmptyView()
+                        }
                     }
+                    .buttonStyle(.plain)
                 }
             } else {
-                Section {
+                SWSectionPanel("密钥操作", footer: "密钥文件只会在本机读取，不会上传。") {
                     Button {
                         Task {
                             do { try await vaultStore.createKey() }
                             catch { vaultStore.lastError = "创建密钥失败：\(error.localizedDescription)" }
                         }
                     } label: {
-                        Label("创建密钥", systemImage: "key.fill")
+                        SWSettingsRow("创建密钥", subtitle: "为这台设备生成新的加密密钥", systemImage: "key.fill") {
+                            EmptyView()
+                        }
                     }
+                    .buttonStyle(.plain)
+                    SWRowDivider()
                     Button {
                         showKeyImporter = true
                     } label: {
-                        Label("导入密钥文件", systemImage: "square.and.arrow.down")
+                        SWSettingsRow("导入密钥文件", subtitle: "加载已有 .bkwkey 文件", systemImage: "square.and.arrow.down") {
+                            EmptyView()
+                        }
                     }
-                } footer: {
-                    Text("密钥文件只会在本机读取，不会上传。")
+                    .buttonStyle(.plain)
                 }
             }
 
-            Section {
+            SWSectionPanel("危险操作", footer: "重置密钥将删除所有加密笔记，明文笔记会保留。") {
                 Button(role: .destructive) {
                     showResetFirstConfirmation = true
                 } label: {
-                    Label("重置密钥", systemImage: "trash")
+                    SWSettingsRow("重置密钥", subtitle: "删除所有加密笔记并生成新密钥", systemImage: "trash", tint: DS.destructive) {
+                        EmptyView()
+                    }
                 }
-            } footer: {
-                Text("重置密钥将删除所有加密笔记，明文笔记会保留。")
+                .buttonStyle(.plain)
             }
         }
-        .listStyle(.insetGrouped)
         .navigationTitle("密钥管理")
         .navigationBarTitleDisplayMode(.inline)
         .fileImporter(
@@ -190,15 +224,19 @@ private struct PrivacySettingsView: View {
     @StateObject private var settings = SettingsStore.shared
 
     var body: some View {
-        List {
-            Section {
-                Toggle("进入后台时隐藏内容", isOn: $settings.hideContentOnBackground)
-                Toggle("重新打开 App 时自动卸载密钥", isOn: $settings.autoUnloadKeyOnForeground)
-            } footer: {
-                Text("自动卸载密钥不会删除笔记，只会让加密笔记回到乱码状态。")
+        SWPanelStack {
+            SWSectionPanel("隐私保护", footer: "自动卸载密钥不会删除笔记，只会让加密笔记回到乱码状态。") {
+                SWSettingsRow("进入后台时隐藏内容", subtitle: "切换到其他应用时遮住笔记内容", systemImage: "eye.slash") {
+                    Toggle("", isOn: $settings.hideContentOnBackground)
+                        .labelsHidden()
+                }
+                SWRowDivider()
+                SWSettingsRow("重新打开 App 时自动卸载密钥", subtitle: "再次进入 App 后需要重新导入密钥", systemImage: "lock.rotation") {
+                    Toggle("", isOn: $settings.autoUnloadKeyOnForeground)
+                        .labelsHidden()
+                }
             }
         }
-        .listStyle(.insetGrouped)
         .navigationTitle("隐私保护")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -211,43 +249,45 @@ private struct TrashSettingsView: View {
     @State private var showEmptyConfirmation = false
 
     var body: some View {
-        List {
-            Section {
+        SWPanelStack {
+            SWSectionPanel {
                 Button {
                     isPresented = false
                     showTrash = true
                 } label: {
-                    HStack {
-                        Label("查看回收站", systemImage: "trash")
-                        Spacer()
-                        if vaultStore.trashCount > 0 {
-                            Text("\(vaultStore.trashCount)")
-                                .foregroundColor(.secondary)
+                    SWSettingsRow("查看回收站", subtitle: "恢复或永久删除已移除笔记", systemImage: "trash", tint: DS.destructive) {
+                        HStack(spacing: DS.s2) {
+                            if vaultStore.trashCount > 0 {
+                                SWStatusBadge("\(vaultStore.trashCount)", style: .neutral)
+                            }
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .semibold))
                         }
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(.secondary)
                     }
                 }
-                .foregroundColor(.primary)
+                .buttonStyle(.plain)
             }
 
-            Section {
+            SWSectionPanel("清理", footer: "回收站笔记将在删除 30 天后自动永久删除。") {
                 Button {
                     Task { await vaultStore.purgeExpiredTrash() }
                 } label: {
-                    Label("清理 30 天前删除的笔记", systemImage: "clock.arrow.circlepath")
+                    SWSettingsRow("清理 30 天前删除的笔记", subtitle: "只移除已经到期的回收站笔记", systemImage: "clock.arrow.circlepath") {
+                        EmptyView()
+                    }
                 }
+                .buttonStyle(.plain)
+                SWRowDivider()
                 Button(role: .destructive) {
                     showEmptyConfirmation = true
                 } label: {
-                    Label("清空回收站", systemImage: "trash.slash")
+                    SWSettingsRow("清空回收站", subtitle: "永久删除回收站中的所有笔记", systemImage: "trash.slash", tint: DS.destructive) {
+                        EmptyView()
+                    }
                 }
-            } footer: {
-                Text("回收站笔记将在删除 30 天后自动永久删除。")
+                .buttonStyle(.plain)
             }
         }
-        .listStyle(.insetGrouped)
         .navigationTitle("回收站设置")
         .navigationBarTitleDisplayMode(.inline)
         .alert("清空回收站", isPresented: $showEmptyConfirmation) {
@@ -266,30 +306,27 @@ private struct TrashSettingsView: View {
 
 private struct AboutView: View {
     var body: some View {
-        List {
-            Section {
-                HStack {
-                    Text("应用名称")
-                    Spacer()
-                    Text("别看我").foregroundColor(.secondary)
+        SWPanelStack {
+            SWSectionPanel {
+                SWSettingsRow("应用名称", systemImage: "app.badge") {
+                    Text("别看我")
                 }
-                HStack {
-                    Text("当前版本")
-                    Spacer()
-                    Text("v0.2").foregroundColor(.secondary)
+                SWRowDivider()
+                SWSettingsRow("当前版本", systemImage: "number") {
+                    Text("v0.2")
                 }
             }
 
-            Section {
-                Text("iCloud 同步：笔记文件保存在 iCloud Drive 中，可在多设备间同步。")
-                    .font(DS.caption())
-                    .foregroundColor(.secondary)
-                Text("明文笔记不会加密，适合普通内容；敏感内容建议使用加密笔记。")
-                    .font(DS.caption())
-                    .foregroundColor(.secondary)
+            SWSectionPanel("说明") {
+                SWSettingsRow("iCloud 同步", subtitle: "笔记文件保存在 iCloud Drive 中，可在多设备间同步。", systemImage: "icloud") {
+                    EmptyView()
+                }
+                SWRowDivider()
+                SWSettingsRow("内容安全", subtitle: "明文笔记不会加密，敏感内容建议使用加密笔记。", systemImage: "shield") {
+                    EmptyView()
+                }
             }
         }
-        .listStyle(.insetGrouped)
         .navigationTitle("关于")
         .navigationBarTitleDisplayMode(.inline)
     }

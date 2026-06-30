@@ -1,6 +1,6 @@
 import Foundation
 
-enum StorageError: Error, LocalizedError {
+nonisolated enum StorageError: Error, LocalizedError {
     case iCloudUnavailable
     case directoryCreationFailed
     case fileWriteFailed
@@ -27,48 +27,49 @@ enum StorageError: Error, LocalizedError {
 }
 
 protocol VaultStorage: Sendable {
-    var isAvailable: Bool { get }
-    var containerURL: URL? { get }
+    nonisolated var isAvailable: Bool { get }
+    nonisolated var containerURL: URL? { get }
 
-    func initializeVault() async throws
+    nonisolated func initializeVault() async throws
 
-    func loadIndex() throws -> NoteIndex?
-    func saveIndex(_ index: NoteIndex) throws
+    nonisolated func loadIndex() throws -> NoteIndex?
+    nonisolated func saveIndex(_ index: NoteIndex) throws
 
-    func listMarkdownFiles(in location: NoteFileLocation) throws -> [URL]
-    func loadMarkdownFile(at url: URL) throws -> MarkdownNoteFile
-    func saveMarkdownFile(_ file: MarkdownNoteFile, at url: URL) throws
+    nonisolated func listMarkdownFiles(in location: NoteFileLocation) throws -> [URL]
+    nonisolated func loadMarkdownFile(at url: URL) throws -> MarkdownNoteFile
+    nonisolated func saveMarkdownFile(_ file: MarkdownNoteFile, at url: URL) throws
 
-    func moveFile(from srcURL: URL, to dstURL: URL) throws
-    func permanentlyDeleteFile(at url: URL) throws
+    nonisolated func moveFile(from srcURL: URL, to dstURL: URL) throws
+    nonisolated func permanentlyDeleteFile(at url: URL) throws
 
-    func createConflictCopy(for url: URL) throws -> URL
-    func emptyTrash() throws
+    nonisolated func createConflictCopy(for url: URL) throws -> URL
+    nonisolated func emptyTrash() throws
 }
 
 extension VaultStorage {
-    func noteFileURL(for noteId: String) -> URL? {
+    nonisolated func noteFileURL(for noteId: String) -> URL? {
         guard let container = containerURL else { return nil }
-        return container.appendingPathComponent("notes").appendingPathComponent("\(noteId).md")
+        return container.appendingPathComponent("\(noteId).md")
     }
 
-    func trashFileURL(for noteId: String) -> URL? {
+    nonisolated func trashFileURL(for noteId: String) -> URL? {
         guard let container = containerURL else { return nil }
         return container.appendingPathComponent("trash").appendingPathComponent("\(noteId).md")
     }
 
-    var notesIndexURL: URL? {
+    nonisolated var notesIndexURL: URL? {
         containerURL?.appendingPathComponent("notes.json")
     }
 
-    func listMarkdownFiles(in location: NoteFileLocation) throws -> [URL] {
-        guard let dirURL = containerURL?.appendingPathComponent(location.rawValue) else {
+    nonisolated func listMarkdownFiles(in location: NoteFileLocation) throws -> [URL] {
+        guard let container = containerURL else {
             throw StorageError.iCloudUnavailable
         }
+        let dirURL = location == .notes ? container : container.appendingPathComponent(location.rawValue)
         return try listMarkdownFilesInDirectory(dirURL)
     }
 
-    func permanentlyDeleteFile(at url: URL) throws {
+    nonisolated func permanentlyDeleteFile(at url: URL) throws {
         let fm = FileManager.default
         guard fm.fileExists(atPath: url.path) else {
             throw StorageError.fileNotFound
@@ -76,7 +77,7 @@ extension VaultStorage {
         try fm.removeItem(at: url)
     }
 
-    func moveFile(from srcURL: URL, to dstURL: URL) throws {
+    nonisolated func moveFile(from srcURL: URL, to dstURL: URL) throws {
         let fm = FileManager.default
         guard fm.fileExists(atPath: srcURL.path) else {
             throw StorageError.fileNotFound
@@ -91,7 +92,7 @@ extension VaultStorage {
         try fm.moveItem(at: srcURL, to: dstURL)
     }
 
-    func emptyTrash() throws {
+    nonisolated func emptyTrash() throws {
         guard let trashURL = containerURL?.appendingPathComponent("trash") else {
             throw StorageError.iCloudUnavailable
         }
@@ -105,7 +106,7 @@ extension VaultStorage {
         }
     }
 
-    func createConflictCopy(for url: URL) throws -> URL {
+    nonisolated func createConflictCopy(for url: URL) throws -> URL {
         guard let container = containerURL else {
             throw StorageError.iCloudUnavailable
         }
@@ -113,14 +114,14 @@ extension VaultStorage {
         let timestamp = Int(Date().timeIntervalSince1970)
         let filename = url.deletingPathExtension().lastPathComponent
         let conflictFilename = "\(filename)-conflict-\(timestamp).md"
-        let conflictURL = container.appendingPathComponent("notes").appendingPathComponent(conflictFilename)
+        let conflictURL = container.appendingPathComponent(conflictFilename)
 
         let fm = FileManager.default
         try fm.copyItem(at: url, to: conflictURL)
         return conflictURL
     }
 
-    internal func listMarkdownFilesInDirectory(_ dirURL: URL) throws -> [URL] {
+    nonisolated internal func listMarkdownFilesInDirectory(_ dirURL: URL) throws -> [URL] {
         let fm = FileManager.default
         guard fm.fileExists(atPath: dirURL.path) else { return [] }
 

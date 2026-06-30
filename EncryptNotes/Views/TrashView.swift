@@ -98,21 +98,13 @@ struct TrashView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: DS.s4) {
+        VStack {
             Spacer()
-            Image(systemName: "trash")
-                .font(.system(size: 44, weight: .regular))
-                .foregroundColor(DS.textSubtle)
-
-            Text("回收站为空")
-                .font(DS.title())
-                .foregroundColor(DS.textSecondary)
-
-            Text("删除的笔记会在这里保留 30 天")
-                .font(DS.body())
-                .foregroundColor(DS.textSubtle)
-                .multilineTextAlignment(.center)
-
+            SWEmptyState(
+                title: "回收站为空",
+                message: "删除的笔记会在这里保留 30 天",
+                systemImage: "trash"
+            )
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -169,12 +161,11 @@ struct TrashView: View {
     private func trashCard(_ trashNote: TrashNote) -> some View {
         VStack(alignment: .leading, spacing: DS.s2) {
             HStack {
-                Label(
+                SWStatusBadge(
                     trashNote.isEncrypted ? "加密笔记" : "明文笔记",
-                    systemImage: trashNote.isEncrypted ? (trashNote.isReadable ? "lock.open.fill" : "lock.fill") : "doc.text"
+                    systemImage: trashNote.isEncrypted ? (trashNote.isReadable ? "lock.open.fill" : "lock.fill") : "doc.text",
+                    style: trashNote.isEncrypted ? .success : .neutral
                 )
-                .foregroundStyle(.secondary)
-                .font(DS.caption())
 
                 Spacer()
 
@@ -207,9 +198,7 @@ struct TrashView: View {
 
                 Spacer()
 
-                Text("剩 \(trashNote.remainingDays) 天")
-                    .font(DS.caption())
-                    .foregroundStyle(DS.textSubtle)
+                SWStatusBadge("剩 \(trashNote.remainingDays) 天", systemImage: "clock", style: .warning)
             }
 
             if let body = trashNote.body {
