@@ -35,7 +35,7 @@ final class MacMarkdownFormatter {
         case .inlineCode:
             return applyWrapper(text: text, selection: safeRange, open: "`", close: "`", placeholder: "code", supportsToggle: true)
         case .inlineMath:
-            return applyWrapper(text: text, selection: safeRange, open: "$", close: "$", placeholder: "math", supportsToggle: false)
+            return applyWrapper(text: text, selection: safeRange, open: "$", close: "$", placeholder: "math", supportsToggle: true)
         case .strike:
             return applyWrapper(text: text, selection: safeRange, open: "~~", close: "~~", placeholder: "strike", supportsToggle: true)
         case .htmlComment:

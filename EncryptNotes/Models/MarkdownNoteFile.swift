@@ -67,7 +67,11 @@ struct MarkdownNoteFile: Sendable {
         }
 
         let frontmatterStr = String(afterStart[..<fmEnd])
-        let body = String(afterStart[bStart...])
+        var bodyStart = bStart
+        if bodyStart < afterStart.endIndex, afterStart[bodyStart] == "\n" {
+            bodyStart = afterStart.index(after: bodyStart)
+        }
+        let body = String(afterStart[bodyStart...])
 
         var noteId: String?
         var createdAt: Date?

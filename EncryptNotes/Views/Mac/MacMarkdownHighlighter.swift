@@ -723,9 +723,8 @@ extension MacMarkdownHighlighter {
                 .font: bodyFont
             ]
         case .headingText(let level):
-            let sizes: [CGFloat] = [fontSize * 1.6, fontSize * 1.45, fontSize * 1.3, fontSize * 1.2, fontSize * 1.1, fontSize * 1.05]
-            let headingSize = sizes[min(level - 1, 5)]
-            let headingFont = NSFont.systemFont(ofSize: headingSize, weight: .bold)
+            _ = level
+            let headingFont = NSFont.systemFont(ofSize: fontSize, weight: .bold)
             return [
                 .foregroundColor: NSColor(DS.textEmphasize),
                 .font: headingFont
@@ -833,16 +832,16 @@ extension MacMarkdownHighlighter {
     }
 
     static func monoFont(size: CGFloat) -> NSFont {
-        NSFont.monospacedSystemFont(ofSize: size * 0.95, weight: .regular)
+        NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
     }
 
-    static func lineHeight(size: CGFloat) -> CGFloat {
-        ceil(size * 1.25)
+    static func lineHeight(size: CGFloat, multiple: CGFloat = 1.25) -> CGFloat {
+        ceil(size * multiple)
     }
 
-    static func paragraphStyle(size: CGFloat) -> NSParagraphStyle {
+    static func paragraphStyle(size: CGFloat, multiple: CGFloat = 1.25) -> NSParagraphStyle {
         let paragraphStyle = NSMutableParagraphStyle()
-        let lh = lineHeight(size: size)
+        let lh = lineHeight(size: size, multiple: multiple)
         paragraphStyle.minimumLineHeight = lh
         paragraphStyle.maximumLineHeight = lh
         paragraphStyle.lineHeightMultiple = 1
@@ -851,8 +850,8 @@ extension MacMarkdownHighlighter {
         return paragraphStyle
     }
 
-    static func baselineOffset(size: CGFloat, font: NSFont) -> CGFloat {
-        let lh = lineHeight(size: size)
+    static func baselineOffset(size: CGFloat, font: NSFont, multiple: CGFloat = 1.25) -> CGFloat {
+        let lh = lineHeight(size: size, multiple: multiple)
         let actualFontHeight = font.ascender - font.descender
         let remaining = lh - actualFontHeight
         return max(0, floor(remaining / 2))
@@ -863,10 +862,11 @@ extension MacMarkdownHighlighter {
         return NSSize(width: 4, height: verticalInset)
     }
 
-    static func makeHighlightedAttributedString(text: String, fontSize: CGFloat) -> NSAttributedString {
+    @MainActor
+    static func makeHighlightedAttributedString(text: String, fontSize: CGFloat, lineHeightMultiple: CGFloat = 1.25) -> NSAttributedString {
         let bodyFont = bodyFont(size: fontSize)
-        let paraStyle = paragraphStyle(size: fontSize)
-        let baselineOff = baselineOffset(size: fontSize, font: bodyFont)
+        let paraStyle = paragraphStyle(size: fontSize, multiple: lineHeightMultiple)
+        let baselineOff = baselineOffset(size: fontSize, font: bodyFont, multiple: lineHeightMultiple)
 
         let mutable = NSMutableAttributedString(string: text)
         let fullRange = NSRange(location: 0, length: (text as NSString).length)

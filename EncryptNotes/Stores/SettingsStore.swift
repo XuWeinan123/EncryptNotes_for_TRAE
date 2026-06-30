@@ -11,6 +11,8 @@ final class SettingsStore: ObservableObject {
 
     static let macEditorFontSizes: [Double] = [12, 14, 16, 18]
     static let defaultMacEditorFontSize: Double = 14
+    static let defaultMacEditorLineHeightMultiple: Double = 1.25
+    static let macEditorLineHeightRange: ClosedRange<Double> = 1.2...2.0
 
     private let defaults: UserDefaults
 
@@ -43,6 +45,17 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    @Published var macEditorLineHeightMultiple: Double {
+        didSet {
+            let clamped = Self.clampedLineHeightMultiple(macEditorLineHeightMultiple)
+            if macEditorLineHeightMultiple != clamped {
+                macEditorLineHeightMultiple = clamped
+                return
+            }
+            defaults.set(macEditorLineHeightMultiple, forKey: Keys.macEditorLineHeightMultiple)
+        }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.preferredNoteMode = NoteMode(rawValue: defaults.string(forKey: Keys.preferredNoteMode) ?? "") ?? .plain
@@ -57,6 +70,13 @@ final class SettingsStore: ObservableObject {
         } else {
             self.macEditorFontSize = Self.defaultMacEditorFontSize
         }
+
+        let storedLineHeight = defaults.double(forKey: Keys.macEditorLineHeightMultiple)
+        if storedLineHeight > 0 {
+            self.macEditorLineHeightMultiple = Self.clampedLineHeightMultiple(storedLineHeight)
+        } else {
+            self.macEditorLineHeightMultiple = Self.defaultMacEditorLineHeightMultiple
+        }
     }
 
     /// 用于测试：重置为默认值。
@@ -67,6 +87,11 @@ final class SettingsStore: ObservableObject {
         hasSeenFirstKeyPrompt = false
         hasSeededDefaultNotes = false
         macEditorFontSize = Self.defaultMacEditorFontSize
+        macEditorLineHeightMultiple = Self.defaultMacEditorLineHeightMultiple
+    }
+
+    static func clampedLineHeightMultiple(_ value: Double) -> Double {
+        min(max(value, macEditorLineHeightRange.lowerBound), macEditorLineHeightRange.upperBound)
     }
 
     private enum Keys {
@@ -76,5 +101,6 @@ final class SettingsStore: ObservableObject {
         static let hasSeenFirstKeyPrompt = "BKHasSeenFirstKeyPrompt"
         static let hasSeededDefaultNotes = "BKHasSeededDefaultNotes"
         static let macEditorFontSize = "BKMacEditorFontSize"
+        static let macEditorLineHeightMultiple = "BKMacEditorLineHeightMultiple"
     }
 }

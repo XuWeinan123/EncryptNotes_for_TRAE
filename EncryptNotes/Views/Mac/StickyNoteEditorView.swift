@@ -6,91 +6,114 @@ import Combine
 #if os(macOS)
 
 struct StickyNoteEditorView: View {
-    let note: Note
-
-    @ObservedObject private var vaultStore = VaultStore.shared
     @ObservedObject private var settings = SettingsStore.shared
-    @ObservedObject private var windowStore = MacNoteWindowStore.shared
+    @ObservedObject private var syncStore = SyncStatusStore.shared
     @StateObject private var viewModel: StickyNoteEditorViewModel
 
-    init(note: Note) {
-        self.note = note
-        _viewModel = StateObject(wrappedValue: StickyNoteEditorViewModel(note: note))
+    init(note: Note, isPreview: Bool = false) {
+        _viewModel = StateObject(wrappedValue: StickyNoteEditorViewModel(note: note, isPreview: isPreview))
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if #available(macOS 26.0, *) {
-                editorContent
-                    .toolbar { toolbarContent }
-                    .toolbarRole(.editor)
-            } else {
-                editorContent
-                    .toolbar { toolbarContent }
+        ZStack(alignment: .bottomTrailing) {
+            MacTextView(
+                text: $viewModel.text,
+                placeholder: "随便写点什么吧",
+                fontSize: CGFloat(settings.macEditorFontSize),
+                lineHeightMultiple: CGFloat(settings.macEditorLineHeightMultiple),
+                autoFocus: true,
+                onChange: { viewModel.textDidChange($0) },
+                onSaveShortcut: { viewModel.saveImmediately() },
+                onApplyShortcut: { viewModel.saveImmediately() },
+                onFitToContent: { viewModel.fitWindowToContent() }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, MacStickyEditorLayout.editorHorizontalInset)
+
+            if !syncStore.isNetworkAvailable {
+                Text("无网络")
+                    .font(DS.caption())
+                    .foregroundColor(DS.destructive)
+                    .padding(.trailing, DS.s3)
+                    .padding(.bottom, DS.s2)
             }
         }
-        .background(DS.bg)
-        .onAppear { viewModel.onAppear() }
+        .background(Color(nsColor: .textBackgroundColor))
+        // 内容延伸到工具栏下方供系统玻璃采样；首行留白由 MacTextView 计算。
+        .ignoresSafeArea(edges: .top)
+        .dsMacStickyToolbarScrollEdge()
+        .navigationTitle("")
         .onDisappear { viewModel.onDisappear() }
         .onChange(of: viewModel.forceClose) { _, shouldClose in
-            if shouldClose { StickyNoteWindowManager.shared.closeWindow(for: note.id) }
-        }
-    }
-
-    private var editorContent: some View {
-        MacTextView(
-            text: $viewModel.text,
-            placeholder: "开始记录...",
-            fontSize: CGFloat(settings.macEditorFontSize),
-            autoFocus: true,
-            onChange: { viewModel.textDidChange($0) },
-            onSaveShortcut: { viewModel.saveImmediately() },
-            onApplyShortcut: { viewModel.saveImmediately() },
-            onFitToContent: { viewModel.fitWindowToContent() }
-        )
-        .padding(.horizontal, MacStickyEditorLayout.editorHorizontalInset)
-        .padding(.bottom, MacStickyEditorLayout.editorBottomInset)
-    }
-
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup {
-            Menu {
-                Button {
-                    copyContent()
-                } label: { Label("复制全文", systemImage: "doc.on.doc") }
-                Divider()
-                Button {
-                    viewModel.fitWindowToContent()
-                } label: { Label("适应内容", systemImage: "arrow.up.left.and.arrow.down.right") }
-                Divider()
-                if let state = windowStore.windowState(for: note.id), state.isPinned {
-                    Button {
-                        windowStore.setPinned(for: note.id, isPinned: false)
-                        StickyNoteWindowManager.shared.updateWindowLevel(for: note.id, isPinned: false)
-                    } label: { Label("取消置顶", systemImage: "pin.slash") }
-                } else {
-                    Button {
-                        windowStore.setPinned(for: note.id, isPinned: true)
-                        StickyNoteWindowManager.shared.updateWindowLevel(for: note.id, isPinned: true)
-                    } label: { Label("置顶", systemImage: "pin") }
-                }
-                Divider()
-                Button(role: .destructive) {
-                    viewModel.deleteNote()
-                } label: { Label("删除", systemImage: "trash") }
-            } label: {
-                Label("更多", systemImage: "ellipsis.circle")
+            if shouldClose {
+                StickyNoteWindowManager.shared.closeWindow(for: viewModel.note.id)
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
         }
-    }
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button(action: { viewModel.copyNoteText() }) {
+                    Label(
+                        viewModel.didCopy ? "已复制" : "复制",
+                        systemImage: viewModel.didCopy ? "checkmark" : "square.on.square"
+                    )
+                    .labelStyle(.iconOnly)
+                    .frame(width: DS.macToolbarIconWidth)
+                }
+                .help(viewModel.didCopy ? "已复制" : "复制")
 
-    private func copyContent() {
-        let pb = NSPasteboard.general
-        pb.clearContents()
-        pb.setString(viewModel.text, forType: .string)
+                Menu {
+                    Button(action: { viewModel.fitWindowToContent() }) {
+                        Label("适应内容", systemImage: "arrow.up.left.and.arrow.down.right")
+                    }
+
+                    Divider()
+
+                    Button(role: viewModel.isContentEmpty ? .destructive : nil,
+                           action: { viewModel.deleteNote() }) {
+                        Label("移到回收站", systemImage: "trash")
+                    }
+                } label: {
+                    Label("更多", systemImage: "ellipsis")
+                        .labelStyle(.iconOnly)
+                        .frame(width: DS.macToolbarIconWidth)
+                }
+                .menuIndicator(.hidden)
+                .help("更多")
+            }
+            ToolbarSpacer(.fixed)
+            ToolbarItem {
+                if viewModel.isPinned {
+                    Button(action: { viewModel.togglePin() }) {
+                        Label("取消置顶", systemImage: "pin.fill")
+                            .labelStyle(.iconOnly)
+                            .frame(width: DS.macToolbarIconWidth)
+                    }
+                    .help("取消置顶")
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.circle)
+                    .tint(DS.primary)
+                } else {
+                    Button(action: { viewModel.togglePin() }) {
+                        Label("置顶", systemImage: "pin.fill")
+                            .labelStyle(.iconOnly)
+                            .frame(width: DS.macToolbarIconWidth)
+                    }
+                    .help("置顶")
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                }
+            }
+        }
+        .alert(isPresented: $viewModel.showingDeleteConfirmation) {
+            Alert(
+                title: Text("删除这条笔记？"),
+                message: Text("笔记将移到回收站，可以恢复。"),
+                primaryButton: .destructive(Text("删除")) {
+                    viewModel.confirmDelete()
+                },
+                secondaryButton: .cancel()
+            )
+        }
     }
 }
 
@@ -110,26 +133,46 @@ enum MacStickyEditorLayout {
 
 @MainActor
 final class StickyNoteEditorViewModel: ObservableObject {
+    @Published var note: Note
     @Published var text: String
+    @Published var isPinned: Bool
+    @Published var showingDeleteConfirmation = false
+    @Published var didCopy = false
     @Published var forceClose = false
 
-    let note: Note
+    private let vaultStore = VaultStore.shared
+    private let windowStore = MacNoteWindowStore.shared
+    private let syncStore = SyncStatusStore.shared
+    private let isPreview: Bool
+    private let wasInitiallyEmpty: Bool
     private var saveTask: Task<Void, Never>?
-    private var didAppear = false
+    private var copyResetTask: Task<Void, Never>?
+    private var cancellables = Set<AnyCancellable>()
 
-    init(note: Note) {
-        self.note = note
-        _text = Published(initialValue: note.body)
+    var isContentEmpty: Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    func onAppear() {
-        guard !didAppear else { return }
-        didAppear = true
+    init(note: Note, isPreview: Bool = false) {
+        self.note = note
+        self.text = note.body
+        self.isPreview = isPreview
+        self.wasInitiallyEmpty = note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        self.isPinned = windowStore.windowState(for: note.id)?.isPinned ?? true
+
+        $isPinned
+            .sink { [weak self] newValue in
+                guard let self = self else { return }
+                self.windowStore.setPinned(newValue, for: self.note.id)
+                StickyNoteWindowManager.shared.updateWindowLevel(for: self.note.id, isPinned: newValue)
+            }
+            .store(in: &cancellables)
     }
 
     func onDisappear() {
         saveTask?.cancel()
-        commitSave()
+        guard !forceClose else { return }
+        handleWindowWillClose()
     }
 
     func textDidChange(_ newText: String) {
@@ -137,9 +180,52 @@ final class StickyNoteEditorViewModel: ObservableObject {
         debouncedSave()
     }
 
+    func copyNoteText() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+
+        didCopy = true
+        copyResetTask?.cancel()
+        copyResetTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            await MainActor.run {
+                self?.didCopy = false
+            }
+        }
+    }
+
+    func togglePin() {
+        isPinned.toggle()
+    }
+
+    func deleteNote() {
+        if isContentEmpty {
+            discardEmptyNoteAndClose()
+            return
+        }
+        showingDeleteConfirmation = true
+    }
+
+    func confirmDelete() {
+        guard !isPreview else {
+            text = ""
+            note.body = ""
+            return
+        }
+
+        Task {
+            do {
+                try await vaultStore.deleteNote(note)
+                forceClose = true
+            } catch {
+                syncStore.setFailed(message: error.localizedDescription)
+            }
+        }
+    }
+
     func saveImmediately() {
         saveTask?.cancel()
-        commitSave()
+        save()
     }
 
     func fitWindowToContent() {
@@ -150,44 +236,166 @@ final class StickyNoteEditorViewModel: ObservableObject {
         )
     }
 
-    func deleteNote() {
-        saveTask?.cancel()
-        Task {
-            do {
-                try await VaultStore.shared.deleteNote(note)
-                forceClose = true
-            } catch {}
-        }
-    }
-
     private func debouncedSave() {
         saveTask?.cancel()
-        let noteCopy = note
-        let snapshot = text
+
+        syncStore.setSyncing()
+        let bodyToSave = text
+        let noteToUpdate = note
+
         saveTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled else { return }
-            self?.commitSaveSnapshot(snapshot, note: noteCopy)
+            await self?.saveSnapshot(bodyToSave, note: noteToUpdate)
         }
     }
 
-    private func commitSave() {
-        commitSaveSnapshot(text, note: note)
+    private func save() {
+        guard !isPreview else {
+            note.body = text
+            syncStore.setSaved()
+            return
+        }
+
+        guard text != note.body else {
+            syncStore.setSaved()
+            return
+        }
+
+        syncStore.setSyncing()
+        let bodyToSave = text
+        let noteToUpdate = note
+
+        Task {
+            await saveSnapshot(bodyToSave, note: noteToUpdate)
+        }
     }
 
-    private nonisolated func commitSaveSnapshot(_ snapshot: String, note: Note) {
-        Task { @MainActor in
-            _ = try? await VaultStore.shared.updateNote(note, body: snapshot)
+    private func saveSnapshot(_ snapshot: String, note noteToUpdate: Note) async {
+        do {
+            try await vaultStore.updateNote(noteToUpdate, body: snapshot)
+            if let updatedNote = vaultStore.readableNotes.first(where: { $0.id == noteToUpdate.id }) {
+                note = updatedNote
+            }
+            syncStore.setSaved()
+        } catch {
+            syncStore.setFailed(message: error.localizedDescription)
+        }
+    }
+
+    private func handleWindowWillClose() {
+        guard !isPreview else {
+            note.body = text
+            syncStore.setSaved()
+            return
+        }
+
+        guard wasInitiallyEmpty && isContentEmpty else {
+            save()
+            return
+        }
+
+        discardEmptyNote()
+    }
+
+    private func discardEmptyNoteAndClose() {
+        guard !isPreview else {
+            text = ""
+            note.body = ""
+            return
+        }
+
+        saveTask?.cancel()
+        Task {
+            do {
+                try await vaultStore.discardEmptyNote(note)
+                syncStore.setSaved()
+                forceClose = true
+            } catch {
+                syncStore.setFailed(message: error.localizedDescription)
+            }
+        }
+    }
+
+    private func discardEmptyNote() {
+        Task {
+            do {
+                try await vaultStore.discardEmptyNote(note)
+                syncStore.setSaved()
+            } catch {
+                syncStore.setFailed(message: error.localizedDescription)
+            }
         }
     }
 }
 
 // MARK: - MacTextView
 
+/// 正文延伸到工具栏下方，同时按窗口实测标题栏高度补齐首行留白。
+private final class ToolbarInsetScrollView: NSScrollView {
+    var baseInsets = NSEdgeInsets() {
+        didSet { applyToolbarTopInset() }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        applyToolbarTopInset()
+    }
+
+    override func layout() {
+        super.layout()
+        if let textView = documentView as? NSTextView {
+            syncDocumentSize(textView)
+        }
+        applyToolbarTopInset()
+    }
+
+    func syncDocumentSize(_ textView: NSTextView? = nil) {
+        guard let textView = textView ?? documentView as? NSTextView else { return }
+        guard let textContainer = textView.textContainer else { return }
+        let width = max(1, contentView.bounds.width)
+        textContainer.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+        textView.layoutManager?.ensureLayout(for: textContainer)
+
+        let usedHeight = textView.layoutManager?.usedRect(for: textContainer).height ?? 0
+        let height = max(
+            contentView.bounds.height,
+            ceil(usedHeight + textView.textContainerInset.height * 2)
+        )
+        let frame = NSRect(x: 0, y: 0, width: width, height: height)
+        if textView.frame != frame {
+            textView.frame = frame
+        }
+    }
+
+    private func applyToolbarTopInset() {
+        let top: CGFloat
+        if let window = window {
+            top = max(0, window.frame.height - window.contentLayoutRect.height)
+        } else {
+            top = baseInsets.top
+        }
+        let target = NSEdgeInsets(
+            top: top,
+            left: baseInsets.left,
+            bottom: MacStickyEditorLayout.editorBottomInset,
+            right: baseInsets.right
+        )
+        guard !insetsEqual(contentInsets, target) else { return }
+        contentInsets = target
+        scrollerInsets = target
+    }
+
+    private func insetsEqual(_ a: NSEdgeInsets, _ b: NSEdgeInsets) -> Bool {
+        a.top == b.top && a.left == b.left && a.bottom == b.bottom && a.right == b.right
+    }
+}
+
 struct MacTextView: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String
     let fontSize: CGFloat
+    let lineHeightMultiple: CGFloat
     let autoFocus: Bool
     let onChange: (String) -> Void
     let onSaveShortcut: () -> Void
@@ -198,6 +406,7 @@ struct MacTextView: NSViewRepresentable {
         text: Binding<String>,
         placeholder: String,
         fontSize: CGFloat,
+        lineHeightMultiple: CGFloat,
         autoFocus: Bool = true,
         onChange: @escaping (String) -> Void,
         onSaveShortcut: @escaping () -> Void,
@@ -207,6 +416,7 @@ struct MacTextView: NSViewRepresentable {
         self._text = text
         self.placeholder = placeholder
         self.fontSize = fontSize
+        self.lineHeightMultiple = lineHeightMultiple
         self.autoFocus = autoFocus
         self.onChange = onChange
         self.onSaveShortcut = onSaveShortcut
@@ -218,7 +428,17 @@ struct MacTextView: NSViewRepresentable {
         Coordinator(self)
     }
 
-    func makeNSView(context: Context) -> AutoFocusTextView {
+    func makeNSView(context: Context) -> NSView {
+        let scrollView = ToolbarInsetScrollView()
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
+        scrollView.scrollerStyle = .overlay
+        scrollView.autoresizesSubviews = true
+        scrollView.autoresizingMask = [.width, .height]
+        scrollView.automaticallyAdjustsContentInsets = false
+
         let textView = AutoFocusTextView()
         textView.coordinator = context.coordinator
         textView.isAutoFocusEnabled = autoFocus
@@ -231,6 +451,8 @@ struct MacTextView: NSViewRepresentable {
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
+        textView.minSize = NSSize(width: 0, height: scrollView.contentSize.height)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainerInset = MacStickyEditorLayout.textContainerInset(fontSize: fontSize)
         textView.drawsBackground = true
         textView.backgroundColor = .clear
@@ -260,55 +482,62 @@ struct MacTextView: NSViewRepresentable {
             }
         }
 
-        return textView
+        scrollView.documentView = textView
+        return scrollView
     }
 
-    func updateNSView(_ nsView: AutoFocusTextView, context: Context) {
-        context.coordinator.parent = self
-        if nsView.isUpdating { return }
-        nsView.isUpdating = true
-        defer { nsView.isUpdating = false }
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let scrollView = nsView as? ToolbarInsetScrollView,
+              let textView = scrollView.documentView as? AutoFocusTextView else { return }
 
-        if nsView.string != text {
-            let selectedRanges = nsView.selectedRanges
-            let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: text, fontSize: fontSize)
-            nsView.textStorage?.setAttributedString(attributed)
-            nsView.selectedRanges = selectedRanges
+        context.coordinator.parent = self
+        scrollView.automaticallyAdjustsContentInsets = false
+
+        if textView.isUpdating { return }
+        textView.isUpdating = true
+        defer { textView.isUpdating = false }
+
+        if textView.string != text {
+            let selectedRanges = textView.selectedRanges
+            let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: text, fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
+            textView.textStorage?.setAttributedString(attributed)
+            textView.selectedRanges = selectedRanges
         } else {
-            let paraStyle = MacMarkdownHighlighter.paragraphStyle(size: fontSize)
+            let paraStyle = MacMarkdownHighlighter.paragraphStyle(size: fontSize, multiple: lineHeightMultiple)
             let bodyFont = MacMarkdownHighlighter.bodyFont(size: fontSize)
-            let baselineOff = MacMarkdownHighlighter.baselineOffset(size: fontSize, font: bodyFont)
-            let fullRange = NSRange(location: 0, length: (nsView.string as NSString).length)
+            let baselineOff = MacMarkdownHighlighter.baselineOffset(size: fontSize, font: bodyFont, multiple: lineHeightMultiple)
+            let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
             if fullRange.length > 0 {
-                nsView.textStorage?.addAttributes([
+                textView.textStorage?.addAttributes([
                     .font: bodyFont,
                     .paragraphStyle: paraStyle,
                     .baselineOffset: baselineOff
                 ], range: fullRange)
-                MacMarkdownHighlighter.applyMarkdownHighlighting(to: nsView)
+                MacMarkdownHighlighter.applyMarkdownHighlighting(to: textView, lineHeightMultiple: lineHeightMultiple)
             }
         }
 
-        nsView.textContainerInset = MacStickyEditorLayout.textContainerInset(fontSize: fontSize)
+        textView.textContainerInset = MacStickyEditorLayout.textContainerInset(fontSize: fontSize)
+        scrollView.syncDocumentSize(textView)
 
-        if nsView.placeholderLabel.string != placeholder {
-            nsView.placeholderLabel.string = placeholder
+        if textView.placeholderLabel.string != placeholder {
+            textView.placeholderLabel.string = placeholder
         }
-        updatePlaceholderVisibility(nsView)
-        updatePlaceholderStyle(nsView, fontSize: fontSize)
+        updatePlaceholderVisibility(textView)
+        updatePlaceholderStyle(textView, fontSize: fontSize)
 
-        if autoFocus, nsView.window != nil, !nsView.didInitialFocus {
-            nsView.didInitialFocus = true
+        if autoFocus, textView.window != nil, !textView.didInitialFocus {
+            textView.didInitialFocus = true
             DispatchQueue.main.async {
-                nsView.window?.makeFirstResponder(nsView)
+                textView.window?.makeFirstResponder(textView)
             }
         }
     }
 
     private func updatePlaceholderStyle(_ textView: AutoFocusTextView, fontSize: CGFloat) {
         let bodyFont = MacMarkdownHighlighter.bodyFont(size: fontSize)
-        let paraStyle = MacMarkdownHighlighter.paragraphStyle(size: fontSize)
-        let baselineOff = MacMarkdownHighlighter.baselineOffset(size: fontSize, font: bodyFont)
+        let paraStyle = MacMarkdownHighlighter.paragraphStyle(size: fontSize, multiple: lineHeightMultiple)
+        let baselineOff = MacMarkdownHighlighter.baselineOffset(size: fontSize, font: bodyFont, multiple: lineHeightMultiple)
         textView.placeholderLabel.font = bodyFont
         textView.placeholderLabel.paragraphStyle = paraStyle
         textView.placeholderLabel.textColor = NSColor.placeholderTextColor
@@ -334,19 +563,19 @@ extension MacTextView {
         }
 
         func configureTextView(_ textView: AutoFocusTextView, text: String, fontSize: CGFloat) {
-            let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: text, fontSize: fontSize)
+            let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: text, fontSize: fontSize, lineHeightMultiple: fontSize == parent.fontSize ? parent.lineHeightMultiple : CGFloat(SettingsStore.defaultMacEditorLineHeightMultiple))
             textView.textStorage?.setAttributedString(attributed)
-            textView.typingAttributes = Self.typingAttributes(fontSize: fontSize)
+            textView.typingAttributes = Self.typingAttributes(fontSize: fontSize, lineHeightMultiple: parent.lineHeightMultiple)
             lastText = text
         }
 
-        static func typingAttributes(fontSize: CGFloat) -> [NSAttributedString.Key: Any] {
+        static func typingAttributes(fontSize: CGFloat, lineHeightMultiple: CGFloat) -> [NSAttributedString.Key: Any] {
             let bodyFont = MacMarkdownHighlighter.bodyFont(size: fontSize)
             return [
                 .font: bodyFont,
                 .foregroundColor: NSColor(DS.textBody),
-                .paragraphStyle: MacMarkdownHighlighter.paragraphStyle(size: fontSize),
-                .baselineOffset: MacMarkdownHighlighter.baselineOffset(size: fontSize, font: bodyFont)
+                .paragraphStyle: MacMarkdownHighlighter.paragraphStyle(size: fontSize, multiple: lineHeightMultiple),
+                .baselineOffset: MacMarkdownHighlighter.baselineOffset(size: fontSize, font: bodyFont, multiple: lineHeightMultiple)
             ]
         }
 
@@ -356,9 +585,10 @@ extension MacTextView {
             let newText = textView.string ?? ""
             parent.onChange(newText)
             lastText = newText
-            MacMarkdownHighlighter.applyMarkdownHighlighting(to: textView)
-            textView.typingAttributes = Self.typingAttributes(fontSize: parent.fontSize)
+            MacMarkdownHighlighter.applyMarkdownHighlighting(to: textView, lineHeightMultiple: parent.lineHeightMultiple)
+            textView.typingAttributes = Self.typingAttributes(fontSize: parent.fontSize, lineHeightMultiple: parent.lineHeightMultiple)
             parent.updatePlaceholderVisibility(textView)
+            (textView.enclosingScrollView as? ToolbarInsetScrollView)?.syncDocumentSize(textView)
             textView.isUpdating = false
         }
 
@@ -377,8 +607,8 @@ final class AutoFocusTextView: NSTextView {
 
     let placeholderLabel = PlaceholderLabel()
 
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
         if window != nil, isAutoFocusEnabled, !didInitialFocus {
             didInitialFocus = true
             DispatchQueue.main.async { [weak self] in
@@ -419,22 +649,12 @@ final class AutoFocusTextView: NSTextView {
 
         let cmdOnly = cmd && !ctrl && !opt && !shift
         let cmdShiftOnly = cmd && shift && !ctrl && !opt
-        let ctrlOnly = ctrl && !cmd && !opt && !shift
-        let ctrlShiftOnly = ctrl && shift && !cmd && !opt
         let cmdOptOnly = cmd && opt && !ctrl && !shift
 
-        if cmdOnly && chars == "b" {
-            applyFormat(.bold); return
+        if let action = ShortcutStore.shared.markdownAction(matching: event) {
+            applyFormat(action.command); return
         }
-        if cmdOnly && chars == "i" {
-            applyFormat(.italic); return
-        }
-        if cmdOnly && chars == "u" {
-            applyFormat(.underline); return
-        }
-        if cmdOnly && chars == "k" {
-            applyFormat(.link); return
-        }
+
         if cmdOnly && chars == "s" {
             coordinator?.parent.onSaveShortcut(); return
         }
@@ -443,18 +663,6 @@ final class AutoFocusTextView: NSTextView {
         }
         if cmdOptOnly && chars == "f" {
             coordinator?.parent.onFitToContent(); return
-        }
-        if ctrlOnly && chars == "`" {
-            applyFormat(.inlineCode); return
-        }
-        if ctrlOnly && chars == "m" {
-            applyFormat(.inlineMath); return
-        }
-        if ctrlShiftOnly && chars == "`" {
-            applyFormat(.strike); return
-        }
-        if ctrlOnly && chars == "-" {
-            applyFormat(.htmlComment); return
         }
 
         super.keyDown(with: event)
@@ -466,13 +674,16 @@ final class AutoFocusTextView: NSTextView {
         let result = MacMarkdownFormatter.apply(command: command, to: currentText, selection: selection)
 
         isUpdating = true
-        let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: result.text, fontSize: (coordinator?.parent.fontSize) ?? 14)
+        let fontSize = (coordinator?.parent.fontSize) ?? 14
+        let lineHeightMultiple = (coordinator?.parent.lineHeightMultiple) ?? CGFloat(SettingsStore.defaultMacEditorLineHeightMultiple)
+        let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: result.text, fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
         textStorage?.setAttributedString(attributed)
         self.setSelectedRange(result.selection)
         didChangeText()
         coordinator?.parent.onChange(result.text)
-        MacMarkdownHighlighter.applyMarkdownHighlighting(to: self)
-        typingAttributes = MacTextView.Coordinator.typingAttributes(fontSize: (coordinator?.parent.fontSize) ?? 14)
+        MacMarkdownHighlighter.applyMarkdownHighlighting(to: self, lineHeightMultiple: lineHeightMultiple)
+        (enclosingScrollView as? ToolbarInsetScrollView)?.syncDocumentSize(self)
+        typingAttributes = MacTextView.Coordinator.typingAttributes(fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
         if let placeholder = self.subviews.first(where: { $0 is PlaceholderLabel }) as? PlaceholderLabel {
             placeholder.isHidden = !result.text.isEmpty
         }
@@ -553,7 +764,7 @@ final class PlaceholderLabel: NSTextField {
 }
 
 extension MacMarkdownHighlighter {
-    static func applyMarkdownHighlighting(to textView: NSTextView) {
+    static func applyMarkdownHighlighting(to textView: NSTextView, lineHeightMultiple: CGFloat) {
         guard let textStorage = textView.textStorage else { return }
         let selectedRanges = textView.selectedRanges
 
@@ -561,8 +772,8 @@ extension MacMarkdownHighlighter {
         let fontSize = textView.font?.pointSize ?? CGFloat(SettingsStore.shared.macEditorFontSize)
 
         let bodyFont = bodyFont(size: fontSize)
-        let paraStyle = paragraphStyle(size: fontSize)
-        let baselineOff = baselineOffset(size: fontSize, font: bodyFont)
+        let paraStyle = paragraphStyle(size: fontSize, multiple: lineHeightMultiple)
+        let baselineOff = baselineOffset(size: fontSize, font: bodyFont, multiple: lineHeightMultiple)
 
         let fullRange = NSRange(location: 0, length: (text as NSString).length)
         textStorage.beginEditing()

@@ -192,20 +192,11 @@ final class StickyNoteWindowManager: NSObject {
     }
 
     private func measureTextHeight(text: String, width: CGFloat, fontSize: CGFloat) -> CGFloat {
-        let bodyFont = NSFont.systemFont(ofSize: fontSize)
-        let paraStyle = NSMutableParagraphStyle()
-        let lh = ceil(fontSize * 1.25)
-        paraStyle.minimumLineHeight = lh
-        paraStyle.maximumLineHeight = lh
-        paraStyle.lineHeightMultiple = 1
-        paraStyle.alignment = .left
-        paraStyle.lineBreakMode = .byWordWrapping
-
-        let attributed = NSAttributedString(string: text, attributes: [
-            .font: bodyFont,
-            .paragraphStyle: paraStyle
-        ])
-
+        let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(
+            text: text,
+            fontSize: fontSize,
+            lineHeightMultiple: CGFloat(SettingsStore.shared.macEditorLineHeightMultiple)
+        )
         let textStorage = NSTextStorage(attributedString: attributed)
         let layoutManager = NSLayoutManager()
         let textContainer = NSTextContainer(containerSize: NSSize(width: width, height: .greatestFiniteMagnitude))
@@ -298,7 +289,6 @@ extension StickyNoteWindowManager: NSWindowDelegate {
         guard let window = notification.object as? NSWindow,
               let id = window.identifier?.rawValue else { return }
 
-        NotificationCenter.default.post(name: .macWindowWillClose, object: nil, userInfo: ["noteId": id])
         saveWindowFrame(window, noteId: id)
         noteWindows.removeValue(forKey: id)
         MacNoteWindowStore.shared.closeWindow(for: id)

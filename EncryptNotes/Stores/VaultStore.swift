@@ -90,6 +90,10 @@ final class VaultStore: ObservableObject {
 
     var isKeyLoaded: Bool { currentKey != nil }
 
+    var storageContainerURL: URL? { storage.containerURL }
+
+    var isUsingICloudStorage: Bool { storage is ICloudVaultStorage }
+
     var readableNotes: [Note] {
         (plainNotes + decryptedNotes).sorted { $0.updatedAt > $1.updatedAt }
     }

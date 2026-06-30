@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import SwiftUI
+import Carbon
 
 @MainActor
 final class MacMainMenuController: NSObject {
@@ -86,7 +87,9 @@ final class MacMainMenuController: NSObject {
         menu.addItem(settingsItem)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "隐藏 \(appName)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"))
-        menu.addItem(NSMenuItem(title: "隐藏其他", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h", keyEquivalentModifierMask: [.command, .option]))
+        let hideOthersItem = NSMenuItem(title: "隐藏其他", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+        hideOthersItem.keyEquivalentModifierMask = [.command, .option]
+        menu.addItem(hideOthersItem)
         menu.addItem(NSMenuItem(title: "全部显示", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "退出 \(appName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
@@ -95,7 +98,9 @@ final class MacMainMenuController: NSObject {
     private func configureEditMenu(_ menu: NSMenu) {
         menu.removeAllItems()
         menu.addItem(NSMenuItem(title: "撤销", action: #selector(UndoManager.undo), keyEquivalent: "z"))
-        menu.addItem(NSMenuItem(title: "重做", action: #selector(UndoManager.redo), keyEquivalent: "z", keyEquivalentModifierMask: [.command, .shift]))
+        let redoItem = NSMenuItem(title: "重做", action: #selector(UndoManager.redo), keyEquivalent: "z")
+        redoItem.keyEquivalentModifierMask = [.command, .shift]
+        menu.addItem(redoItem)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
         menu.addItem(NSMenuItem(title: "复制", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
@@ -106,45 +111,37 @@ final class MacMainMenuController: NSObject {
     private func configureFormatMenu(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        let boldItem = NSMenuItem(title: "粗体", action: Selector(("markdownBold:")), keyEquivalent: "b")
-        boldItem.target = nil
-        menu.addItem(boldItem)
-
-        let italicItem = NSMenuItem(title: "斜体", action: Selector(("markdownItalic:")), keyEquivalent: "i")
-        italicItem.target = nil
-        menu.addItem(italicItem)
-
-        let underlineItem = NSMenuItem(title: "下划线", action: Selector(("markdownUnderline:")), keyEquivalent: "u")
-        underlineItem.target = nil
-        menu.addItem(underlineItem)
+        addMarkdownItem(.bold, to: menu)
+        addMarkdownItem(.italic, to: menu)
+        addMarkdownItem(.underline, to: menu)
 
         menu.addItem(.separator())
 
-        let codeItem = NSMenuItem(title: "行内代码", action: Selector(("markdownInlineCode:")), keyEquivalent: "`")
-        codeItem.keyEquivalentModifierMask = .control
-        codeItem.target = nil
-        menu.addItem(codeItem)
-
-        let mathItem = NSMenuItem(title: "行内公式", action: Selector(("markdownInlineMath:")), keyEquivalent: "m")
-        mathItem.keyEquivalentModifierMask = .control
-        mathItem.target = nil
-        menu.addItem(mathItem)
-
-        let strikeItem = NSMenuItem(title: "删除线", action: Selector(("markdownStrike:")), keyEquivalent: "`")
-        strikeItem.keyEquivalentModifierMask = [.control, .shift]
-        strikeItem.target = nil
-        menu.addItem(strikeItem)
-
-        let commentItem = NSMenuItem(title: "HTML 注释", action: Selector(("markdownHTMLComment:")), keyEquivalent: "-")
-        commentItem.keyEquivalentModifierMask = .control
-        commentItem.target = nil
-        menu.addItem(commentItem)
+        addMarkdownItem(.inlineCode, to: menu)
+        addMarkdownItem(.inlineMath, to: menu)
+        addMarkdownItem(.strike, to: menu)
+        addMarkdownItem(.htmlComment, to: menu)
 
         menu.addItem(.separator())
 
-        let linkItem = NSMenuItem(title: "链接", action: Selector(("markdownLink:")), keyEquivalent: "k")
-        linkItem.target = nil
-        menu.addItem(linkItem)
+        addMarkdownItem(.link, to: menu)
+    }
+
+    private func addMarkdownItem(_ action: MarkdownShortcutAction, to menu: NSMenu) {
+        let shortcut = ShortcutStore.shared.shortcut(for: action)
+        let item = NSMenuItem(title: action.title, action: action.selector, keyEquivalent: shortcut.keyEquivalent)
+        item.keyEquivalentModifierMask = modifierMask(from: shortcut.modifiers)
+        item.target = nil
+        menu.addItem(item)
+    }
+
+    private func modifierMask(from carbonModifiers: UInt32) -> NSEvent.ModifierFlags {
+        var flags: NSEvent.ModifierFlags = []
+        if carbonModifiers & UInt32(controlKey) != 0 { flags.insert(.control) }
+        if carbonModifiers & UInt32(optionKey) != 0 { flags.insert(.option) }
+        if carbonModifiers & UInt32(shiftKey) != 0 { flags.insert(.shift) }
+        if carbonModifiers & UInt32(cmdKey) != 0 { flags.insert(.command) }
+        return flags
     }
 
     private func configureNoteMenu(_ menu: NSMenu) {

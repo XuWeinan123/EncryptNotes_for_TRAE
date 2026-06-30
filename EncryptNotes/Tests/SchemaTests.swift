@@ -85,6 +85,22 @@ final class SchemaTests: XCTestCase {
         XCTAssertFalse(parsed.isEncrypted)
     }
 
+    func testMarkdownNoteFileParseSkipsSeparatorBlankLine() throws {
+        let content = """
+        ---
+        note_id: "separator-id"
+        created_at: "1970-01-12T13:46:40.000Z"
+        updated_at: "1970-01-12T13:46:40.000Z"
+        ---
+
+        第一行
+        """
+
+        let parsed = try MarkdownNoteFile.parse(from: content)
+
+        XCTAssertEqual(parsed.body, "第一行")
+    }
+
     func testMarkdownNoteFileEncryptedDetection() {
         let encryptedBody = "bkwenc:v1:ABCDEFGHIJKLMNOP"
         let file = MarkdownNoteFile(

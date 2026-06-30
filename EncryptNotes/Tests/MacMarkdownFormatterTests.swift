@@ -84,6 +84,16 @@ final class MacMarkdownFormatterTests: XCTestCase {
         XCTAssertEqual(result.selection, NSRange(location: 13, length: 0))
     }
 
+    func testInlineMathWrapsSelection() {
+        let result = MacMarkdownFormatter.apply(
+            command: .inlineMath,
+            to: "use x",
+            selection: NSRange(location: 4, length: 1)
+        )
+        XCTAssertEqual(result.text, "use $x$")
+        XCTAssertEqual(result.selection, NSRange(location: 5, length: 1))
+    }
+
     // MARK: - Toggle removal
 
     func testBoldToggleRemovesMarkerWhenAlreadyWrapped() {
@@ -117,6 +127,28 @@ final class MacMarkdownFormatterTests: XCTestCase {
         )
         XCTAssertEqual(result.text, "code")
         XCTAssertEqual(result.selection, NSRange(location: 0, length: 4))
+    }
+
+    func testInlineMathToggleRemovesDollarMarkers() {
+        let text = "$math$"
+        let result = MacMarkdownFormatter.apply(
+            command: .inlineMath,
+            to: text,
+            selection: NSRange(location: 1, length: 4)
+        )
+        XCTAssertEqual(result.text, "math")
+        XCTAssertEqual(result.selection, NSRange(location: 0, length: 4))
+    }
+
+    func testUnderlineToggleRemovesTags() {
+        let text = "<u>under</u>"
+        let result = MacMarkdownFormatter.apply(
+            command: .underline,
+            to: text,
+            selection: NSRange(location: 3, length: 5)
+        )
+        XCTAssertEqual(result.text, "under")
+        XCTAssertEqual(result.selection, NSRange(location: 0, length: 5))
     }
 
     func testStrikeToggleRemovesMarker() {

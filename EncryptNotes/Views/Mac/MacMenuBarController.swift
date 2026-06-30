@@ -30,19 +30,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         statusItem?.length = NSStatusItem.squareLength
 
         if let button = statusItem?.button {
-            button.title = ""
-            button.toolTip = "别看我"
-            button.imagePosition = .imageOnly
-
-            if let image = NSImage(systemSymbolName: "pencil", accessibilityDescription: "别看我") {
-                image.isTemplate = true
-                button.image = image
-                button.imageScaling = .scaleProportionallyDown
-                button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
-            } else {
-                button.image = nil
-                button.imagePosition = .noImage
-            }
+            configureStatusButton(button)
         }
 
         let menu = NSMenu()
@@ -57,6 +45,24 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
             name: .macNewNote,
             object: nil
         )
+    }
+
+    private func configureStatusButton(_ button: NSStatusBarButton) {
+        button.toolTip = "别看我"
+        button.imageScaling = .scaleProportionallyDown
+        button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+
+        if let image = NSImage(systemSymbolName: "pencil", accessibilityDescription: "别看我") {
+            image.isTemplate = true
+            button.title = ""
+            button.image = image
+            button.imagePosition = .imageOnly
+        } else {
+            statusItem?.length = NSStatusItem.variableLength
+            button.image = nil
+            button.title = "别"
+            button.imagePosition = .noImage
+        }
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {

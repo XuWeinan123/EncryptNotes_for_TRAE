@@ -4,17 +4,77 @@ import AppKit
 import Carbon
 import Combine
 
+enum MarkdownShortcutAction: String, CaseIterable, Identifiable, Codable {
+    case bold
+    case italic
+    case underline
+    case inlineCode
+    case inlineMath
+    case strike
+    case htmlComment
+    case link
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .bold: return "粗体"
+        case .italic: return "斜体"
+        case .underline: return "下划线"
+        case .inlineCode: return "行内代码"
+        case .inlineMath: return "行内公式"
+        case .strike: return "删除线"
+        case .htmlComment: return "HTML 注释"
+        case .link: return "链接"
+        }
+    }
+
+    var command: MacMarkdownFormatCommand {
+        switch self {
+        case .bold: return .bold
+        case .italic: return .italic
+        case .underline: return .underline
+        case .inlineCode: return .inlineCode
+        case .inlineMath: return .inlineMath
+        case .strike: return .strike
+        case .htmlComment: return .htmlComment
+        case .link: return .link
+        }
+    }
+
+    var selector: Selector {
+        switch self {
+        case .bold: return Selector(("markdownBold:"))
+        case .italic: return Selector(("markdownItalic:"))
+        case .underline: return Selector(("markdownUnderline:"))
+        case .inlineCode: return Selector(("markdownInlineCode:"))
+        case .inlineMath: return Selector(("markdownInlineMath:"))
+        case .strike: return Selector(("markdownStrike:"))
+        case .htmlComment: return Selector(("markdownHTMLComment:"))
+        case .link: return Selector(("markdownLink:"))
+        }
+    }
+}
+
+struct MarkdownShortcut: Codable, Equatable {
+    let keyCode: UInt32
+    let modifiers: UInt32
+    let keyEquivalent: String
+}
+
 @MainActor
 final class ShortcutStore: ObservableObject {
     static let shared = ShortcutStore()
 
     @Published var newNoteKey: (keyCode: UInt32, modifiers: UInt32)
+    @Published private(set) var markdownShortcuts: [MarkdownShortcutAction: MarkdownShortcut]
 
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandlerRef: EventHandlerRef?
     private let defaults: UserDefaults
 
     private let newNoteKeyDefaults = "mac.shortcut.newNote"
+    private let markdownShortcutDefaults = "mac.shortcut.markdownFormatting"
 
     private init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -24,6 +84,19 @@ final class ShortcutStore: ObservableObject {
             self.newNoteKey = (shortcut.keyCode, shortcut.modifiers)
         } else {
             self.newNoteKey = (keyCode: 6, modifiers: UInt32(controlKey | cmdKey))
+        }
+
+        if let data = defaults.data(forKey: markdownShortcutDefaults),
+           let stored = try? JSONDecoder.decode([String: MarkdownShortcut].self, from: data) {
+            var shortcuts = Self.defaultMarkdownShortcuts
+            for (rawValue, shortcut) in stored {
+                if let action = MarkdownShortcutAction(rawValue: rawValue) {
+                    shortcuts[action] = shortcut
+                }
+            }
+            self.markdownShortcuts = shortcuts
+        } else {
+            self.markdownShortcuts = Self.defaultMarkdownShortcuts
         }
 
         registerHotKeys()
@@ -65,6 +138,53 @@ final class ShortcutStore: ObservableObject {
         registerHotKeys()
     }
 
+    func shortcut(for action: MarkdownShortcutAction) -> MarkdownShortcut {
+        markdownShortcuts[action] ?? Self.defaultMarkdownShortcuts[action]!
+    }
+
+    func setMarkdownShortcut(_ shortcut: MarkdownShortcut, for action: MarkdownShortcutAction) {
+        markdownShortcuts[action] = shortcut
+        persistMarkdownShortcuts()
+        MacMainMenuController.shared.installMainMenu()
+    }
+
+    func resetMarkdownShortcuts() {
+        markdownShortcuts = Self.defaultMarkdownShortcuts
+        defaults.removeObject(forKey: markdownShortcutDefaults)
+        MacMainMenuController.shared.installMainMenu()
+    }
+
+    func markdownAction(matching event: NSEvent) -> MarkdownShortcutAction? {
+        let modifiers = Self.carbonModifiers(from: event.modifierFlags)
+        let keyCode = UInt32(event.keyCode)
+        return MarkdownShortcutAction.allCases.first { action in
+            let shortcut = shortcut(for: action)
+            return shortcut.keyCode == keyCode && shortcut.modifiers == modifiers
+        }
+    }
+
+    static var defaultMarkdownShortcuts: [MarkdownShortcutAction: MarkdownShortcut] {
+        [
+            .bold: MarkdownShortcut(keyCode: 11, modifiers: UInt32(cmdKey), keyEquivalent: "b"),
+            .italic: MarkdownShortcut(keyCode: 34, modifiers: UInt32(cmdKey), keyEquivalent: "i"),
+            .underline: MarkdownShortcut(keyCode: 32, modifiers: UInt32(cmdKey), keyEquivalent: "u"),
+            .link: MarkdownShortcut(keyCode: 40, modifiers: UInt32(cmdKey), keyEquivalent: "k"),
+            .inlineCode: MarkdownShortcut(keyCode: 50, modifiers: UInt32(controlKey), keyEquivalent: "`"),
+            .inlineMath: MarkdownShortcut(keyCode: 46, modifiers: UInt32(controlKey), keyEquivalent: "m"),
+            .strike: MarkdownShortcut(keyCode: 50, modifiers: UInt32(controlKey | shiftKey), keyEquivalent: "`"),
+            .htmlComment: MarkdownShortcut(keyCode: 27, modifiers: UInt32(controlKey), keyEquivalent: "-")
+        ]
+    }
+
+    static func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
+        var modifiers: UInt32 = 0
+        if flags.contains(.control) { modifiers |= UInt32(controlKey) }
+        if flags.contains(.option) { modifiers |= UInt32(optionKey) }
+        if flags.contains(.shift) { modifiers |= UInt32(shiftKey) }
+        if flags.contains(.command) { modifiers |= UInt32(cmdKey) }
+        return modifiers
+    }
+
     static func displayStringForKey(keyCode: UInt32, modifiers: UInt32) -> String {
         var parts: [String] = []
         if modifiers & UInt32(controlKey) != 0 { parts.append("⌃") }
@@ -91,6 +211,7 @@ final class ShortcutStore: ObservableObject {
         case 15: keyString = "R"
         case 16: keyString = "Y"
         case 17: keyString = "T"
+        case 27: keyString = "-"
         case 31: keyString = "O"
         case 32: keyString = "U"
         case 34: keyString = "I"
@@ -103,6 +224,7 @@ final class ShortcutStore: ObservableObject {
         case 46: keyString = "M"
         case 48: keyString = "Tab"
         case 49: keyString = "Space"
+        case 50: keyString = "`"
         case 51: keyString = "⌫"
         case 53: keyString = "Esc"
         case 123: keyString = "←"
@@ -113,6 +235,12 @@ final class ShortcutStore: ObservableObject {
         }
         parts.append(keyString)
         return parts.joined()
+    }
+
+    private func persistMarkdownShortcuts() {
+        let rawShortcuts = Dictionary(uniqueKeysWithValues: markdownShortcuts.map { ($0.key.rawValue, $0.value) })
+        let data = try? JSONEncoder.encode(rawShortcuts)
+        defaults.set(data, forKey: markdownShortcutDefaults)
     }
 
     private struct ShortcutData: Codable {

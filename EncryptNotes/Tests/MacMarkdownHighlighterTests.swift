@@ -1,5 +1,8 @@
 import XCTest
 @testable import EncryptNotes
+#if os(macOS)
+import AppKit
+#endif
 
 final class MacMarkdownHighlighterTests: XCTestCase {
 
@@ -122,6 +125,26 @@ final class MacMarkdownHighlighterTests: XCTestCase {
         })
         XCTAssertTrue(hasRole(.linkText, in: s, text: text, substring: "alt"))
     }
+
+    #if os(macOS)
+    func testHeadingHighlightDoesNotChangePointSize() {
+        let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: "### 标题", fontSize: 14)
+        let font = attributed.attribute(.font, at: 4, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize, 14)
+    }
+
+    func testInlineCodeHighlightDoesNotChangePointSize() {
+        let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: "`code`", fontSize: 14)
+        let font = attributed.attribute(.font, at: 1, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize, 14)
+    }
+
+    func testParagraphLineHeightUsesMultiplier() {
+        let style = MacMarkdownHighlighter.paragraphStyle(size: 14, multiple: 1.5)
+        XCTAssertEqual(style.minimumLineHeight, ceil(14 * 1.5))
+        XCTAssertEqual(style.maximumLineHeight, ceil(14 * 1.5))
+    }
+    #endif
 
     // MARK: - Lists
 

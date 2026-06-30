@@ -1,11 +1,13 @@
 import Foundation
 import SwiftUI
+import AppKit
 import UniformTypeIdentifiers
 
 struct MacSettingsView: View {
     @ObservedObject private var shortcutStore = ShortcutStore.shared
     @ObservedObject private var vaultStore = VaultStore.shared
     @ObservedObject private var settings = SettingsStore.shared
+    @State private var recordingAction: MarkdownShortcutAction?
 
     var body: some View {
         TabView {
@@ -25,8 +27,9 @@ struct MacSettingsView: View {
                 }
         }
         .padding(DS.s4)
-        .frame(width: 460, height: 400)
+        .frame(width: 500, height: 480)
         .background(DS.bg)
+        .background(shortcutRecorder)
     }
 
     private var generalTab: some View {
@@ -47,7 +50,35 @@ struct MacSettingsView: View {
                     .frame(width: 200)
                 }
                 .padding(.vertical, DS.s1)
+
+                VStack(alignment: .leading, spacing: DS.s2) {
+                    HStack(spacing: DS.s3) {
+                        Text("行高")
+                            .font(DS.bodyLg())
+                            .foregroundColor(DS.textBody)
+                        Spacer()
+                        Text(String(format: "%.2fx", settings.macEditorLineHeightMultiple))
+                            .font(DS.caption())
+                            .foregroundColor(DS.textSecondary)
+                            .monospacedDigit()
+                    }
+                    Slider(
+                        value: lineHeightBinding,
+                        in: SettingsStore.macEditorLineHeightRange,
+                        step: 0.05
+                    )
+                }
+                .padding(.vertical, DS.s1)
                 helperText("仅影响 mac 便利贴编辑器")
+            }
+
+            macPanel("存储") {
+                Button(vaultStore.isUsingICloudStorage ? "打开 iCloud 文件夹" : "打开本地文件夹") {
+                    openStorageFolder()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                helperText(vaultStore.isUsingICloudStorage ? "笔记文件位于当前 iCloud 容器的 notes/ 目录。" : "当前未使用 iCloud，已回退到本地存储。")
             }
 
             macPanel("隐私保护") {
@@ -66,9 +97,35 @@ struct MacSettingsView: View {
                     value: ShortcutStore.displayStringForKey(
                         keyCode: shortcutStore.newNoteKey.keyCode,
                         modifiers: shortcutStore.newNoteKey.modifiers
-                    )
+                    ),
+                    isRecording: false,
+                    onRecord: {}
                 )
                 helperText("默认快捷键：⌃⌘Z")
+            }
+
+            macPanel("Markdown 格式") {
+                ForEach(MarkdownShortcutAction.allCases) { action in
+                    let shortcut = shortcutStore.shortcut(for: action)
+                    shortcutRow(
+                        title: action.title,
+                        value: ShortcutStore.displayStringForKey(
+                            keyCode: shortcut.keyCode,
+                            modifiers: shortcut.modifiers
+                        ),
+                        isRecording: recordingAction == action,
+                        onRecord: { recordingAction = action }
+                    )
+                }
+
+                Button("恢复默认格式快捷键") {
+                    shortcutStore.resetMarkdownShortcuts()
+                    recordingAction = nil
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                helperText(recordingAction == nil ? "点击录制后按下新的组合键；Esc 取消。" : "正在录制：按下新的组合键，或按 Esc 取消。")
             }
         }
     }
@@ -124,6 +181,21 @@ struct MacSettingsView: View {
         )
     }
 
+    private var lineHeightBinding: Binding<Double> {
+        Binding(
+            get: { settings.macEditorLineHeightMultiple },
+            set: { settings.macEditorLineHeightMultiple = $0 }
+        )
+    }
+
+    private var shortcutRecorder: some View {
+        ShortcutRecorderView(recordingAction: $recordingAction) { action, shortcut in
+            shortcutStore.setMarkdownShortcut(shortcut, for: action)
+            recordingAction = nil
+        }
+        .frame(width: 0, height: 0)
+    }
+
     private func panelStack<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DS.s3) {
@@ -160,7 +232,7 @@ struct MacSettingsView: View {
             .padding(.vertical, DS.s1)
     }
 
-    private func shortcutRow(title: String, value: String) -> some View {
+    private func shortcutRow(title: String, value: String, isRecording: Bool, onRecord: @escaping () -> Void) -> some View {
         HStack(spacing: DS.s3) {
             Text(title)
                 .font(DS.bodyLg())
@@ -168,9 +240,10 @@ struct MacSettingsView: View {
             Spacer()
             Text(value)
                 .font(DS.caption())
-                .foregroundColor(DS.textSecondary)
-            Button("录制…") {
-                // Shortcut recording UI can be added here in future
+                .foregroundColor(isRecording ? DS.primary : DS.textSecondary)
+                .monospacedDigit()
+            Button(isRecording ? "录制中…" : "录制…") {
+                onRecord()
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
@@ -193,6 +266,21 @@ struct MacSettingsView: View {
             .font(DS.caption())
             .foregroundColor(DS.textSubtle)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func openStorageFolder() {
+        guard let containerURL = vaultStore.storageContainerURL else {
+            let alert = NSAlert()
+            alert.messageText = "无法打开文件夹"
+            alert.informativeText = "当前没有可用的存储目录。"
+            alert.addButton(withTitle: "确定")
+            alert.runModal()
+            return
+        }
+
+        let notesURL = containerURL.appendingPathComponent("notes")
+        let targetURL = FileManager.default.fileExists(atPath: notesURL.path) ? notesURL : containerURL
+        NSWorkspace.shared.activateFileViewerSelecting([targetURL])
     }
 
     private func loadKey() {
@@ -262,6 +350,60 @@ struct MacSettingsView: View {
                     errorAlert.runModal()
                 }
             }
+        }
+    }
+}
+
+private struct ShortcutRecorderView: NSViewRepresentable {
+    @Binding var recordingAction: MarkdownShortcutAction?
+    let onRecord: (MarkdownShortcutAction, MarkdownShortcut) -> Void
+
+    func makeNSView(context: Context) -> RecorderView {
+        let view = RecorderView()
+        view.onRecord = onRecord
+        view.onCancel = { recordingAction = nil }
+        return view
+    }
+
+    func updateNSView(_ nsView: RecorderView, context: Context) {
+        nsView.recordingAction = recordingAction
+        nsView.onRecord = onRecord
+        nsView.onCancel = { recordingAction = nil }
+        if recordingAction != nil {
+            DispatchQueue.main.async {
+                nsView.window?.makeFirstResponder(nsView)
+            }
+        }
+    }
+
+    final class RecorderView: NSView {
+        var recordingAction: MarkdownShortcutAction?
+        var onRecord: ((MarkdownShortcutAction, MarkdownShortcut) -> Void)?
+        var onCancel: (() -> Void)?
+
+        override var acceptsFirstResponder: Bool { true }
+
+        override func keyDown(with event: NSEvent) {
+            guard let action = recordingAction else {
+                super.keyDown(with: event)
+                return
+            }
+
+            if event.keyCode == 53 {
+                onCancel?()
+                return
+            }
+
+            guard let keyEquivalent = event.charactersIgnoringModifiers?.lowercased(), !keyEquivalent.isEmpty else {
+                return
+            }
+
+            let shortcut = MarkdownShortcut(
+                keyCode: UInt32(event.keyCode),
+                modifiers: ShortcutStore.carbonModifiers(from: event.modifierFlags),
+                keyEquivalent: keyEquivalent
+            )
+            onRecord?(action, shortcut)
         }
     }
 }
