@@ -224,6 +224,7 @@ struct SWPageHeader: View {
         }
         .padding(DS.cardPadding)
         .dsCardSurface(shadow: false)
+        .padding(.bottom, DS.s4)
     }
 }
 

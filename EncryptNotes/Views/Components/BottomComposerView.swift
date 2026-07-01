@@ -79,6 +79,7 @@ struct BottomComposerView: View {
                 .disabled(!canEncrypt)
         }
         .pickerStyle(.segmented)
+        .tint(DS.primary)
         .onChange(of: isEncrypted) { _, newValue in
             if newValue && !canEncrypt {
                 isEncrypted = false

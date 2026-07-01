@@ -27,14 +27,18 @@ final class KeychainStore {
     private init() {}
 
     func saveKey(_ keyMaterial: String, forVaultId vaultId: String) throws {
-        guard let data = keyMaterial.data(using: .utf8) else {
+        try saveString(keyMaterial, account: vaultId)
+    }
+
+    func saveString(_ value: String, account: String) throws {
+        guard let data = value.data(using: .utf8) else {
             throw KeychainError.dataConversionFailed
         }
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: vaultId,
+            kSecAttrAccount as String: account,
             kSecValueData as String: data
         ]
 
@@ -47,10 +51,14 @@ final class KeychainStore {
     }
 
     func loadKey(forVaultId vaultId: String) throws -> String {
+        try loadString(account: vaultId)
+    }
+
+    func loadString(account: String) throws -> String {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: vaultId,
+            kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
@@ -74,10 +82,14 @@ final class KeychainStore {
     }
 
     func deleteKey(forVaultId vaultId: String) throws {
+        try deleteString(account: vaultId)
+    }
+
+    func deleteString(account: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: vaultId
+            kSecAttrAccount as String: account
         ]
 
         let status = SecItemDelete(query as CFDictionary)
@@ -87,8 +99,12 @@ final class KeychainStore {
     }
 
     func hasKey(forVaultId vaultId: String) -> Bool {
+        hasString(account: vaultId)
+    }
+
+    func hasString(account: String) -> Bool {
         do {
-            _ = try loadKey(forVaultId: vaultId)
+            _ = try loadString(account: account)
             return true
         } catch {
             return false

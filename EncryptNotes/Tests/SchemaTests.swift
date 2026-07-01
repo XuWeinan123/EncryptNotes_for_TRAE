@@ -150,6 +150,52 @@ final class SchemaTests: XCTestCase {
         XCTAssertTrue(filtered.contains { $0.lastPathComponent == "note2.md" })
     }
 
+    func testNoteTitleFormatterRemovesLeadingHeadingMarker() {
+        XCTAssertEqual(NoteTitleFormatter.displayTitle(from: "# Hello"), "Hello")
+        XCTAssertEqual(NoteTitleFormatter.displayTitle(from: "## Hello"), "Hello")
+        XCTAssertEqual(NoteTitleFormatter.displayTitle(from: "#Hello"), "#Hello")
+        XCTAssertEqual(NoteTitleFormatter.displayTitle(from: "Hello"), "Hello")
+    }
+
+    func testNoteTitleFormatterFileNameUsesNormalizedHeadingTitle() {
+        XCTAssertEqual(
+            NoteTitleFormatter.fileName(for: "note-id", body: "# Hello"),
+            "Hello-note-id.md"
+        )
+        XCTAssertEqual(
+            NoteTitleFormatter.fileName(for: "note-id", body: "Hello"),
+            "Hello-note-id.md"
+        )
+    }
+
+    func testNoteTitleFormatterSanitizesGeneratedTitle() {
+        XCTAssertEqual(
+            NoteTitleFormatter.sanitizedGeneratedTitle("\"# Project / Launch?\""),
+            "Project - Launch"
+        )
+        XCTAssertEqual(
+            NoteTitleFormatter.fileName(for: "note-id", title: "`# 私密/标题?`"),
+            "私密-标题-note-id.md"
+        )
+    }
+
+    func testNoteTitleFormatterDetectsMarkdownHeadingException() {
+        XCTAssertTrue(NoteTitleFormatter.firstNonEmptyLineIsMarkdownHeading(in: "\n## 标题\n正文"))
+        XCTAssertFalse(NoteTitleFormatter.firstNonEmptyLineIsMarkdownHeading(in: "#标签 不是标题"))
+        XCTAssertFalse(NoteTitleFormatter.firstNonEmptyLineIsMarkdownHeading(in: "普通第一行\n# 标题"))
+    }
+
+    func testNoteTitleFormatterReadsTitleFromFileName() {
+        XCTAssertEqual(
+            NoteTitleFormatter.displayTitle(fromFileName: "AI 标题-note-id.md", noteId: "note-id"),
+            "AI 标题"
+        )
+        XCTAssertEqual(
+            NoteTitleFormatter.displayTitle(fromFileName: "unexpected.md", noteId: "note-id", emptyTitle: "(空笔记)"),
+            "(空笔记)"
+        )
+    }
+
     func testEncryptedMarkdownBodyDoesNotContainPlaintext() throws {
         let key = SymmetricKey(size: .bits256)
         let crypto = CryptoService.shared

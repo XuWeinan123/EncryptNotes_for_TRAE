@@ -118,9 +118,7 @@ struct TrashView: View {
     }
 
     private func firstLine(of body: String) -> String {
-        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return "(空笔记)" }
-        return String(trimmed.components(separatedBy: .newlines).first { !$0.isEmpty } ?? "(空笔记)")
+        NoteTitleFormatter.displayTitle(from: body, emptyTitle: "(空笔记)")
     }
 
     private func timeString(from date: Date) -> String {

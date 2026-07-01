@@ -48,21 +48,51 @@ final class MacMarkdownHighlighterTests: XCTestCase {
     // MARK: - Code fence
 
     func testCodeFenceMarkersAndContent() {
-        let text = "```\nlet x = 1\n```\n"
+        let text = "```markdown\nlet x = 1\n```\n"
         let s = spans(text)
         let nsText = text as NSString
-        let openFenceRange = nsText.range(of: "```")
+        let openFenceRange = nsText.range(of: "```markdown")
         let closeFenceLoc = nsText.range(of: "```", options: .backwards).location
 
         XCTAssertTrue(s.contains { $0.role == .codeFenceMarker && $0.range.location == openFenceRange.location })
         XCTAssertTrue(s.contains { $0.role == .codeFenceMarker && $0.range.location == closeFenceLoc })
-        XCTAssertTrue(s.contains { $0.role == .codeBlockText })
+        XCTAssertFalse(s.contains { $0.role == .codeBlockText })
+    }
+
+    func testPlainCodeFenceOpeningMarkerIsNotHighlighted() {
+        let text = "```\nlet x = 1\n```\n"
+        let s = spans(text)
+        let nsText = text as NSString
+        let openFenceLoc = nsText.range(of: "```").location
+        let closeFenceLoc = nsText.range(of: "```", options: .backwards).location
+
+        XCTAssertFalse(s.contains { $0.role == .codeFenceMarker && $0.range.location == openFenceLoc })
+        XCTAssertTrue(s.contains { $0.role == .codeFenceMarker && $0.range.location == closeFenceLoc })
+    }
+
+    func testMultipleMarkdownFenceOpeningsAreHighlighted() {
+        let text = "```markdown\nfirst\n```\n\n```markdown\nsecond\n```\n"
+        let s = spans(text)
+        let nsText = text as NSString
+        let firstOpening = nsText.range(of: "```markdown").location
+        let secondOpening = nsText.range(of: "```markdown", options: [], range: NSRange(location: firstOpening + 1, length: nsText.length - firstOpening - 1)).location
+
+        XCTAssertTrue(s.contains { $0.role == .codeFenceMarker && $0.range.location == firstOpening })
+        XCTAssertTrue(s.contains { $0.role == .codeFenceMarker && $0.range.location == secondOpening })
     }
 
     func testInlineCodeRecognized() {
         let text = "use `foo` here"
         let s = spans(text)
         XCTAssertTrue(hasRole(.inlineCode, in: s, text: text, substring: "`foo`"))
+    }
+
+    func testTripleBackticksOnSingleLineArePlainText() {
+        let text = "before ```内容``` after"
+        let s = spans(text)
+        XCTAssertFalse(s.contains { $0.role == .inlineCode })
+        XCTAssertFalse(s.contains { $0.role == .codeFenceMarker })
+        XCTAssertFalse(s.contains { $0.role == .codeBlockText })
     }
 
     // MARK: - Emphasis
@@ -137,6 +167,13 @@ final class MacMarkdownHighlighterTests: XCTestCase {
         let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: "`code`", fontSize: 14)
         let font = attributed.attribute(.font, at: 1, effectiveRange: nil) as? NSFont
         XCTAssertEqual(font?.pointSize, 14)
+    }
+
+    func testCodeBlockContentHasNoBackground() {
+        let text = "```markdown\nlet x = 1\n```\n"
+        let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: text, fontSize: 14)
+        let contentIndex = (text as NSString).range(of: "let x = 1").location
+        XCTAssertNil(attributed.attribute(.backgroundColor, at: contentIndex, effectiveRange: nil))
     }
 
     func testParagraphLineHeightUsesMultiplier() {

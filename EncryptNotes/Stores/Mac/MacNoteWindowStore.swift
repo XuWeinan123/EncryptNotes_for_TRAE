@@ -49,7 +49,7 @@ final class MacNoteWindowStore: ObservableObject {
             let defaultFrame = defaultWindowFrame()
             windowStates[noteId] = MacNoteWindowState(
                 noteId: noteId,
-                isPinned: true,
+                isPinned: SettingsStore.shared.pinNewNotesByDefault,
                 frame: defaultFrame,
                 lastOpenedAt: Date()
             )
@@ -78,11 +78,13 @@ final class MacNoteWindowStore: ObservableObject {
         saveWindowState(for: noteId)
     }
 
-    func updateFrame(for noteId: String, frame: MacWindowFrame) {
+    func updateFrame(for noteId: String, frame: MacWindowFrame, remembersAsNewNoteSize: Bool = false) {
         guard var state = windowStates[noteId] else { return }
         state.frame = frame
         windowStates[noteId] = state
-        saveLastWindowSize(width: frame.width, height: frame.height)
+        if remembersAsNewNoteSize {
+            saveLastWindowSize(width: frame.width, height: frame.height)
+        }
         saveWindowState(for: noteId)
     }
 

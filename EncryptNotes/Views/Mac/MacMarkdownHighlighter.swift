@@ -88,20 +88,31 @@ final class MacMarkdownHighlighter {
         let totalRanges: [NSRange]
     }
 
+    private struct FencePosition {
+        let lineRange: NSRange
+        let markerRange: NSRange
+        let line: String
+    }
+
     private static func findCodeFenceRanges(in text: String, nsString: NSString) -> BlockRanges {
         var spans: [MarkdownHighlightSpan] = []
         var totalRanges: [NSRange] = []
-        let pattern = "^(\\s{0,3})(```|~~~)"
+        let pattern = "^([ \\t]{0,3})(```|~~~)([^`~\\n]*)$"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]) else {
             return BlockRanges(spans: spans, totalRanges: totalRanges)
         }
 
         let matches = regex.matches(in: text, options: [], range: fullRange(nsString))
-        var fencePositions: [(location: Int, markerRange: NSRange)] = []
+        var fencePositions: [FencePosition] = []
 
         for match in matches {
             let markerRange = match.range(at: 2)
-            fencePositions.append((location: match.range.location, markerRange: markerRange))
+            let lineRange = match.range
+            fencePositions.append(FencePosition(
+                lineRange: lineRange,
+                markerRange: markerRange,
+                line: nsString.substring(with: lineRange)
+            ))
         }
 
         var i = 0
@@ -113,21 +124,30 @@ final class MacMarkdownHighlighter {
             let totalRange = NSRange(location: blockStart, length: blockEnd - blockStart)
             totalRanges.append(totalRange)
 
-            spans.append(MarkdownHighlightSpan(range: opening.markerRange, role: .codeFenceMarker))
-            spans.append(MarkdownHighlightSpan(range: closing.markerRange, role: .codeFenceMarker))
-
-            let contentStart = opening.markerRange.location + opening.markerRange.length
-            let contentLength = closing.markerRange.location - contentStart
-            if contentLength > 0 {
-                spans.append(MarkdownHighlightSpan(
-                    range: NSRange(location: contentStart, length: contentLength),
-                    role: .codeBlockText
-                ))
+            if isOpeningFenceWithInfo(opening.line, marker: nsString.substring(with: opening.markerRange)) {
+                let markerLineRange = NSRange(
+                    location: opening.markerRange.location,
+                    length: opening.lineRange.location + opening.lineRange.length - opening.markerRange.location
+                )
+                spans.append(MarkdownHighlightSpan(range: markerLineRange, role: .codeFenceMarker))
+            }
+            if isClosingFenceLine(closing.line, marker: nsString.substring(with: closing.markerRange)) {
+                spans.append(MarkdownHighlightSpan(range: closing.markerRange, role: .codeFenceMarker))
             }
             i += 2
         }
 
         return BlockRanges(spans: spans, totalRanges: totalRanges)
+    }
+
+    private static func isOpeningFenceWithInfo(_ line: String, marker: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix(marker), trimmed != marker else { return false }
+        return !trimmed.dropFirst(marker.count).trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private static func isClosingFenceLine(_ line: String, marker: String) -> Bool {
+        line.trimmingCharacters(in: .whitespacesAndNewlines) == marker
     }
 
     private static func findTableRanges(in text: String, nsString: NSString, excludedRanges: [NSRange]) -> BlockRanges {
@@ -488,11 +508,24 @@ final class MacMarkdownHighlighter {
 
         for match in matches {
             let fullRange = match.range
+            guard !isBacktickAdjacentMatch(fullRange, in: line) else { continue }
             let absoluteFull = NSRange(location: lineRange.location + fullRange.location, length: fullRange.length)
             if isExcluded(absoluteFull, by: excludedRanges) { continue }
             spans.append(MarkdownHighlightSpan(range: absoluteFull, role: .inlineCode))
         }
         return spans.isEmpty ? nil : spans
+    }
+
+    private static func isBacktickAdjacentMatch(_ range: NSRange, in line: String) -> Bool {
+        let nsLine = line as NSString
+        if range.location > 0, nsLine.character(at: range.location - 1) == unichar(0x60) {
+            return true
+        }
+        let end = range.location + range.length
+        if end < nsLine.length, nsLine.character(at: end) == unichar(0x60) {
+            return true
+        }
+        return false
     }
 
     private static func matchUnderline(in line: String, lineRange: NSRange, excludedRanges: [NSRange]) -> [MarkdownHighlightSpan]? {
@@ -776,8 +809,7 @@ extension MacMarkdownHighlighter {
         case .codeBlockText:
             return [
                 .foregroundColor: NSColor(DS.textBody),
-                .font: monoFontValue,
-                .backgroundColor: NSColor(DS.surfaceSunken).withAlphaComponent(0.5)
+                .font: bodyFont
             ]
         case .listMarker:
             return [

@@ -21,6 +21,11 @@ struct MacMarkdownListContinuationResult: Equatable {
     let selection: NSRange
 }
 
+struct MacMarkdownCodeFenceCompletionResult: Equatable {
+    let text: String
+    let selection: NSRange
+}
+
 final class MacMarkdownFormatter {
 
     static func apply(command: MacMarkdownFormatCommand, to text: String, selection: NSRange) -> MacMarkdownFormatResult {
@@ -157,30 +162,104 @@ final class MacMarkdownFormatter {
         )
     }
 
+    static func completeCodeFenceIfNeeded(in text: String, selection: NSRange) -> MacMarkdownCodeFenceCompletionResult? {
+        guard selection.length == 0 else { return nil }
+        let nsText = text as NSString
+        let cursor = max(0, min(selection.location, nsText.length))
+        let lineRange = nsText.lineRange(for: NSRange(location: cursor, length: 0))
+        let lineStart = lineRange.location
+        let lineLengthToCursor = max(0, cursor - lineStart)
+        let currentLine = nsText.substring(with: NSRange(location: lineStart, length: lineLengthToCursor))
+        guard let marker = CodeFenceOpening(line: currentLine) else { return nil }
+
+        let insertion = "\n\n\(marker.closingMarker)"
+        let newText = nsText.substring(to: cursor) + insertion + nsText.substring(from: cursor)
+        return MacMarkdownCodeFenceCompletionResult(
+            text: newText,
+            selection: NSRange(location: cursor + 1, length: 0)
+        )
+    }
+
     static func stringByAddingMarkdownParagraphSpacing(to text: String) -> String {
-        let lines = text.components(separatedBy: "\n")
-        guard lines.count > 1 else { return text }
+        let lines = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .components(separatedBy: "\n")
 
-        var output: [String] = []
-        var inFence = false
+        var blocks: [[String]] = []
+        var index = 0
 
-        for index in lines.indices {
+        while index < lines.count {
             let line = lines[index]
-            output.append(line)
 
-            if isFenceLine(line) {
-                inFence.toggle()
+            if isBlankLine(line) {
+                index += 1
                 continue
             }
 
-            guard !inFence, index < lines.index(before: lines.endIndex) else { continue }
-            let nextLine = lines[lines.index(after: index)]
-            if isNormalParagraphLine(line), isNormalParagraphLine(nextLine) {
-                output.append("")
+            if isFenceLine(line) {
+                var block = [line]
+                index += 1
+
+                while index < lines.count {
+                    let currentLine = lines[index]
+                    block.append(currentLine)
+                    index += 1
+
+                    if isFenceLine(currentLine) {
+                        break
+                    }
+                }
+
+                blocks.append(block)
+                continue
             }
+
+            if isListLine(line, allowsNestedIndent: false) {
+                var block = [line]
+                index += 1
+
+                while index < lines.count, isListLine(lines[index], allowsNestedIndent: true) {
+                    block.append(lines[index])
+                    index += 1
+                }
+
+                blocks.append(block)
+                continue
+            }
+
+            if isQuoteLine(line) {
+                var block = [line]
+                index += 1
+
+                while index < lines.count, isQuoteLine(lines[index]) {
+                    block.append(lines[index])
+                    index += 1
+                }
+
+                blocks.append(block)
+                continue
+            }
+
+            if isTableLine(line) {
+                var block = [line]
+                index += 1
+
+                while index < lines.count, isTableLine(lines[index]) {
+                    block.append(lines[index])
+                    index += 1
+                }
+
+                blocks.append(block)
+                continue
+            }
+
+            blocks.append([line])
+            index += 1
         }
 
-        return output.joined(separator: "\n")
+        guard !blocks.isEmpty else { return "" }
+        return blocks.map { $0.joined(separator: "\n") }.joined(separator: "\n\n") + "\n"
     }
 
     private static func isInsideFencedCodeBlock(text: String, cursor: Int) -> Bool {
@@ -196,19 +275,60 @@ final class MacMarkdownFormatter {
     }
 
     private static func isFenceLine(_ line: String) -> Bool {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        return trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~")
+        matches(line, pattern: #"^[ \t]{0,3}(`{3,}|~{3,}).*$"#)
     }
 
     private static func isNormalParagraphLine(_ line: String) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return false }
         if isFenceLine(line) { return false }
-        if trimmed.hasPrefix("#") || trimmed.hasPrefix(">") { return false }
-        if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") || trimmed.hasPrefix("+ ") { return false }
+        if isHeadingLine(line) || isQuoteLine(line) { return false }
+        if isListLine(line, allowsNestedIndent: false) { return false }
+        if isHorizontalRuleLine(line) { return false }
         if trimmed.hasPrefix("|") { return false }
         if trimmed.range(of: #"^\d+[\.\)]\s+"#, options: .regularExpression) != nil { return false }
         return true
+    }
+
+    private static func isBlankLine(_ line: String) -> Bool {
+        line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private static func isHeadingLine(_ line: String) -> Bool {
+        matches(line, pattern: #"^[ \t]{0,3}#{1,6}[ \t]+\S"#)
+    }
+
+    private static func isListLine(_ line: String, allowsNestedIndent: Bool) -> Bool {
+        let indent = allowsNestedIndent ? #"[ \t]*"# : #"[ \t]{0,3}"#
+        return matches(line, pattern: #"^\#(indent)\d+[.)][ \t]+\S"#)
+            || matches(line, pattern: #"^\#(indent)[-*+][ \t]+\S"#)
+    }
+
+    private static func isQuoteLine(_ line: String) -> Bool {
+        matches(line, pattern: #"^[ \t]{0,3}>[ \t]?.*"#)
+    }
+
+    private static func isTableLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return false }
+        if isFenceLine(line) || isHeadingLine(line) || isListLine(line, allowsNestedIndent: false) || isQuoteLine(line) {
+            return false
+        }
+        return trimmed.contains("|") && (trimmed.hasPrefix("|") || trimmed.hasSuffix("|") || isTableDelimiterLine(trimmed))
+    }
+
+    private static func isTableDelimiterLine(_ line: String) -> Bool {
+        matches(line, pattern: #"^:?-{3,}:?([ \t]*\|[ \t]*:?-{3,}:?)+[ \t]*\|?$"#)
+    }
+
+    private static func isHorizontalRuleLine(_ line: String) -> Bool {
+        matches(line, pattern: #"^[ \t]{0,3}(-{3,}|\*{3,}|_{3,})[ \t]*$"#)
+    }
+
+    private static func matches(_ line: String, pattern: String) -> Bool {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
+        let range = NSRange(location: 0, length: (line as NSString).length)
+        return regex.firstMatch(in: line, range: range) != nil
     }
 
     private struct ListMarker {
@@ -234,6 +354,20 @@ final class MacMarkdownFormatter {
             } else {
                 return nil
             }
+        }
+    }
+
+    private struct CodeFenceOpening {
+        let closingMarker: String
+
+        init?(line: String) {
+            let pattern = #"^[ \t]{0,3}(```|~~~)(?:[ \t]*[A-Za-z0-9_+\-.#]+)?[ \t]*$"#
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+            let nsLine = line as NSString
+            guard let match = regex.firstMatch(in: line, range: NSRange(location: 0, length: nsLine.length)) else {
+                return nil
+            }
+            closingMarker = nsLine.substring(with: match.range(at: 1))
         }
     }
 }

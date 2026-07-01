@@ -11,6 +11,7 @@ final class StickyNoteWindowManager: NSObject {
         [.titled, .closable, .resizable, .unifiedTitleAndToolbar, .fullSizeContentView]
 
     private var noteWindows: [String: NSWindow] = [:]
+    private var noteIdsRememberingNewNoteSize = Set<String>()
 
     private override init() {
         super.init()
@@ -30,7 +31,7 @@ final class StickyNoteWindowManager: NSObject {
         }
     }
 
-    func showNote(_ note: Note, at screenPoint: NSPoint? = nil) {
+    func showNote(_ note: Note, at screenPoint: NSPoint? = nil, remembersNewNoteSize: Bool = false) {
         if let existingWindow = noteWindows[note.id] {
             existingWindow.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -62,6 +63,9 @@ final class StickyNoteWindowManager: NSObject {
         applyWindowLevel(window, isPinned: isPinned)
 
         noteWindows[note.id] = window
+        if remembersNewNoteSize {
+            noteIdsRememberingNewNoteSize.insert(note.id)
+        }
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -231,7 +235,8 @@ final class StickyNoteWindowManager: NSObject {
                 y: Double(frame.origin.y),
                 width: Double(max(Self.minimumContentSize.width, frame.size.width)),
                 height: Double(max(Self.minimumContentSize.height, frame.size.height))
-            )
+            ),
+            remembersAsNewNoteSize: noteIdsRememberingNewNoteSize.contains(noteId)
         )
     }
 
@@ -287,6 +292,7 @@ extension StickyNoteWindowManager: NSWindowDelegate {
 
         saveWindowFrame(window, noteId: id)
         noteWindows.removeValue(forKey: id)
+        noteIdsRememberingNewNoteSize.remove(id)
         MacNoteWindowStore.shared.closeWindow(for: id)
     }
 

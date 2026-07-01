@@ -103,6 +103,16 @@ final class VaultStore: ObservableObject {
         (plainNotes + decryptedNotes).sorted { $0.updatedAt > $1.updatedAt }
     }
 
+    func displayTitle(for note: Note, emptyTitle: String = "空笔记") -> String {
+        if let entry = noteIndex.entry(for: note.id) {
+            let fileTitle = NoteTitleFormatter.displayTitle(fromFileName: entry.fileName, noteId: note.id, emptyTitle: "")
+            if !fileTitle.isEmpty {
+                return fileTitle
+            }
+        }
+        return NoteTitleFormatter.displayTitle(from: note.body, emptyTitle: emptyTitle)
+    }
+
     var filteredNotes: [NoteListItem] {
         var readable = readableNotes
 
@@ -376,37 +386,8 @@ final class VaultStore: ObservableObject {
             : container.appendingPathComponent(location.rawValue).appendingPathComponent(fileName)
     }
 
-    nonisolated private static func noteTitle(from body: String) -> String {
-        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "空笔记" }
-        let firstLine = trimmed.components(separatedBy: .newlines)
-            .first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? "空笔记"
-        return firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
     nonisolated private static func fileName(for noteId: String, body: String) -> String {
-        let title = noteTitle(from: body)
-        let invalidScalars = CharacterSet(charactersIn: "/\\:?%*|\"<>")
-            .union(.newlines)
-            .union(.controlCharacters)
-        let cleanedScalars = title.unicodeScalars.map { scalar in
-            invalidScalars.contains(scalar) ? UnicodeScalar(45)! : scalar
-        }
-        var cleaned = String(String.UnicodeScalarView(cleanedScalars))
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .replacingOccurrences(of: #"-+"#, with: "-", options: .regularExpression)
-            .trimmingCharacters(in: CharacterSet(charactersIn: " .-"))
-
-        if cleaned.isEmpty {
-            cleaned = "空笔记"
-        }
-
-        let maxTitleLength = 72
-        if cleaned.count > maxTitleLength {
-            cleaned = String(cleaned.prefix(maxTitleLength)).trimmingCharacters(in: CharacterSet(charactersIn: " .-"))
-        }
-
-        return "\(cleaned)-\(noteId).md"
+        NoteTitleFormatter.fileName(for: noteId, body: body)
     }
 
     nonisolated private static func loadTrashNote(entry: NoteIndexEntry, url: URL, key: SymmetricKey?, storage: VaultStorage) -> TrashNote? {
@@ -782,6 +763,35 @@ final class VaultStore: ObservableObject {
                 plainNotes[index] = updatedNote
             }
         }
+    }
+
+    func renameNote(_ note: Note, title: String) async throws {
+        guard let entry = noteIndex.entry(for: note.id), entry.location == .notes else {
+            throw StorageError.fileNotFound
+        }
+        guard let cleanedTitle = NoteTitleFormatter.sanitizedGeneratedTitle(title) else {
+            throw StorageError.invalidData
+        }
+
+        let newFileName = NoteTitleFormatter.fileName(for: note.id, title: cleanedTitle)
+        guard newFileName != entry.fileName else { return }
+        guard let currentURL = Self.urlForEntry(entry, storage: storage),
+              let targetURL = Self.urlForFileName(newFileName, storage: storage) else {
+            throw StorageError.iCloudUnavailable
+        }
+
+        try storage.moveFile(from: currentURL, to: targetURL)
+        noteIndex.upsert(NoteIndexEntry(
+            noteId: entry.noteId,
+            fileName: newFileName,
+            mode: entry.mode,
+            location: entry.location,
+            deletedAt: entry.deletedAt,
+            purgeAfter: entry.purgeAfter,
+            originalLocation: entry.originalLocation
+        ))
+        try storage.saveIndex(noteIndex)
+        objectWillChange.send()
     }
 
     func deleteNote(_ note: Note) async throws {

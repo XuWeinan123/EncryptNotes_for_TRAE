@@ -4,27 +4,59 @@ import AppKit
 import UniformTypeIdentifiers
 
 struct MacSettingsView: View {
+    enum Tab: Hashable {
+        case general
+        case editor
+        case aiTitle
+        case shortcuts
+        case key
+    }
+
     @ObservedObject private var shortcutStore = ShortcutStore.shared
     @ObservedObject private var vaultStore = VaultStore.shared
     @ObservedObject private var settings = SettingsStore.shared
+    @State private var selectedTab: Tab
     @State private var recordingAction: MarkdownShortcutAction?
+    @State private var settingsErrorMessage: String?
+    @State private var deepSeekAPIKey = ""
+    @State private var geminiAPIKey = ""
+    @State private var apiKeyStatusMessage: String?
+
+    init(selectedTab: Tab = .general) {
+        _selectedTab = State(initialValue: selectedTab)
+    }
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             generalTab
                 .tabItem {
                     Label("通用", systemImage: "gear")
                 }
+                .tag(Tab.general)
+
+            editorTab
+                .tabItem {
+                    Label("编辑器", systemImage: "textformat")
+                }
+                .tag(Tab.editor)
+
+            aiTitleTab
+                .tabItem {
+                    Label("AI 标题", systemImage: "sparkles")
+                }
+                .tag(Tab.aiTitle)
 
             shortcutTab
                 .tabItem {
                     Label("快捷键", systemImage: "keyboard")
                 }
+                .tag(Tab.shortcuts)
 
             keyTab
                 .tabItem {
                     Label("密钥", systemImage: "key")
                 }
+                .tag(Tab.key)
         }
         .padding(.horizontal, DS.s4)
         .padding(.bottom, DS.s4)
@@ -32,63 +64,48 @@ struct MacSettingsView: View {
             minWidth: 640,
             idealWidth: 640,
             maxWidth: 640,
-            minHeight: 360,
+            minHeight: 660,
             idealHeight: 660,
             maxHeight: 660
         )
         .background(DS.bg)
         .background(shortcutRecorder)
+        .onAppear(perform: loadAIAPIKeys)
+        .alert("设置失败", isPresented: settingsErrorBinding) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(settingsErrorMessage ?? "无法保存这个设置。")
+        }
     }
 
     private var generalTab: some View {
         panelStack {
             SWPageHeader(
                 title: "通用设置",
-                subtitle: "调整编辑体验、存储位置和主题",
+                subtitle: "调整菜单栏、置顶、存储位置和主题",
                 systemImage: "gearshape",
                 tint: DS.primaryDeep
             )
 
-            macPanel("编辑器") {
-                SWSettingsRow("编辑字号", subtitle: "仅影响 mac 便利贴编辑器", systemImage: "textformat.size") {
-                    VStack(alignment: .trailing, spacing: DS.s1) {
-                        Text(String(format: "%.0f", settings.macEditorFontSize))
-                            .font(DS.caption())
-                            .foregroundColor(DS.textSecondary)
-                            .monospacedDigit()
-                        Slider(
-                            value: fontSizeBinding,
-                            in: SettingsStore.macEditorFontSizeRange,
-                            step: SettingsStore.macEditorFontSizeStep
-                        )
-                        .frame(width: 150)
+            macPanel("菜单栏") {
+                toggleRow("启动时打开菜单栏应用", subtitle: "登录 Mac 后自动启动应用，并显示在菜单栏中。", systemImage: "menubar.rectangle", isOn: launchAtLoginBinding)
+
+                SWRowDivider()
+
+                SWSettingsRow("最近笔记数量", subtitle: "控制菜单栏中显示的最近笔记数量", systemImage: "list.number") {
+                    Picker("最近笔记数量", selection: recentNotesLimitBinding) {
+                        ForEach(Array(SettingsStore.macRecentNotesLimitRange), id: \.self) { count in
+                            Text("\(count)").tag(count)
+                        }
                     }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .frame(width: 86)
                 }
+            }
 
-                SWRowDivider()
-
-                SWSettingsRow("行高", subtitle: "控制编辑器正文的阅读密度", systemImage: "line.3.horizontal.decrease") {
-                    VStack(alignment: .trailing, spacing: DS.s1) {
-                        Text(String(format: "%.2fx", settings.macEditorLineHeightMultiple))
-                            .font(DS.caption())
-                            .foregroundColor(DS.textSecondary)
-                            .monospacedDigit()
-                        Slider(
-                            value: lineHeightBinding,
-                            in: SettingsStore.macEditorLineHeightRange,
-                            step: 0.05
-                        )
-                        .frame(width: 150)
-                    }
-                }
-
-                SWRowDivider()
-
-                toggleRow("复制时增加段落空行", subtitle: "粘贴到 Typora 等 Markdown 软件时更接近段落格式", systemImage: "doc.on.clipboard", isOn: $settings.copyAddsParagraphSpacing)
-
-                SWRowDivider()
-
-                toggleRow("关闭时自动删除空笔记", subtitle: "正文为空的便利贴关闭后直接移除", systemImage: "trash", isOn: $settings.autoDeleteEmptyNotes)
+            macPanel("笔记") {
+                toggleRow("笔记默认置顶", subtitle: "新建笔记窗口默认保持在其他窗口上方。", systemImage: "pin.fill", isOn: $settings.pinNewNotesByDefault)
             }
 
             macPanel("存储") {
@@ -116,6 +133,145 @@ struct MacSettingsView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .frame(width: 150)
+                    .tint(DS.primary)
+                }
+            }
+        }
+    }
+
+    private var editorTab: some View {
+        panelStack {
+            SWPageHeader(
+                title: "编辑器",
+                subtitle: "调整便利贴正文输入和复制行为",
+                systemImage: "textformat",
+                tint: DS.primaryDeep
+            )
+
+            macPanel("编辑体验") {
+                SWSettingsRow("编辑字号", subtitle: "仅影响 mac 便利贴编辑器。", systemImage: "textformat.size") {
+                    VStack(alignment: .trailing, spacing: DS.s1) {
+                        Text(String(format: "%.0f", settings.macEditorFontSize))
+                            .font(DS.caption())
+                            .foregroundColor(DS.textSecondary)
+                            .monospacedDigit()
+                        Slider(
+                            value: fontSizeBinding,
+                            in: SettingsStore.macEditorFontSizeRange,
+                            step: SettingsStore.macEditorFontSizeStep
+                        )
+                        .frame(width: 150)
+                        .tint(DS.primary)
+                    }
+                }
+
+                SWRowDivider()
+
+                SWSettingsRow("行高", subtitle: "控制编辑器正文的阅读密度。", systemImage: "line.3.horizontal.decrease") {
+                    VStack(alignment: .trailing, spacing: DS.s1) {
+                        Text(String(format: "%.2fx", settings.macEditorLineHeightMultiple))
+                            .font(DS.caption())
+                            .foregroundColor(DS.textSecondary)
+                            .monospacedDigit()
+                        Slider(
+                            value: lineHeightBinding,
+                            in: SettingsStore.macEditorLineHeightRange,
+                            step: 0.05
+                        )
+                        .frame(width: 150)
+                        .tint(DS.primary)
+                    }
+                }
+            }
+
+            macPanel("编辑行为") {
+                toggleRow("复制为更宽松的 Markdown 段落", subtitle: "复制时自动补充段落空行，便于粘贴到 Typora 等 Markdown 编辑器使用。", systemImage: "doc.on.clipboard", isOn: $settings.copyAddsParagraphSpacing)
+
+                SWRowDivider()
+
+                toggleRow("关闭空白笔记时自动丢弃", subtitle: "正文为空的便利贴关闭后直接移除。", systemImage: "trash", isOn: $settings.autoDeleteEmptyNotes)
+            }
+        }
+    }
+
+    private var aiTitleTab: some View {
+        panelStack {
+            SWPageHeader(
+                title: "AI 标题",
+                subtitle: "关闭便利贴后为菜单栏和 iCloud 文件名生成标题",
+                systemImage: "sparkles",
+                tint: DS.primaryDeep
+            )
+
+            macPanel("开关") {
+                toggleRow("开启 AI 标题", subtitle: "关闭编辑器后发送正文给所选服务生成标题；不会改写正文。", systemImage: "sparkles", isOn: $settings.macAITitleEnabled)
+
+                SWRowDivider()
+
+                toggleRow("标题例外", subtitle: "如果第一行已经是 # 标题，则跳过 AI 标题。", systemImage: "number", isOn: $settings.macAITitleSkipsMarkdownHeading)
+            }
+
+            macPanel("服务") {
+                SWSettingsRow("标题服务", subtitle: "选择关闭编辑器后调用的模型服务", systemImage: "server.rack", tint: DS.primaryDeep) {
+                    Picker("标题服务", selection: $settings.macAITitleProvider) {
+                        ForEach(MacAITitleProvider.allCases) { provider in
+                            Text(provider.title).tag(provider)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 180)
+                    .tint(DS.primary)
+                }
+
+                SWRowDivider()
+
+                apiKeyRow(
+                    title: "DeepSeek API Key",
+                    provider: .deepSeek,
+                    key: $deepSeekAPIKey
+                )
+
+                SWRowDivider()
+
+                apiKeyRow(
+                    title: "Gemini API Key",
+                    provider: .gemini,
+                    key: $geminiAPIKey
+                )
+
+                if let apiKeyStatusMessage {
+                    helperText(apiKeyStatusMessage)
+                }
+            }
+
+            macPanel("Prompt") {
+                VStack(alignment: .leading, spacing: DS.s2) {
+                    HStack {
+                        Label("自定义 Prompt", systemImage: "text.quote")
+                            .font(DS.body())
+                            .foregroundColor(DS.textStrong)
+                        Spacer()
+                        Button("恢复默认") {
+                            settings.resetMacAITitlePrompt()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+
+                    TextEditor(text: $settings.macAITitlePrompt)
+                        .font(.system(size: 13, design: .monospaced))
+                        .scrollContentBackground(.hidden)
+                        .padding(DS.s2)
+                        .frame(height: 96)
+                        .background(DS.surfaceSunken)
+                        .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
+                                .stroke(DS.line, lineWidth: 0.5)
+                        )
+
+                    helperText("正文会发送给当前选择的服务商；加密笔记在已解锁编辑时也会参与生成。")
                 }
             }
         }
@@ -127,7 +283,7 @@ struct MacSettingsView: View {
                 title: "快捷键",
                 subtitle: "录制 mac 菜单栏应用的常用操作组合键",
                 systemImage: "keyboard",
-                tint: DS.link
+                tint: DS.primaryDeep
             )
 
             macPanel("新建笔记") {
@@ -159,15 +315,15 @@ struct MacSettingsView: View {
                     }
                 }
 
-                Button("恢复默认格式快捷键") {
-                    shortcutStore.resetMarkdownShortcuts()
-                    recordingAction = nil
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-
                 helperText(recordingAction == nil ? "点击录制后按下新的组合键；Esc 取消。" : "正在录制：按下新的组合键，或按 Esc 取消。")
             }
+
+            Button("恢复默认快捷键") {
+                shortcutStore.resetAllShortcuts()
+                recordingAction = nil
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
     }
 
@@ -177,7 +333,7 @@ struct MacSettingsView: View {
                 title: "密钥",
                 subtitle: vaultStore.isKeyLoaded ? "这台 Mac 已经可以解锁加密笔记" : "加载密钥后才能查看加密笔记正文",
                 systemImage: vaultStore.isKeyLoaded ? "checkmark.shield.fill" : "lock.shield",
-                tint: vaultStore.isKeyLoaded ? DS.primaryDeep : DS.textSubtle
+                tint: DS.primaryDeep
             )
 
             if vaultStore.isKeyLoaded {
@@ -249,6 +405,37 @@ struct MacSettingsView: View {
         )
     }
 
+    private var recentNotesLimitBinding: Binding<Int> {
+        Binding(
+            get: { settings.macRecentNotesLimit },
+            set: { settings.macRecentNotesLimit = $0 }
+        )
+    }
+
+    private var launchAtLoginBinding: Binding<Bool> {
+        Binding(
+            get: { settings.launchAtLogin },
+            set: { isEnabled in
+                do {
+                    try settings.setLaunchAtLogin(isEnabled)
+                } catch {
+                    settingsErrorMessage = "无法更新登录项设置：\(error.localizedDescription)"
+                }
+            }
+        )
+    }
+
+    private var settingsErrorBinding: Binding<Bool> {
+        Binding(
+            get: { settingsErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    settingsErrorMessage = nil
+                }
+            }
+        )
+    }
+
     private var shortcutRecorder: some View {
         ShortcutRecorderView(recordingAction: $recordingAction) { action, shortcut in
             shortcutStore.setMarkdownShortcut(shortcut, for: action)
@@ -264,6 +451,22 @@ struct MacSettingsView: View {
         ]
     }
 
+    private func apiKeyRow(title: String, provider: MacAITitleProvider, key: Binding<String>) -> some View {
+        SWSettingsRow(title, subtitle: provider == settings.macAITitleProvider ? "当前服务" : nil, systemImage: "key.viewfinder", tint: provider == settings.macAITitleProvider ? DS.primaryDeep : DS.textSubtle) {
+            HStack(spacing: DS.s2) {
+                SecureField(title, text: key)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 210)
+                Button("保存") {
+                    saveAIAPIKey(key.wrappedValue, provider: provider)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                SWStatusBadge(key.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未保存" : "已填写", style: key.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .neutral : .success)
+            }
+        }
+    }
+
     private func panelStack<Content: View>(@ViewBuilder content: @escaping () -> Content) -> some View {
         MacSettingsPage(content: content)
     }
@@ -272,7 +475,7 @@ struct MacSettingsView: View {
         _ title: String,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        SWSectionPanel(title) {
+        SWSectionPanel {
             VStack(alignment: .leading, spacing: DS.s2) {
                 content()
             }
@@ -287,6 +490,7 @@ struct MacSettingsView: View {
             Toggle("", isOn: isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
+                .tint(DS.primary)
         }
     }
 
@@ -353,6 +557,22 @@ struct MacSettingsView: View {
             .foregroundColor(DS.textSubtle)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, DS.s1)
+    }
+
+    private func loadAIAPIKeys() {
+        deepSeekAPIKey = settings.loadMacAITitleAPIKey(for: .deepSeek)
+        geminiAPIKey = settings.loadMacAITitleAPIKey(for: .gemini)
+    }
+
+    private func saveAIAPIKey(_ key: String, provider: MacAITitleProvider) {
+        do {
+            try settings.saveMacAITitleAPIKey(key, for: provider)
+            apiKeyStatusMessage = key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "\(provider.title) API Key 已移除。"
+                : "\(provider.title) API Key 已保存到本机钥匙串。"
+        } catch {
+            settingsErrorMessage = "无法保存 \(provider.title) API Key：\(error.localizedDescription)"
+        }
     }
 
     private func openStorageFolder() {
@@ -445,23 +665,39 @@ struct MacSettingsView: View {
     }
 }
 
+#Preview("设置 - 通用") {
+    MacSettingsView(selectedTab: .general)
+}
+
+#Preview("设置 - 编辑器") {
+    MacSettingsView(selectedTab: .editor)
+}
+
+#Preview("设置 - AI 标题") {
+    MacSettingsView(selectedTab: .aiTitle)
+}
+
+#Preview("设置 - 快捷键") {
+    MacSettingsView(selectedTab: .shortcuts)
+}
+
+#Preview("设置 - 密钥") {
+    MacSettingsView(selectedTab: .key)
+}
+
 private struct MacSettingsPage<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        contentStack
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(DS.bg)
-    }
-
-    private var contentStack: some View {
         VStack(alignment: .leading, spacing: DS.s3) {
             content()
+            Spacer(minLength: 0)
         }
-        .padding(.top, DS.s3)
+        .padding(.top, DS.s6)
         .padding(.horizontal, DS.s3)
         .padding(.bottom, DS.s4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(DS.bg)
     }
 }
 

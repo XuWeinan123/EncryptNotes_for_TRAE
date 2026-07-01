@@ -92,7 +92,8 @@ final class SettingsStoreTests: XCTestCase {
         let store = makeStore()
         XCTAssertFalse(store.copyAddsParagraphSpacing)
         XCTAssertTrue(store.autoDeleteEmptyNotes)
-        XCTAssertEqual(store.macTheme, .green)
+        XCTAssertEqual(store.macTheme, .pink)
+        XCTAssertEqual(store.macRecentNotesLimit, 5)
     }
 
     func testMacThemePersists() {
@@ -101,4 +102,51 @@ final class SettingsStoreTests: XCTestCase {
         let reloaded = makeStore()
         XCTAssertEqual(reloaded.macTheme, .cyan)
     }
+
+    func testRecentNotesLimitIsClamped() {
+        let store = makeStore()
+        store.macRecentNotesLimit = 1
+        XCTAssertEqual(store.macRecentNotesLimit, 3)
+        store.macRecentNotesLimit = 99
+        XCTAssertEqual(store.macRecentNotesLimit, 12)
+    }
+
+    func testRecentNotesLimitPersists() {
+        let store = makeStore()
+        store.macRecentNotesLimit = 7
+        let reloaded = makeStore()
+        XCTAssertEqual(reloaded.macRecentNotesLimit, 7)
+    }
+
+    #if os(macOS)
+    func testMacAITitleDefaults() {
+        let store = makeStore()
+        XCTAssertFalse(store.macAITitleEnabled)
+        XCTAssertEqual(store.macAITitleProvider, .deepSeek)
+        XCTAssertEqual(store.macAITitlePrompt, SettingsStore.defaultMacAITitlePrompt)
+        XCTAssertFalse(store.macAITitleSkipsMarkdownHeading)
+    }
+
+    func testMacAITitlePreferencesPersist() {
+        let store = makeStore()
+        store.macAITitleEnabled = true
+        store.macAITitleProvider = .gemini
+        store.macAITitlePrompt = "Return a short title."
+        store.macAITitleSkipsMarkdownHeading = true
+
+        let reloaded = makeStore()
+        XCTAssertTrue(reloaded.macAITitleEnabled)
+        XCTAssertEqual(reloaded.macAITitleProvider, .gemini)
+        XCTAssertEqual(reloaded.macAITitlePrompt, "Return a short title.")
+        XCTAssertTrue(reloaded.macAITitleSkipsMarkdownHeading)
+    }
+
+    func testResetMacAITitlePromptRestoresDefault() {
+        let store = makeStore()
+        store.macAITitlePrompt = "Custom prompt"
+        store.resetMacAITitlePrompt()
+        XCTAssertEqual(store.macAITitlePrompt, SettingsStore.defaultMacAITitlePrompt)
+    }
+    #endif
+
 }

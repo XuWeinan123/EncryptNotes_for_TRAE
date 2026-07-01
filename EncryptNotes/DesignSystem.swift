@@ -128,7 +128,7 @@ enum DS {
     static let macToolbarIconWidth: CGFloat = 18
 
     private static var currentMacTheme: MacTheme {
-        MacTheme(rawValue: UserDefaults.standard.string(forKey: "BKMacTheme") ?? "") ?? .green
+        MacTheme(rawValue: UserDefaults.standard.string(forKey: "BKMacTheme") ?? "") ?? .pink
     }
 
     // MARK: - Elevation

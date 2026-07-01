@@ -69,12 +69,17 @@ final class ShortcutStore: ObservableObject {
     @Published var newNoteKey: (keyCode: UInt32, modifiers: UInt32)
     @Published private(set) var markdownShortcuts: [MarkdownShortcutAction: MarkdownShortcut]
 
-    private var hotKeyRef: EventHotKeyRef?
+    private var hotKeyRefs: [UInt32: EventHotKeyRef] = [:]
     private var eventHandlerRef: EventHandlerRef?
     private let defaults: UserDefaults
 
     private let newNoteKeyDefaults = "mac.shortcut.newNote"
     private let markdownShortcutDefaults = "mac.shortcut.markdownFormatting"
+    fileprivate enum HotKeyID {
+        static let newNote: UInt32 = 1
+        static let openRecentBase: UInt32 = 10
+        static let activateMenu: UInt32 = 20
+    }
 
     private init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -83,7 +88,7 @@ final class ShortcutStore: ObservableObject {
            let shortcut = try? JSONDecoder.decode(ShortcutData.self, from: data) {
             self.newNoteKey = (shortcut.keyCode, shortcut.modifiers)
         } else {
-            self.newNoteKey = (keyCode: 6, modifiers: UInt32(controlKey | cmdKey))
+            self.newNoteKey = Self.defaultNewNoteShortcut
         }
 
         if let data = defaults.data(forKey: markdownShortcutDefaults),
@@ -105,26 +110,21 @@ final class ShortcutStore: ObservableObject {
     func registerHotKeys() {
         unregisterHotKeys()
 
-        let hotKeyID = EventHotKeyID(signature: OSType(0x424B5730), id: 1)
-
-        RegisterEventHotKey(
-            newNoteKey.keyCode,
-            newNoteKey.modifiers,
-            hotKeyID,
-            GetApplicationEventTarget(),
-            0,
-            &hotKeyRef
-        )
+        registerHotKey(id: HotKeyID.newNote, keyCode: newNoteKey.keyCode, modifiers: newNoteKey.modifiers)
+        registerHotKey(id: HotKeyID.openRecentBase + 1, keyCode: 18, modifiers: UInt32(controlKey | cmdKey))
+        registerHotKey(id: HotKeyID.openRecentBase + 2, keyCode: 19, modifiers: UInt32(controlKey | cmdKey))
+        registerHotKey(id: HotKeyID.openRecentBase + 3, keyCode: 20, modifiers: UInt32(controlKey | cmdKey))
+        registerHotKey(id: HotKeyID.activateMenu, keyCode: 50, modifiers: UInt32(controlKey | cmdKey))
 
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         InstallEventHandler(GetApplicationEventTarget(), hotKeyEventHandler, 1, &eventType, nil, &eventHandlerRef)
     }
 
     func unregisterHotKeys() {
-        if let ref = hotKeyRef {
+        for ref in hotKeyRefs.values {
             UnregisterEventHotKey(ref)
-            hotKeyRef = nil
         }
+        hotKeyRefs.removeAll()
         if let handlerRef = eventHandlerRef {
             RemoveEventHandler(handlerRef)
             eventHandlerRef = nil
@@ -154,6 +154,15 @@ final class ShortcutStore: ObservableObject {
         MacMainMenuController.shared.installMainMenu()
     }
 
+    func resetAllShortcuts() {
+        newNoteKey = Self.defaultNewNoteShortcut
+        markdownShortcuts = Self.defaultMarkdownShortcuts
+        defaults.removeObject(forKey: newNoteKeyDefaults)
+        defaults.removeObject(forKey: markdownShortcutDefaults)
+        registerHotKeys()
+        MacMainMenuController.shared.installMainMenu()
+    }
+
     func markdownAction(matching event: NSEvent) -> MarkdownShortcutAction? {
         let modifiers = Self.carbonModifiers(from: event.modifierFlags)
         let keyCode = UInt32(event.keyCode)
@@ -174,6 +183,10 @@ final class ShortcutStore: ObservableObject {
             .strike: MarkdownShortcut(keyCode: 50, modifiers: UInt32(controlKey | shiftKey), keyEquivalent: "`"),
             .htmlComment: MarkdownShortcut(keyCode: 27, modifiers: UInt32(controlKey), keyEquivalent: "-")
         ]
+    }
+
+    private static var defaultNewNoteShortcut: (keyCode: UInt32, modifiers: UInt32) {
+        (keyCode: 6, modifiers: UInt32(controlKey | cmdKey))
     }
 
     static func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
@@ -237,6 +250,22 @@ final class ShortcutStore: ObservableObject {
         return parts.joined()
     }
 
+    private func registerHotKey(id: UInt32, keyCode: UInt32, modifiers: UInt32) {
+        var hotKeyID = EventHotKeyID(signature: OSType(0x424B5730), id: id)
+        var ref: EventHotKeyRef?
+        let status = RegisterEventHotKey(
+            keyCode,
+            modifiers,
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &ref
+        )
+        if status == noErr, let ref {
+            hotKeyRefs[id] = ref
+        }
+    }
+
     private func persistMarkdownShortcuts() {
         let rawShortcuts = Dictionary(uniqueKeysWithValues: markdownShortcuts.map { ($0.key.rawValue, $0.value) })
         let data = try? JSONEncoder.encode(rawShortcuts)
@@ -255,8 +284,14 @@ private let hotKeyEventHandler: EventHandlerUPP = { (_, eventRef, _) -> OSStatus
     GetEventParameter(eventRef, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &hkID)
 
     DispatchQueue.main.async {
-        if hkID.id == 1 {
+        if hkID.id == ShortcutStore.HotKeyID.newNote {
             NotificationCenter.default.post(name: .macNewNote, object: nil)
+        } else if hkID.id >= ShortcutStore.HotKeyID.openRecentBase + 1,
+                  hkID.id <= ShortcutStore.HotKeyID.openRecentBase + 3 {
+            let index = Int(hkID.id - ShortcutStore.HotKeyID.openRecentBase - 1)
+            NotificationCenter.default.post(name: .macOpenRecentNote, object: index)
+        } else if hkID.id == ShortcutStore.HotKeyID.activateMenu {
+            NotificationCenter.default.post(name: .macActivateMenuBarMenu, object: nil)
         }
     }
     return noErr
@@ -264,4 +299,6 @@ private let hotKeyEventHandler: EventHandlerUPP = { (_, eventRef, _) -> OSStatus
 
 extension Notification.Name {
     static let macNewNote = Notification.Name("macNewNote")
+    static let macOpenRecentNote = Notification.Name("macOpenRecentNote")
+    static let macActivateMenuBarMenu = Notification.Name("macActivateMenuBarMenu")
 }

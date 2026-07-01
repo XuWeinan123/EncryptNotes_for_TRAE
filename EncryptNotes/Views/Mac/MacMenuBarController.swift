@@ -12,14 +12,15 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
     private let windowStore = MacNoteWindowStore.shared
     private let shortcutStore = ShortcutStore.shared
     private let settings = SettingsStore.shared
-    private let syncStore = SyncStatusStore.shared
-    private let automaticRefreshInterval: TimeInterval = 30
 
     private var allNotesWindow: NSWindow?
     private var trashWindow: NSWindow?
     private var settingsWindow: NSWindow?
-    private var automaticRefreshTimer: Timer?
-    private var isRefreshing = false
+
+    private enum RecentMenuNote {
+        case readable(Note)
+        case locked(EncryptedNoteInfo)
+    }
 
     private override init() {
         super.init()
@@ -42,7 +43,6 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         statusItem?.menu = menu
 
         buildMenu(menu)
-        startAutomaticRefresh()
 
         NotificationCenter.default.addObserver(
             self,
@@ -50,10 +50,21 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
             name: .macNewNote,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleOpenRecentNote(_:)),
+            name: .macOpenRecentNote,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleActivateMenuBarMenu),
+            name: .macActivateMenuBarMenu,
+            object: nil
+        )
     }
 
     deinit {
-        automaticRefreshTimer?.invalidate()
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -91,53 +102,26 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         newNoteItem.target = self
         menu.addItem(newNoteItem)
 
-        let refreshItem = NSMenuItem(
-            title: isRefreshing ? "正在刷新 iCloud 文件夹…" : "刷新 iCloud 文件夹",
-            action: #selector(refreshICloudFolder),
-            keyEquivalent: "r"
-        )
-        refreshItem.keyEquivalentModifierMask = [.command]
-        refreshItem.target = self
-        refreshItem.isEnabled = !isRefreshing
-        menu.addItem(refreshItem)
-
         menu.addItem(.separator())
 
-        let recentHeader = NSMenuItem(title: "最近笔记", action: nil, keyEquivalent: "")
-        recentHeader.isEnabled = false
-        menu.addItem(recentHeader)
+        let recentItems = recentMenuNotes()
 
-        let recentNotes = Array(vaultStore.readableNotes.prefix(8))
-        let lockedNotes = vaultStore.isKeyLoaded ? [] : Array(vaultStore.lockedEncryptedNotes.prefix(8))
-
-        for note in recentNotes {
-            let firstLine = note.body.components(separatedBy: .newlines).first { !$0.isEmpty } ?? "(空笔记)"
-            let truncated = String(firstLine.prefix(40))
-            let title = note.isEncrypted ? "🔒 \(truncated)" : "📝 \(truncated)"
-            let item = NSMenuItem(title: title, action: #selector(openNote(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = note.id
+        for (index, recentItem) in recentItems.enumerated() {
+            let item = menuItem(for: recentItem, index: index)
             menu.addItem(item)
         }
 
-        for info in lockedNotes.prefix(max(0, 8 - recentNotes.count)) {
-            let item = NSMenuItem(title: "🔒 加密笔记 · 未加载密钥", action: #selector(openLockedNote(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = info.id
-            menu.addItem(item)
-        }
-
-        if recentNotes.isEmpty && lockedNotes.isEmpty {
+        if recentItems.isEmpty {
             let emptyItem = NSMenuItem(title: "暂无笔记", action: nil, keyEquivalent: "")
             emptyItem.isEnabled = false
             menu.addItem(emptyItem)
         }
 
-        menu.addItem(.separator())
-
         let allNotesItem = NSMenuItem(title: "全部笔记…", action: #selector(showAllNotes), keyEquivalent: "")
         allNotesItem.target = self
         menu.addItem(allNotesItem)
+
+        menu.addItem(.separator())
 
         let trashItem = NSMenuItem(
             title: "回收站…\(vaultStore.trashCount > 0 ? " (\(vaultStore.trashCount))" : "")",
@@ -179,7 +163,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
             do {
                 let note = try await vaultStore.createNote(body: "", isEncrypted: wantEncrypted)
                 await MainActor.run {
-                    StickyNoteWindowManager.shared.showNote(note, at: mouseLocation)
+                    StickyNoteWindowManager.shared.showNote(note, at: mouseLocation, remembersNewNoteSize: true)
                 }
             } catch {
                 await MainActor.run {
@@ -189,34 +173,14 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         }
     }
 
-    @objc private func refreshICloudFolder() {
-        Task {
-            await refreshICloudFolder(showFailureAlert: true)
-        }
+    @objc private func handleOpenRecentNote(_ notification: Notification) {
+        guard let index = notification.object as? Int else { return }
+        openRecentNote(at: index)
     }
 
-    private func startAutomaticRefresh() {
-        guard automaticRefreshTimer == nil else { return }
-        automaticRefreshTimer = Timer.scheduledTimer(withTimeInterval: automaticRefreshInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                await self?.refreshICloudFolder(showFailureAlert: false)
-            }
-        }
-    }
-
-    private func refreshICloudFolder(showFailureAlert: Bool) async {
-        guard !isRefreshing else { return }
-        isRefreshing = true
-        statusItem?.menu?.update()
-
-        await vaultStore.refreshFromStorage()
-
-        isRefreshing = false
-        statusItem?.menu?.update()
-
-        if showFailureAlert, case .failed(let message) = syncStore.status {
-            showError(message: message)
-        }
+    @objc private func handleActivateMenuBarMenu() {
+        NSApp.activate(ignoringOtherApps: true)
+        statusItem?.button?.performClick(nil)
     }
 
     @objc private func openNote(_ sender: NSMenuItem) {
@@ -229,6 +193,47 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         guard let noteId = sender.representedObject as? String,
               let info = vaultStore.lockedEncryptedNotes.first(where: { $0.id == noteId }) else { return }
         openLockedStickyNote(for: info)
+    }
+
+    private func recentMenuNotes() -> [RecentMenuNote] {
+        let limit = settings.macRecentNotesLimit
+        var items = vaultStore.readableNotes.prefix(limit).map { RecentMenuNote.readable($0) }
+        if !vaultStore.isKeyLoaded, items.count < limit {
+            let remaining = limit - items.count
+            items.append(contentsOf: vaultStore.lockedEncryptedNotes.prefix(remaining).map { .locked($0) })
+        }
+        return items
+    }
+
+    private func menuItem(for recentItem: RecentMenuNote, index: Int) -> NSMenuItem {
+        let item: NSMenuItem
+        switch recentItem {
+        case .readable(let note):
+            let title = vaultStore.displayTitle(for: note, emptyTitle: "(空笔记)")
+            let truncated = String(title.prefix(30))
+            item = NSMenuItem(title: "\(note.isEncrypted ? "🔒" : "📝") \(truncated)", action: #selector(openNote(_:)), keyEquivalent: "")
+            item.representedObject = note.id
+        case .locked(let info):
+            item = NSMenuItem(title: "🔒 加密笔记 · 未加载密钥", action: #selector(openLockedNote(_:)), keyEquivalent: "")
+            item.representedObject = info.id
+        }
+        if index < 3 {
+            item.keyEquivalent = "\(index + 1)"
+            item.keyEquivalentModifierMask = [.control, .command]
+        }
+        item.target = self
+        return item
+    }
+
+    private func openRecentNote(at index: Int) {
+        let items = recentMenuNotes()
+        guard items.indices.contains(index) else { return }
+        switch items[index] {
+        case .readable(let note):
+            openStickyNote(for: note)
+        case .locked(let info):
+            openLockedStickyNote(for: info)
+        }
     }
 
     func openStickyNote(for note: Note) {

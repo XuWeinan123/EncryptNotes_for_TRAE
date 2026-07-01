@@ -84,6 +84,10 @@ struct StickyNoteEditorView: View {
                 .help(viewModel.didCopy ? "已复制" : "复制")
 
                 Menu {
+                    Button(action: { viewModel.fitWindowToContent() }) {
+                        Label("适应内容", systemImage: "arrow.up.left.and.arrow.down.right")
+                    }
+                    
                     Button(action: { toggleFindInterface() }) {
                         Label("搜索", systemImage: "magnifyingglass")
                     }
@@ -91,14 +95,7 @@ struct StickyNoteEditorView: View {
 
                     Divider()
 
-                    Button(action: { viewModel.fitWindowToContent() }) {
-                        Label("适应内容", systemImage: "arrow.up.left.and.arrow.down.right")
-                    }
-
-                    Divider()
-
-                    Button(role: viewModel.isContentEmpty ? .destructive : nil,
-                           action: { viewModel.deleteNote() }) {
+                    Button(role: .destructive, action: { viewModel.deleteNote() }) {
                         Label("移到回收站", systemImage: "trash")
                     }
                 } label: {
@@ -263,6 +260,7 @@ private final class ToolbarHoverTrackingView: NSView {
     private var pendingHoverOn: DispatchWorkItem?
     private var pendingHoverOff: DispatchWorkItem?
     private var isHovering = false
+    private var mouseMonitor: Any?
 
     override var mouseDownCanMoveWindow: Bool { true }
 
@@ -277,16 +275,21 @@ private final class ToolbarHoverTrackingView: NSView {
         }
         let area = NSTrackingArea(
             rect: bounds,
-            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
             owner: self,
             userInfo: nil
         )
         trackingAreaRef = area
         addTrackingArea(area)
+        updateHoverForCurrentMouseLocation()
     }
 
     override func mouseEntered(with event: NSEvent) {
-        scheduleHoverOn()
+        updateHover(withWindowPoint: event.locationInWindow)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        updateHover(withWindowPoint: event.locationInWindow)
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -300,8 +303,18 @@ private final class ToolbarHoverTrackingView: NSView {
             pendingHoverOn = nil
             pendingHoverOff?.cancel()
             pendingHoverOff = nil
+            removeMouseMonitor()
             setHovering(false)
+        } else {
+            installMouseMonitor()
+            DispatchQueue.main.async { [weak self] in
+                self?.updateHoverForCurrentMouseLocation()
+            }
         }
+    }
+
+    deinit {
+        removeMouseMonitor()
     }
 
     private func scheduleHoverOn() {
@@ -315,6 +328,14 @@ private final class ToolbarHoverTrackingView: NSView {
         }
         pendingHoverOn = item
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.04, execute: item)
+    }
+
+    private func showHoverImmediately() {
+        pendingHoverOff?.cancel()
+        pendingHoverOff = nil
+        pendingHoverOn?.cancel()
+        pendingHoverOn = nil
+        setHovering(true)
     }
 
     private func scheduleHoverOff() {
@@ -337,6 +358,40 @@ private final class ToolbarHoverTrackingView: NSView {
         return bounds.contains(pointInView)
     }
 
+    private func installMouseMonitor() {
+        removeMouseMonitor()
+        mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]) { [weak self] event in
+            self?.updateHover(with: event)
+            return event
+        }
+    }
+
+    private func removeMouseMonitor() {
+        if let mouseMonitor {
+            NSEvent.removeMonitor(mouseMonitor)
+            self.mouseMonitor = nil
+        }
+    }
+
+    private func updateHoverForCurrentMouseLocation() {
+        guard let window else { return }
+        updateHover(withWindowPoint: window.mouseLocationOutsideOfEventStream)
+    }
+
+    private func updateHover(with event: NSEvent) {
+        guard let window, event.window == window else { return }
+        updateHover(withWindowPoint: event.locationInWindow)
+    }
+
+    private func updateHover(withWindowPoint pointInWindow: NSPoint) {
+        let pointInView = convert(pointInWindow, from: nil)
+        if bounds.contains(pointInView) {
+            showHoverImmediately()
+        } else if isHovering {
+            scheduleHoverOff()
+        }
+    }
+
     private func setHovering(_ hovering: Bool) {
         guard isHovering != hovering else { return }
         isHovering = hovering
@@ -357,6 +412,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
     private let windowStore = MacNoteWindowStore.shared
     private let settings = SettingsStore.shared
     private let syncStore = SyncStatusStore.shared
+    private let aiTitleService = MacAITitleService()
     private let isPreview: Bool
     private var saveTask: Task<Void, Never>?
     private var copyResetTask: Task<Void, Never>?
@@ -461,7 +517,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
         saveTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled else { return }
-            await self?.saveSnapshot(bodyToSave, note: noteToUpdate)
+            _ = await self?.saveSnapshot(bodyToSave, note: noteToUpdate)
         }
     }
 
@@ -482,19 +538,21 @@ final class StickyNoteEditorViewModel: ObservableObject {
         let noteToUpdate = note
 
         Task {
-            await saveSnapshot(bodyToSave, note: noteToUpdate)
+            _ = await saveSnapshot(bodyToSave, note: noteToUpdate)
         }
     }
 
-    private func saveSnapshot(_ snapshot: String, note noteToUpdate: Note) async {
+    private func saveSnapshot(_ snapshot: String, note noteToUpdate: Note) async -> Bool {
         do {
             try await vaultStore.updateNote(noteToUpdate, body: snapshot)
             if let updatedNote = vaultStore.readableNotes.first(where: { $0.id == noteToUpdate.id }) {
                 note = updatedNote
             }
             syncStore.setSaved()
+            return true
         } catch {
             syncStore.setFailed(message: error.localizedDescription)
+            return false
         }
     }
 
@@ -506,11 +564,59 @@ final class StickyNoteEditorViewModel: ObservableObject {
         }
 
         guard settings.autoDeleteEmptyNotes && isContentEmpty else {
-            save()
+            saveAndGenerateTitleOnClose()
             return
         }
 
         discardEmptyNote()
+    }
+
+    private func saveAndGenerateTitleOnClose() {
+        let snapshot = text
+        let noteToUpdate = note
+        syncStore.setSyncing()
+
+        Task {
+            let didSave: Bool
+            if snapshot == noteToUpdate.body {
+                syncStore.setSaved()
+                didSave = true
+            } else {
+                didSave = await saveSnapshot(snapshot, note: noteToUpdate)
+            }
+
+            guard didSave,
+                  let savedNote = vaultStore.readableNotes.first(where: { $0.id == noteToUpdate.id }) else {
+                return
+            }
+            await generateAITitleIfNeeded(for: savedNote, body: snapshot)
+        }
+    }
+
+    private func generateAITitleIfNeeded(for savedNote: Note, body: String) async {
+        guard settings.macAITitleEnabled else { return }
+        guard syncStore.isNetworkAvailable else { return }
+        guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        if settings.macAITitleSkipsMarkdownHeading,
+           NoteTitleFormatter.firstNonEmptyLineIsMarkdownHeading(in: body) {
+            return
+        }
+
+        let provider = settings.macAITitleProvider
+        let apiKey = settings.loadMacAITitleAPIKey(for: provider)
+        guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        do {
+            let title = try await aiTitleService.generateTitle(
+                for: body,
+                provider: provider,
+                apiKey: apiKey,
+                prompt: settings.macAITitlePrompt
+            )
+            try await vaultStore.renameNote(savedNote, title: title)
+        } catch {
+            // Title generation is opportunistic; note saving must remain the source of truth.
+        }
     }
 
     private func discardEmptyNoteAndClose() {
@@ -595,6 +701,19 @@ private final class ToolbarInsetScrollView: NSScrollView {
         if textView.frame != frame {
             textView.frame = frame
         }
+    }
+
+    func preservingVisibleOrigin(_ changes: () -> Void) {
+        let origin = contentView.bounds.origin
+        changes()
+        let maxY = max(0, documentView?.bounds.height ?? 0 - contentView.bounds.height)
+        let maxX = max(0, documentView?.bounds.width ?? 0 - contentView.bounds.width)
+        let boundedOrigin = NSPoint(
+            x: min(max(0, origin.x), maxX),
+            y: min(max(0, origin.y), maxY)
+        )
+        contentView.scroll(to: boundedOrigin)
+        reflectScrolledClipView(contentView)
     }
 
     func syncFindToolbarAppearance() {
@@ -771,28 +890,48 @@ struct MacTextView: NSViewRepresentable {
         textView.isUpdating = true
         defer { textView.isUpdating = false }
 
-        if textView.string != text {
+        let targetInset = MacStickyEditorLayout.textContainerInset(fontSize: fontSize)
+        let needsExternalTextReplace = textView.string != text
+        let needsStyleRefresh = context.coordinator.needsStyleRefresh(
+            fontSize: fontSize,
+            lineHeightMultiple: lineHeightMultiple
+        )
+        let needsInsetRefresh = !NSEqualSizes(textView.textContainerInset, targetInset)
+
+        if needsExternalTextReplace {
             let selectedRanges = textView.selectedRanges
             let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: text, fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
-            textView.textStorage?.setAttributedString(attributed)
-            textView.selectedRanges = selectedRanges
-        } else {
+            scrollView.preservingVisibleOrigin {
+                textView.textStorage?.setAttributedString(attributed)
+                textView.selectedRanges = selectedRanges
+            }
+            context.coordinator.markStyleRendered(fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
+        } else if needsStyleRefresh {
             let paraStyle = MacMarkdownHighlighter.paragraphStyle(size: fontSize, multiple: lineHeightMultiple)
             let bodyFont = MacMarkdownHighlighter.bodyFont(size: fontSize)
             let baselineOff = MacMarkdownHighlighter.baselineOffset(size: fontSize, font: bodyFont, multiple: lineHeightMultiple)
             let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
             if fullRange.length > 0 {
-                textView.textStorage?.addAttributes([
-                    .font: bodyFont,
-                    .paragraphStyle: paraStyle,
-                    .baselineOffset: baselineOff
-                ], range: fullRange)
-                MacMarkdownHighlighter.applyMarkdownHighlighting(to: textView, lineHeightMultiple: lineHeightMultiple)
+                scrollView.preservingVisibleOrigin {
+                    textView.textStorage?.addAttributes([
+                        .font: bodyFont,
+                        .paragraphStyle: paraStyle,
+                        .baselineOffset: baselineOff
+                    ], range: fullRange)
+                    MacMarkdownHighlighter.applyMarkdownHighlighting(to: textView, lineHeightMultiple: lineHeightMultiple)
+                }
             }
+            context.coordinator.markStyleRendered(fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
         }
 
-        textView.textContainerInset = MacStickyEditorLayout.textContainerInset(fontSize: fontSize)
-        scrollView.syncDocumentSize(textView)
+        if needsInsetRefresh {
+            textView.textContainerInset = targetInset
+        }
+        if needsExternalTextReplace || needsStyleRefresh || needsInsetRefresh {
+            scrollView.preservingVisibleOrigin {
+                scrollView.syncDocumentSize(textView)
+            }
+        }
 
         if textView.placeholderLabel.string != placeholder {
             textView.placeholderLabel.string = placeholder
@@ -830,6 +969,8 @@ extension MacTextView {
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: MacTextView
         private var lastText: String = ""
+        private var lastRenderedFontSize: CGFloat = 0
+        private var lastRenderedLineHeightMultiple: CGFloat = 0
 
         init(_ parent: MacTextView) {
             self.parent = parent
@@ -841,6 +982,17 @@ extension MacTextView {
             textView.textStorage?.setAttributedString(attributed)
             textView.typingAttributes = Self.typingAttributes(fontSize: fontSize, lineHeightMultiple: parent.lineHeightMultiple)
             lastText = text
+            lastRenderedFontSize = fontSize
+            lastRenderedLineHeightMultiple = parent.lineHeightMultiple
+        }
+
+        func needsStyleRefresh(fontSize: CGFloat, lineHeightMultiple: CGFloat) -> Bool {
+            lastRenderedFontSize != fontSize || lastRenderedLineHeightMultiple != lineHeightMultiple
+        }
+
+        func markStyleRendered(fontSize: CGFloat, lineHeightMultiple: CGFloat) {
+            lastRenderedFontSize = fontSize
+            lastRenderedLineHeightMultiple = lineHeightMultiple
         }
 
         static func typingAttributes(fontSize: CGFloat, lineHeightMultiple: CGFloat) -> [NSAttributedString.Key: Any] {
@@ -866,10 +1018,22 @@ extension MacTextView {
             let newText = textView.string
             parent.onChange(newText)
             lastText = newText
-            MacMarkdownHighlighter.applyMarkdownHighlighting(to: textView, lineHeightMultiple: parent.lineHeightMultiple)
+            let scrollView = textView.enclosingScrollView as? ToolbarInsetScrollView
+            if let scrollView {
+                scrollView.preservingVisibleOrigin {
+                    MacMarkdownHighlighter.applyMarkdownHighlighting(to: textView, lineHeightMultiple: parent.lineHeightMultiple)
+                }
+            } else {
+                MacMarkdownHighlighter.applyMarkdownHighlighting(to: textView, lineHeightMultiple: parent.lineHeightMultiple)
+            }
+            markStyleRendered(fontSize: parent.fontSize, lineHeightMultiple: parent.lineHeightMultiple)
             textView.typingAttributes = Self.typingAttributes(fontSize: parent.fontSize, lineHeightMultiple: parent.lineHeightMultiple)
             parent.updatePlaceholderVisibility(textView)
-            (textView.enclosingScrollView as? ToolbarInsetScrollView)?.syncDocumentSize(textView)
+            if let scrollView {
+                scrollView.preservingVisibleOrigin {
+                    scrollView.syncDocumentSize(textView)
+                }
+            }
             textView.isUpdating = false
         }
 
@@ -941,6 +1105,7 @@ final class AutoFocusTextView: NSTextView {
         let cmdOptOnly = cmd && opt && !ctrl && !shift
 
         if !cmd && !ctrl && !opt && !shift && event.keyCode == 36 {
+            if completeMarkdownCodeFence() { return }
             if continueMarkdownList() { return }
         }
 
@@ -1012,6 +1177,15 @@ final class AutoFocusTextView: NSTextView {
         return true
     }
 
+    private func completeMarkdownCodeFence() -> Bool {
+        guard !hasMarkedText() else { return false }
+        guard let result = MacMarkdownFormatter.completeCodeFenceIfNeeded(in: string, selection: selectedRange()) else {
+            return false
+        }
+        applyTextResult(result.text, selection: result.selection)
+        return true
+    }
+
     private func applyFormat(_ command: MacMarkdownFormatCommand) {
         guard !hasMarkedText() else { return }
 
@@ -1026,18 +1200,55 @@ final class AutoFocusTextView: NSTextView {
         isUpdating = true
         let fontSize = (coordinator?.parent.fontSize) ?? 14
         let lineHeightMultiple = (coordinator?.parent.lineHeightMultiple) ?? CGFloat(SettingsStore.defaultMacEditorLineHeightMultiple)
-        let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: text, fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
-        textStorage?.setAttributedString(attributed)
+        let oldText = string
+        let change = replacementChange(from: oldText, to: text)
+        let scrollView = enclosingScrollView as? ToolbarInsetScrollView
+        guard shouldChangeText(in: change.range, replacementString: change.replacement) else {
+            isUpdating = false
+            return
+        }
+
+        textStorage?.replaceCharacters(in: change.range, with: change.replacement)
         setSelectedRange(selection)
         didChangeText()
         coordinator?.parent.onChange(text)
-        MacMarkdownHighlighter.applyMarkdownHighlighting(to: self, lineHeightMultiple: lineHeightMultiple)
-        (enclosingScrollView as? ToolbarInsetScrollView)?.syncDocumentSize(self)
+        if let scrollView {
+            scrollView.preservingVisibleOrigin {
+                MacMarkdownHighlighter.applyMarkdownHighlighting(to: self, lineHeightMultiple: lineHeightMultiple)
+                scrollView.syncDocumentSize(self)
+            }
+        } else {
+            MacMarkdownHighlighter.applyMarkdownHighlighting(to: self, lineHeightMultiple: lineHeightMultiple)
+        }
         typingAttributes = MacTextView.Coordinator.typingAttributes(fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
+        coordinator?.markStyleRendered(fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
         if let placeholder = self.subviews.first(where: { $0 is PlaceholderLabel }) as? PlaceholderLabel {
             placeholder.isHidden = !text.isEmpty
         }
         isUpdating = false
+    }
+
+    private func replacementChange(from oldText: String, to newText: String) -> (range: NSRange, replacement: String) {
+        let old = oldText as NSString
+        let new = newText as NSString
+        var prefix = 0
+        while prefix < old.length,
+              prefix < new.length,
+              old.character(at: prefix) == new.character(at: prefix) {
+            prefix += 1
+        }
+
+        var suffix = 0
+        while suffix < old.length - prefix,
+              suffix < new.length - prefix,
+              old.character(at: old.length - suffix - 1) == new.character(at: new.length - suffix - 1) {
+            suffix += 1
+        }
+
+        let oldLength = old.length - prefix - suffix
+        let newLength = new.length - prefix - suffix
+        let replacement = new.substring(with: NSRange(location: prefix, length: newLength))
+        return (NSRange(location: prefix, length: oldLength), replacement)
     }
 
     @objc func markdownBold(_ sender: Any?) { applyFormat(.bold) }
@@ -1128,6 +1339,11 @@ extension MacMarkdownHighlighter {
         let baselineOff = baselineOffset(size: fontSize, font: bodyFont, multiple: lineHeightMultiple)
 
         let fullRange = NSRange(location: 0, length: (text as NSString).length)
+        let undoManager = textView.undoManager
+        let wasUndoRegistrationEnabled = undoManager?.isUndoRegistrationEnabled ?? false
+        if wasUndoRegistrationEnabled {
+            undoManager?.disableUndoRegistration()
+        }
         textStorage.beginEditing()
         textStorage.setAttributes([
             .font: bodyFont,
@@ -1150,6 +1366,9 @@ extension MacMarkdownHighlighter {
         }
 
         textStorage.endEditing()
+        if wasUndoRegistrationEnabled {
+            undoManager?.enableUndoRegistration()
+        }
         textView.selectedRanges = selectedRanges
         textView.typingAttributes = [
             .font: bodyFont,

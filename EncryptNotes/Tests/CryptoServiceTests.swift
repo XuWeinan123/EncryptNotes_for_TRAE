@@ -32,15 +32,15 @@ final class CryptoServiceTests: XCTestCase {
         let cryptoService = CryptoService.shared
         let key = SymmetricKey(size: .bits256)
 
-        var encrypted = try cryptoService.encryptMarkdownBody("原始内容", using: key)
+        let encrypted = try cryptoService.encryptMarkdownBody("原始内容", using: key)
 
         let base64Start = encrypted.index(encrypted.startIndex, offsetBy: "bkwenc:v1:".count)
         let prefix = encrypted[..<base64Start]
         var base64 = String(encrypted[base64Start...])
-        if let lastChar = base64.last, lastChar != "A" {
-            base64 = String(base64.dropLast()) + "A"
+        if let firstChar = base64.first, firstChar != "A" {
+            base64 = "A" + String(base64.dropFirst())
         } else {
-            base64 = String(base64.dropLast()) + "B"
+            base64 = "B" + String(base64.dropFirst())
         }
         let tampered = String(prefix) + base64
 

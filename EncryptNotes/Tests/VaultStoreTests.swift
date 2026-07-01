@@ -37,6 +37,51 @@ final class VaultStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testCreateNoteWithHeadingTitleOmitsHashFromFileName() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_heading_filename_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "test-vault-heading")
+
+        let note = try await store.createNote(body: "# Hello\nBody", isEncrypted: false)
+
+        let mdURL = try savedNoteURL(in: tmpDir, noteId: note.id)
+        XCTAssertTrue(mdURL.lastPathComponent.hasPrefix("Hello-"))
+        XCTAssertFalse(mdURL.lastPathComponent.hasPrefix("#"))
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
+    func testRenameNoteChangesFileNameButLeavesMarkdownContentUntouched() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_ai_title_rename_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "test-vault-ai-title")
+
+        let originalBody = "第一行正文\n\n更多内容"
+        let note = try await store.createNote(body: originalBody, isEncrypted: false)
+        let oldURL = try savedNoteURL(in: tmpDir, noteId: note.id)
+        let oldData = try Data(contentsOf: oldURL)
+        let oldContent = String(data: oldData, encoding: .utf8) ?? ""
+
+        try await store.renameNote(note, title: "AI 总结/标题?")
+
+        let newURL = try savedNoteURL(in: tmpDir, noteId: note.id)
+        XCTAssertNotEqual(oldURL.lastPathComponent, newURL.lastPathComponent)
+        XCTAssertTrue(newURL.lastPathComponent.hasPrefix("AI 总结-标题-"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: oldURL.path))
+
+        let newData = try Data(contentsOf: newURL)
+        let newContent = String(data: newData, encoding: .utf8) ?? ""
+        XCTAssertEqual(newContent, oldContent)
+        XCTAssertTrue(newContent.contains(originalBody))
+        XCTAssertEqual(store.displayTitle(for: note), "AI 总结-标题")
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
     func testCreateEncryptedNoteRequiresKey() async throws {
         let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_encreq_\(UUID().uuidString)")
         let storage = try TemporaryStorage(baseURL: tmpDir)

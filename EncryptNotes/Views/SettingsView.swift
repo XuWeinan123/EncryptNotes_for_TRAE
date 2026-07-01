@@ -229,11 +229,13 @@ private struct PrivacySettingsView: View {
                 SWSettingsRow("进入后台时隐藏内容", subtitle: "切换到其他应用时遮住笔记内容", systemImage: "eye.slash") {
                     Toggle("", isOn: $settings.hideContentOnBackground)
                         .labelsHidden()
+                        .tint(DS.primary)
                 }
                 SWRowDivider()
                 SWSettingsRow("重新打开 App 时自动卸载密钥", subtitle: "再次进入 App 后需要重新导入密钥", systemImage: "lock.rotation") {
                     Toggle("", isOn: $settings.autoUnloadKeyOnForeground)
                         .labelsHidden()
+                        .tint(DS.primary)
                 }
             }
         }
