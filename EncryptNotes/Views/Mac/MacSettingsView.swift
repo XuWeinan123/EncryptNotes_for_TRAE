@@ -42,7 +42,7 @@ struct MacSettingsView: View {
 
             aiTitleTab
                 .tabItem {
-                    Label("AI 标题", systemImage: "sparkles")
+                    Label("AI", systemImage: "sparkles")
                 }
                 .tag(Tab.aiTitle)
 
@@ -197,7 +197,7 @@ struct MacSettingsView: View {
     private var aiTitleTab: some View {
         panelStack {
             SWPageHeader(
-                title: "AI 标题",
+                title: "AI",
                 subtitle: "关闭便利贴后为菜单栏和 iCloud 文件名生成标题",
                 systemImage: "sparkles",
                 tint: DS.primaryDeep

@@ -13,6 +13,7 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
         menuBarController.setup()
         MacMainMenuController.shared.installMainMenu()
         _ = shortcutStore
+        menuBarController.openIntroWindowIfNeeded()
 
         Task {
             await VaultStore.shared.initialize()

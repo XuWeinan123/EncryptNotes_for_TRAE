@@ -41,6 +41,7 @@
 				Views/Mac/AllNotesWindow.swift,
 				Views/Mac/LockedStickyNoteView.swift,
 				Views/Mac/MacMenuBarController.swift,
+				Views/Mac/MacIntroView.swift,
 				Views/Mac/MacSettingsView.swift,
 				Views/Mac/StickyNoteEditorView.swift,
 				Views/Mac/StickyNoteWindow.swift,
@@ -409,7 +410,7 @@
 		000000000000000111000000 /* Debug configuration for PBXNativeTarget "EncryptNotes" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Icon;
 				CODE_SIGN_ENTITLEMENTS = EncryptNotes/EncryptNotesDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
@@ -419,7 +420,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Seal Notes";
-				INFOPLIST_KEY_CFBundleIconName = AppIcon;
+				INFOPLIST_KEY_CFBundleIconName = Icon;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -457,7 +458,7 @@
 		000000000000000112000000 /* Release configuration for PBXNativeTarget "EncryptNotes" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Icon;
 				CODE_SIGN_ENTITLEMENTS = EncryptNotes/EncryptNotes.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
@@ -467,7 +468,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Seal Notes";
-				INFOPLIST_KEY_CFBundleIconName = AppIcon;
+				INFOPLIST_KEY_CFBundleIconName = Icon;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -547,7 +548,7 @@
 		000000000000000511000000 /* Debug configuration for PBXNativeTarget "EncryptNotesMac" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Icon;
 				CODE_SIGN_ENTITLEMENTS = EncryptNotes/EncryptNotesMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -578,7 +579,7 @@
 		000000000000000512000000 /* Release configuration for PBXNativeTarget "EncryptNotesMac" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Icon;
 				CODE_SIGN_ENTITLEMENTS = EncryptNotes/EncryptNotesMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;

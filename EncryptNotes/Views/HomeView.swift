@@ -194,7 +194,7 @@ struct HomeView: View {
                                         .font(DS.title())
                                         .foregroundColor(DS.textEmphasize)
                                 } else {
-                                    Text("别看我")
+                                    Text("Seal Note")
                                         .font(DS.page())
                                         .foregroundColor(DS.textEmphasize)
                                 }
@@ -659,7 +659,7 @@ struct PrivacyScreenView: View {
                     .font(.system(size: 44, weight: .regular))
                     .foregroundColor(DS.textSecondary)
 
-                Text("别看我")
+                Text("Seal Note")
                     .font(DS.page())
                     .foregroundColor(DS.textEmphasize)
             }

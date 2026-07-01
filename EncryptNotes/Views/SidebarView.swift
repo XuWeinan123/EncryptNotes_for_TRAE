@@ -88,7 +88,7 @@ struct SidebarView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: DS.s3) {
-            Text("别看我")
+            Text("Seal Note")
                 .font(DS.page())
                 .foregroundColor(DS.textEmphasize)
 

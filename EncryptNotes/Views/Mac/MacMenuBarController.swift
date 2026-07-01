@@ -16,6 +16,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
     private var allNotesWindow: NSWindow?
     private var trashWindow: NSWindow?
     private var settingsWindow: NSWindow?
+    private var introWindow: NSWindow?
 
     private enum RecentMenuNote {
         case readable(Note)
@@ -69,11 +70,11 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
     }
 
     private func configureStatusButton(_ button: NSStatusBarButton) {
-        button.toolTip = "别看我"
+        button.toolTip = "Seal Note"
         button.imageScaling = .scaleProportionallyDown
         button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
 
-        if let image = NSImage(systemSymbolName: "pencil", accessibilityDescription: "别看我") {
+        if let image = NSImage(systemSymbolName: "pencil", accessibilityDescription: "Seal Note") {
             image.isTemplate = true
             button.title = ""
             button.image = image
@@ -150,7 +151,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "退出《别看我》", action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "退出Seal Note", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
     }
@@ -360,6 +361,40 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    func openIntroWindowIfNeeded() {
+        guard !settings.hideMacIntroOnLaunch else { return }
+        if introWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 620, height: 720),
+                styleMask: [.titled, .closable, .fullSizeContentView],
+                backing: .buffered,
+                defer: false
+            )
+            let hostingView = NSHostingView(rootView: MacIntroView {
+                window.close()
+            })
+            window.title = ""
+            window.contentView = hostingView
+            window.contentMinSize = NSSize(width: 620, height: 720)
+            window.contentMaxSize = NSSize(width: 620, height: 720)
+            window.center()
+            window.isReleasedWhenClosed = false
+            window.delegate = self
+            window.isMovableByWindowBackground = true
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = true
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
+            window.standardWindowButton(.closeButton)?.isHidden = true
+            window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+            window.standardWindowButton(.zoomButton)?.isHidden = true
+            introWindow = window
+        }
+        introWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     @objc private func quitApp() {
         NSApp.terminate(nil)
     }
@@ -382,6 +417,8 @@ extension MacMenuBarController: NSWindowDelegate {
             trashWindow = nil
         } else if window == settingsWindow {
             settingsWindow = nil
+        } else if window == introWindow {
+            introWindow = nil
         }
     }
 }

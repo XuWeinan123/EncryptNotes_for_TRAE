@@ -159,6 +159,10 @@ final class SettingsStore: ObservableObject {
     @Published var macAITitleSkipsMarkdownHeading: Bool {
         didSet { defaults.set(macAITitleSkipsMarkdownHeading, forKey: Keys.macAITitleSkipsMarkdownHeading) }
     }
+
+    @Published var hideMacIntroOnLaunch: Bool {
+        didSet { defaults.set(hideMacIntroOnLaunch, forKey: Keys.hideMacIntroOnLaunch) }
+    }
     #endif
 
     init(defaults: UserDefaults = .standard, keychainStore: KeychainStore? = nil) {
@@ -199,6 +203,7 @@ final class SettingsStore: ObservableObject {
         let storedPrompt = defaults.string(forKey: Keys.macAITitlePrompt) ?? ""
         self.macAITitlePrompt = storedPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Self.defaultMacAITitlePrompt : storedPrompt
         self.macAITitleSkipsMarkdownHeading = defaults.object(forKey: Keys.macAITitleSkipsMarkdownHeading) as? Bool ?? false
+        self.hideMacIntroOnLaunch = defaults.object(forKey: Keys.hideMacIntroOnLaunch) as? Bool ?? false
         #endif
     }
 
@@ -222,6 +227,7 @@ final class SettingsStore: ObservableObject {
         macAITitleProvider = Self.defaultMacAITitleProvider
         macAITitlePrompt = Self.defaultMacAITitlePrompt
         macAITitleSkipsMarkdownHeading = false
+        hideMacIntroOnLaunch = false
         #endif
     }
 
@@ -296,6 +302,7 @@ final class SettingsStore: ObservableObject {
         static let macAITitleProvider = "BKMacAITitleProvider"
         static let macAITitlePrompt = "BKMacAITitlePrompt"
         static let macAITitleSkipsMarkdownHeading = "BKMacAITitleSkipsMarkdownHeading"
+        static let hideMacIntroOnLaunch = "BKHideMacIntroOnLaunch"
         #endif
     }
 }

@@ -38,7 +38,7 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
         #if os(macOS)
         let cloudDocsURL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs")
-        return cloudDocsURL.appendingPathComponent("别看我")
+        return cloudDocsURL.appendingPathComponent("Seal Note")
         #else
         return nil
         #endif

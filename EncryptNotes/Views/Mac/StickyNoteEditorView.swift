@@ -24,6 +24,7 @@ struct StickyNoteEditorView: View {
                 fontSize: CGFloat(settings.macEditorFontSize),
                 lineHeightMultiple: CGFloat(settings.macEditorLineHeightMultiple),
                 autoFocus: true,
+                isEditable: !viewModel.isContentLocked,
                 onChange: { viewModel.textDidChange($0) },
                 onSaveShortcut: { viewModel.saveImmediately() },
                 onApplyShortcut: { viewModel.saveImmediately() },
@@ -41,6 +42,7 @@ struct StickyNoteEditorView: View {
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .blur(radius: viewModel.isContentLocked ? 3 : 0)
 
             VStack(spacing: 0) {
                 MacToolbarHoverRegion { hovering in
@@ -71,8 +73,24 @@ struct StickyNoteEditorView: View {
                 StickyNoteWindowManager.shared.closeWindow(for: viewModel.note.id)
             }
         }
+        .onChange(of: viewModel.isContentLocked) { _, locked in
+            if locked {
+                hideFindInterface()
+            }
+        }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                Button(action: { viewModel.toggleEncryptionLock() }) {
+                    Label(
+                        viewModel.isContentLocked ? "解锁" : "上锁",
+                        systemImage: viewModel.isContentLocked ? "lock.fill" : "lock.open.fill"
+                    )
+                    .labelStyle(.iconOnly)
+                    .frame(width: DS.macToolbarIconWidth)
+                }
+                .disabled(viewModel.isEncryptionToggling)
+                .help(viewModel.isContentLocked ? "解锁" : "加密并锁定")
+
                 Button(action: { viewModel.copyNoteText() }) {
                     Label(
                         viewModel.didCopy ? "已复制" : "复制",
@@ -81,17 +99,20 @@ struct StickyNoteEditorView: View {
                     .labelStyle(.iconOnly)
                     .frame(width: DS.macToolbarIconWidth)
                 }
+                .disabled(viewModel.isContentLocked)
                 .help(viewModel.didCopy ? "已复制" : "复制")
 
                 Menu {
                     Button(action: { viewModel.fitWindowToContent() }) {
                         Label("适应内容", systemImage: "arrow.up.left.and.arrow.down.right")
                     }
+                    .disabled(viewModel.isContentLocked)
                     
                     Button(action: { toggleFindInterface() }) {
                         Label("搜索", systemImage: "magnifyingglass")
                     }
                     .keyboardShortcut("f", modifiers: .command)
+                    .disabled(viewModel.isContentLocked)
 
                     Divider()
 
@@ -140,6 +161,14 @@ struct StickyNoteEditorView: View {
                 secondaryButton: .cancel()
             )
         }
+        .alert("需要密钥", isPresented: $viewModel.showingKeyRequiredAlert) {
+            Button("打开设置") {
+                MacMenuBarController.shared.openSettingsWindow()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("请先在设置中创建并导出密钥，或导入已有密钥。")
+        }
     }
 
     private func adjustFontSize(by delta: Double) {
@@ -161,6 +190,7 @@ struct StickyNoteEditorView: View {
     }
 
     private func toggleFindInterface() {
+        guard !viewModel.isContentLocked else { return }
         guard let window = NSApp.keyWindow else { return }
         guard let textView = editorTextView(in: window) else {
             let sender = FindPanelActionSender(tag: NSTextFinder.Action.showFindInterface.rawValue)
@@ -184,6 +214,16 @@ struct StickyNoteEditorView: View {
         DispatchQueue.main.async {
             scrollView?.syncFindToolbarAppearance()
         }
+    }
+
+    private func hideFindInterface() {
+        guard let window = editorWindow(),
+              let textView = editorTextView(in: window) else { return }
+        let sender = FindPanelActionSender(tag: NSTextFinder.Action.hideFindInterface.rawValue)
+        AutoFocusTextView.setFindToolbarActive(false, showsSeparator: false, in: window)
+        textView.performFindPanelAction(sender)
+        (textView.enclosingScrollView as? ToolbarInsetScrollView)?.syncFindToolbarAppearance()
+        isFindBarVisible = false
     }
 
     private func editorTextView(in window: NSWindow) -> AutoFocusTextView? {
@@ -407,6 +447,10 @@ final class StickyNoteEditorViewModel: ObservableObject {
     @Published var showingDeleteConfirmation = false
     @Published var didCopy = false
     @Published var forceClose = false
+    @Published var isContentLocked = false
+    @Published var ciphertextPreview = ""
+    @Published var isEncryptionToggling = false
+    @Published var showingKeyRequiredAlert = false
 
     private let vaultStore = VaultStore.shared
     private let windowStore = MacNoteWindowStore.shared
@@ -419,7 +463,8 @@ final class StickyNoteEditorViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     var isContentEmpty: Bool {
-        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let body = isContentLocked ? note.body : text
+        return body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     init(note: Note, isPreview: Bool = false) {
@@ -444,11 +489,13 @@ final class StickyNoteEditorViewModel: ObservableObject {
     }
 
     func textDidChange(_ newText: String) {
+        guard !isContentLocked else { return }
         text = newText
         debouncedSave()
     }
 
     func copyNoteText() {
+        guard !isContentLocked else { return }
         let copiedText = settings.copyAddsParagraphSpacing
             ? MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
             : text
@@ -467,6 +514,15 @@ final class StickyNoteEditorViewModel: ObservableObject {
 
     func togglePin() {
         isPinned.toggle()
+    }
+
+    func toggleEncryptionLock() {
+        guard !isEncryptionToggling else { return }
+        if isContentLocked {
+            unlockEncryptedContent()
+        } else {
+            lockContent()
+        }
     }
 
     func deleteNote() {
@@ -495,11 +551,16 @@ final class StickyNoteEditorViewModel: ObservableObject {
     }
 
     func saveImmediately() {
+        guard !isContentLocked else {
+            syncStore.setSaved()
+            return
+        }
         saveTask?.cancel()
         save()
     }
 
     func fitWindowToContent() {
+        guard !isContentLocked else { return }
         StickyNoteWindowManager.shared.fitWindowToContent(
             noteId: note.id,
             text: text,
@@ -508,6 +569,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
     }
 
     private func debouncedSave() {
+        guard !isContentLocked else { return }
         saveTask?.cancel()
 
         syncStore.setSyncing()
@@ -522,6 +584,10 @@ final class StickyNoteEditorViewModel: ObservableObject {
     }
 
     private func save() {
+        guard !isContentLocked else {
+            syncStore.setSaved()
+            return
+        }
         guard !isPreview else {
             note.body = text
             syncStore.setSaved()
@@ -556,7 +622,79 @@ final class StickyNoteEditorViewModel: ObservableObject {
         }
     }
 
+    private func lockContent() {
+        guard !isPreview else { return }
+        guard vaultStore.isKeyLoaded else {
+            showingKeyRequiredAlert = true
+            return
+        }
+
+        saveTask?.cancel()
+        isEncryptionToggling = true
+        syncStore.setSyncing()
+
+        let bodyToEncrypt = text
+        let noteToEncrypt = note
+        let start = Date()
+        print("Seal Note encryption start note=\(noteToEncrypt.id) bytes=\(bodyToEncrypt.utf8.count)")
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.isEncryptionToggling = false }
+            do {
+                let result = try await self.vaultStore.encryptNoteForEditing(noteToEncrypt, body: bodyToEncrypt)
+                let elapsed = Date().timeIntervalSince(start) * 1000
+                print("Seal Note encryption end note=\(noteToEncrypt.id) elapsed_ms=\(String(format: "%.2f", elapsed))")
+                self.note = result.note
+                self.ciphertextPreview = result.ciphertext
+                self.text = result.ciphertext
+                self.isContentLocked = true
+                self.syncStore.setSaved()
+            } catch {
+                let elapsed = Date().timeIntervalSince(start) * 1000
+                print("Seal Note encryption failed note=\(noteToEncrypt.id) elapsed_ms=\(String(format: "%.2f", elapsed)) error=\(error.localizedDescription)")
+                self.syncStore.setFailed(message: error.localizedDescription)
+            }
+        }
+    }
+
+    private func unlockEncryptedContent() {
+        let noteToDecrypt = note
+        let start = Date()
+        isEncryptionToggling = true
+        print("Seal Note decryption start note=\(noteToDecrypt.id)")
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.isEncryptionToggling = false }
+            do {
+                let decrypted = try await self.vaultStore.decryptEncryptedNoteBody(noteToDecrypt)
+                let elapsed = Date().timeIntervalSince(start) * 1000
+                print("Seal Note decryption end note=\(noteToDecrypt.id) elapsed_ms=\(String(format: "%.2f", elapsed))")
+                self.note = Note(
+                    id: noteToDecrypt.id,
+                    body: decrypted,
+                    createdAt: noteToDecrypt.createdAt,
+                    updatedAt: noteToDecrypt.updatedAt,
+                    isEncrypted: true
+                )
+                self.ciphertextPreview = ""
+                self.text = decrypted
+                self.isContentLocked = false
+                self.syncStore.setSaved()
+            } catch {
+                let elapsed = Date().timeIntervalSince(start) * 1000
+                print("Seal Note decryption failed note=\(noteToDecrypt.id) elapsed_ms=\(String(format: "%.2f", elapsed)) error=\(error.localizedDescription)")
+                self.syncStore.setFailed(message: error.localizedDescription)
+            }
+        }
+    }
+
     private func handleWindowWillClose() {
+        guard !isContentLocked else {
+            syncStore.setSaved()
+            return
+        }
         guard !isPreview else {
             note.body = text
             syncStore.setSaved()
@@ -760,6 +898,7 @@ struct MacTextView: NSViewRepresentable {
     let fontSize: CGFloat
     let lineHeightMultiple: CGFloat
     let autoFocus: Bool
+    let isEditable: Bool
     let onChange: (String) -> Void
     let onSaveShortcut: () -> Void
     let onApplyShortcut: () -> Void
@@ -776,6 +915,7 @@ struct MacTextView: NSViewRepresentable {
         fontSize: CGFloat,
         lineHeightMultiple: CGFloat,
         autoFocus: Bool = true,
+        isEditable: Bool = true,
         onChange: @escaping (String) -> Void,
         onSaveShortcut: @escaping () -> Void,
         onApplyShortcut: @escaping () -> Void,
@@ -791,6 +931,7 @@ struct MacTextView: NSViewRepresentable {
         self.fontSize = fontSize
         self.lineHeightMultiple = lineHeightMultiple
         self.autoFocus = autoFocus
+        self.isEditable = isEditable
         self.onChange = onChange
         self.onSaveShortcut = onSaveShortcut
         self.onApplyShortcut = onApplyShortcut
@@ -822,8 +963,8 @@ struct MacTextView: NSViewRepresentable {
         textView.coordinator = context.coordinator
         textView.isAutoFocusEnabled = autoFocus
 
-        textView.isEditable = true
-        textView.isSelectable = true
+        textView.isEditable = isEditable
+        textView.isSelectable = isEditable
         textView.isRichText = false
         textView.importsGraphics = false
         textView.usesFontPanel = false
@@ -873,6 +1014,8 @@ struct MacTextView: NSViewRepresentable {
         context.coordinator.parent = self
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.onFindVisibilityChange = onFindVisibilityChange
+        textView.isEditable = isEditable
+        textView.isSelectable = isEditable
 
         // IME composition uses marked text; rewriting textStorage here cancels Chinese candidates.
         if textView.hasMarkedText() {
@@ -1082,6 +1225,9 @@ final class AutoFocusTextView: NSTextView {
     }
 
     override func performFindPanelAction(_ sender: Any?) {
+        if !isEditable, findActionTag(from: sender) != NSTextFinder.Action.hideFindInterface.rawValue {
+            return
+        }
         updateToolbarAppearanceForFindAction(sender)
         super.performFindPanelAction(sender)
         DispatchQueue.main.async { [weak self] in
@@ -1103,6 +1249,16 @@ final class AutoFocusTextView: NSTextView {
         let cmdOnly = cmd && !ctrl && !opt && !shift
         let cmdShiftOnly = cmd && shift && !ctrl && !opt
         let cmdOptOnly = cmd && opt && !ctrl && !shift
+
+        if !isEditable {
+            if (cmdOnly && ["c", "f", "s"].contains(chars.lowercased()))
+                || (cmdShiftOnly && ["c", "s"].contains(chars.lowercased()))
+                || (cmdOptOnly && chars.lowercased() == "f") {
+                return
+            }
+            super.keyDown(with: event)
+            return
+        }
 
         if !cmd && !ctrl && !opt && !shift && event.keyCode == 36 {
             if completeMarkdownCodeFence() { return }
@@ -1169,6 +1325,7 @@ final class AutoFocusTextView: NSTextView {
     }
 
     private func continueMarkdownList() -> Bool {
+        guard isEditable else { return false }
         guard !hasMarkedText() else { return false }
         guard let result = MacMarkdownFormatter.continueListIfNeeded(in: string, selection: selectedRange()) else {
             return false
@@ -1178,6 +1335,7 @@ final class AutoFocusTextView: NSTextView {
     }
 
     private func completeMarkdownCodeFence() -> Bool {
+        guard isEditable else { return false }
         guard !hasMarkedText() else { return false }
         guard let result = MacMarkdownFormatter.completeCodeFenceIfNeeded(in: string, selection: selectedRange()) else {
             return false
@@ -1187,6 +1345,7 @@ final class AutoFocusTextView: NSTextView {
     }
 
     private func applyFormat(_ command: MacMarkdownFormatCommand) {
+        guard isEditable else { return }
         guard !hasMarkedText() else { return }
 
         let currentText = self.string

@@ -1,6 +1,6 @@
-# 《别看我》macOS v0.1 开发计划
+# Seal NotemacOS v0.1 开发计划
 
-> 本计划基于根目录 `别看我_macOS_PRD_v0.1.md` 制定，目标是方便交给其他模型或开发者直接执行。  
+> 本计划基于根目录 `Seal Note_macOS_PRD_v0.1.md` 制定，目标是方便交给其他模型或开发者直接执行。  
 > macOS v0.1 的产品形态：**菜单栏 App + 独立悬浮便利贴窗口 + iCloud 文件同步 + 本地 AES-GCM 加密 + 回收站**。
 
 ---
@@ -39,7 +39,7 @@
 - 继续使用同一目录结构：
 
 ```text
-iCloud Drive / 别看我 /
+iCloud Drive / Seal Note /
   vault.json
   notes/
     <note_id>.bkwplain.json
@@ -228,7 +228,7 @@ EncryptNotes/Views/Mac/MacMenuBarController.swift
 
 加载密钥文件… / 移除本机密钥
 设置…
-退出《别看我》
+退出Seal Note
 ```
 
 ### 验收
@@ -943,7 +943,7 @@ window.makeKeyAndOrderFront(nil)
 
 1. 先读：
    - `AGENTS.md`
-   - `别看我_macOS_PRD_v0.1.md`
+   - `Seal Note_macOS_PRD_v0.1.md`
    - `EncryptNotes/Storage/VaultStorage.swift`
    - `EncryptNotes/Storage/ICloudVaultStorage.swift`
    - `EncryptNotes/Stores/VaultStore.swift`

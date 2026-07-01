@@ -438,7 +438,7 @@ final class VaultStore: ObservableObject {
 
         let now = Date()
         let defaults: [(String, Date)] = [
-            ("欢迎使用别看我。\n\n你可以像写卡片一样记录想法，也可以在需要时创建加密笔记。\n\n#欢迎", now),
+            ("欢迎使用Seal Note。\n\n你可以像写卡片一样记录想法，也可以在需要时创建加密笔记。\n\n#欢迎", now),
             ("标签写法示例：\n\n在正文中输入 #灵感 或 #日记 ，它们会出现在侧边栏的标签区域。\n\n#使用说明 #标签", now.addingTimeInterval(-1)),
             ("加密笔记适合保存更私密的内容。\n\n首次创建笔记时，你可以选择创建密钥。创建密钥后，新建笔记时可以打开\"加密笔记\"开关。\n\n#加密", now.addingTimeInterval(-2))
         ]
@@ -633,7 +633,7 @@ final class VaultStore: ObservableObject {
         dateFormatter.dateFormat = "yyyy-MM-dd"
         let dateStr = dateFormatter.string(from: Date())
         let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("别看我-密钥-\(dateStr).bkwkey")
+            .appendingPathComponent("Seal Note-密钥-\(dateStr).bkwkey")
         try data.write(to: tempURL)
         return tempURL
     }
@@ -695,10 +695,31 @@ final class VaultStore: ObservableObject {
 
     func updateNote(_ note: Note, body: String) async throws {
         guard let _ = vaultId else { throw VaultError.notReady }
-        let now = Date()
+        _ = try saveReadableNote(note, body: body, mode: note.isEncrypted ? .encrypted : .plain)
+    }
 
+    func encryptNoteForEditing(_ note: Note, body: String) async throws -> (note: Note, ciphertext: String) {
+        guard let _ = vaultId else { throw VaultError.notReady }
+        guard currentKey != nil else { throw VaultError.keyNotLoaded }
+        return try saveReadableNote(note, body: body, mode: .encrypted)
+    }
+
+    func decryptEncryptedNoteBody(_ note: Note) async throws -> String {
+        guard let key = currentKey else { throw VaultError.keyNotLoaded }
+        guard let entry = noteIndex.entry(for: note.id),
+              entry.mode == .encrypted,
+              let url = Self.urlForEntry(entry, storage: storage) else {
+            throw StorageError.fileNotFound
+        }
+        let mdFile = try storage.loadMarkdownFile(at: url)
+        return try cryptoService.decryptMarkdownBody(mdFile.body, using: key)
+    }
+
+    private func saveReadableNote(_ note: Note, body: String, mode: NoteFileMode) throws -> (note: Note, ciphertext: String) {
+        let now = Date()
+        let isEncrypted = mode == .encrypted
         let finalBody: String
-        if note.isEncrypted {
+        if isEncrypted {
             guard let key = currentKey else { throw VaultError.keyNotLoaded }
             finalBody = try cryptoService.encryptMarkdownBody(body, using: key)
         } else {
@@ -737,32 +758,47 @@ final class VaultStore: ObservableObject {
             noteIndex.upsert(NoteIndexEntry(
                 noteId: entry.noteId,
                 fileName: newFileName,
-                mode: entry.mode,
+                mode: mode,
                 location: entry.location,
                 deletedAt: entry.deletedAt,
                 purgeAfter: entry.purgeAfter,
                 originalLocation: entry.originalLocation
             ))
-            try? storage.saveIndex(noteIndex)
+        } else {
+            noteIndex.upsert(NoteIndexEntry(
+                noteId: note.id,
+                fileName: newFileName,
+                mode: mode,
+                location: .notes
+            ))
         }
+        try storage.saveIndex(noteIndex)
 
         let updatedNote = Note(
             id: note.id,
             body: body,
             createdAt: note.createdAt,
             updatedAt: now,
-            isEncrypted: note.isEncrypted
+            isEncrypted: isEncrypted
         )
 
-        if note.isEncrypted {
+        if isEncrypted {
+            plainNotes.removeAll { $0.id == note.id }
             if let index = decryptedNotes.firstIndex(where: { $0.id == note.id }) {
                 decryptedNotes[index] = updatedNote
+            } else {
+                decryptedNotes.insert(updatedNote, at: 0)
             }
         } else {
+            decryptedNotes.removeAll { $0.id == note.id }
             if let index = plainNotes.firstIndex(where: { $0.id == note.id }) {
                 plainNotes[index] = updatedNote
+            } else {
+                plainNotes.insert(updatedNote, at: 0)
             }
         }
+        lockedEncryptedNotes.removeAll { $0.id == note.id }
+        return (updatedNote, finalBody)
     }
 
     func renameNote(_ note: Note, title: String) async throws {
@@ -1041,7 +1077,7 @@ final class VaultStore: ObservableObject {
         let dateStr = dateFormatter.string(from: Date())
 
         let tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("别看我-笔记-\(dateStr)-\(UUID().uuidString.prefix(8))")
+            .appendingPathComponent("Seal Note-笔记-\(dateStr)-\(UUID().uuidString.prefix(8))")
         try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
 
         let fileDateFormatter = DateFormatter()
@@ -1065,7 +1101,7 @@ final class VaultStore: ObservableObject {
         }
 
         let zipURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("别看我-笔记-\(dateStr).zip")
+            .appendingPathComponent("Seal Note-笔记-\(dateStr).zip")
         try ZipUtility.createZip(from: tmpDir, to: zipURL)
         try? FileManager.default.removeItem(at: tmpDir)
 

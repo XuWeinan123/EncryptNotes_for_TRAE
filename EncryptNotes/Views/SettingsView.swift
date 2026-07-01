@@ -311,7 +311,7 @@ private struct AboutView: View {
         SWPanelStack {
             SWSectionPanel {
                 SWSettingsRow("应用名称", systemImage: "app.badge") {
-                    Text("别看我")
+                    Text("Seal Note")
                 }
                 SWRowDivider()
                 SWSettingsRow("当前版本", systemImage: "number") {

@@ -1,8 +1,8 @@
-# 《别看我》macOS PRD v0.1
+# Seal NotemacOS PRD v0.1
 
 ## 1. 产品范围
 
-《别看我》macOS v0.1 是一个常驻菜单栏的悬浮便利贴 App。
+Seal NotemacOS v0.1 是一个常驻菜单栏的悬浮便利贴 App。
 
 本版本只完成一个最小但完整的产品闭环：
 
@@ -24,7 +24,7 @@ v0.1 不追求完整笔记管理能力，不做 Markdown、Checklist、标签、
 - 默认悬浮：新建和打开的便利贴默认置顶。
 - 明文与加密共存：普通内容快速记录，敏感内容本地加密。
 - 文件归用户所有：通过 iCloud 文件同步，不依赖自建账号和服务器。
-- 与《别看我》移动端共享同一套加密空间和数据文件。
+- 与Seal Note移动端共享同一套加密空间和数据文件。
 
 ---
 
@@ -147,7 +147,7 @@ v0.1 不追求完整笔记管理能力，不做 Markdown、Checklist、标签、
 
 加载密钥文件… / 移除本机密钥
 设置…
-退出《别看我》
+退出Seal Note
 ```
 
 ### 6.1 最近笔记规则
@@ -238,7 +238,7 @@ v0.1 只保存纯文本，不做 Markdown 实时渲染和富文本格式。
 ### 8.1 iCloud 目录
 
 ```text
-iCloud Drive / 别看我 /
+iCloud Drive / Seal Note /
   vault.json
   notes /
     <note_id>.bkwplain.json

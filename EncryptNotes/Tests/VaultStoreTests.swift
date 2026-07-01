@@ -125,6 +125,39 @@ final class VaultStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testEncryptNoteForEditingConvertsPlainNoteAndDecryptsFromDisk() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_editor_encrypt_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let key = SymmetricKey(size: .bits256)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "test-vault-editor-encrypt", key: key)
+
+        let note = try await store.createNote(body: "需要加密的内容", isEncrypted: false)
+        let result = try await store.encryptNoteForEditing(note, body: "需要加密的内容")
+
+        XCTAssertTrue(result.note.isEncrypted)
+        XCTAssertEqual(result.note.body, "需要加密的内容")
+        XCTAssertTrue(store.plainNotes.isEmpty)
+        XCTAssertEqual(store.decryptedNotes.first?.id, note.id)
+
+        let entry = try XCTUnwrap(storage.loadIndex()?.entry(for: note.id))
+        XCTAssertEqual(entry.mode, .encrypted)
+
+        let mdURL = try savedNoteURL(in: tmpDir, noteId: note.id)
+        let mdFile = try storage.loadMarkdownFile(at: mdURL)
+        XCTAssertEqual(result.ciphertext, mdFile.body)
+        XCTAssertTrue(mdFile.body.hasPrefix("bkwenc:v1:"))
+
+        let mdContent = String(data: try Data(contentsOf: mdURL), encoding: .utf8) ?? ""
+        XCTAssertFalse(mdContent.contains("需要加密的内容"))
+
+        let decrypted = try await store.decryptEncryptedNoteBody(result.note)
+        XCTAssertEqual(decrypted, "需要加密的内容")
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
     func testNoFreeLimit() async throws {
         let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_nolimit_\(UUID().uuidString)")
         let storage = try TemporaryStorage(baseURL: tmpDir)

@@ -1,8 +1,8 @@
-# 《别看我》PRD v0.1
+# Seal NotePRD v0.1
 
 ## 1. 产品范围
 
-《别看我》v0.1 只面向 Apple 平台，首发只承诺 iPhone 体验。
+Seal Notev0.1 只面向 Apple 平台，首发只承诺 iPhone 体验。
 
 本版本不做账号系统，不做自建服务器，不做 Android，不做 Web，不做多人协作，不做 flomo 批量导入，不做订阅制。
 
@@ -73,7 +73,7 @@ v0.1 不使用单一加密数据库文件，而是采用多个 JSON 文件保存
 建议结构：
 
 ```text
-iCloud Drive / 别看我 /
+iCloud Drive / Seal Note /
   vault.json
   notes /
     note_01.bkwenc.json
@@ -167,7 +167,7 @@ App 不默认把密钥托管给平台，也不依赖账号恢复密钥。
 建议默认命名：
 
 ```text
-别看我-密钥-2026-06-18.bkwkey
+Seal Note-密钥-2026-06-18.bkwkey
 ```
 
 ### 6.3 密钥文件规则

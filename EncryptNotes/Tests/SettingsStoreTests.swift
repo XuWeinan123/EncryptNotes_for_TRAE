@@ -125,6 +125,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.macAITitleProvider, .deepSeek)
         XCTAssertEqual(store.macAITitlePrompt, SettingsStore.defaultMacAITitlePrompt)
         XCTAssertFalse(store.macAITitleSkipsMarkdownHeading)
+        XCTAssertFalse(store.hideMacIntroOnLaunch)
     }
 
     func testMacAITitlePreferencesPersist() {
@@ -141,11 +142,26 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(reloaded.macAITitleSkipsMarkdownHeading)
     }
 
+    func testMacIntroPreferencePersists() {
+        let store = makeStore()
+        store.hideMacIntroOnLaunch = true
+
+        let reloaded = makeStore()
+        XCTAssertTrue(reloaded.hideMacIntroOnLaunch)
+    }
+
     func testResetMacAITitlePromptRestoresDefault() {
         let store = makeStore()
         store.macAITitlePrompt = "Custom prompt"
         store.resetMacAITitlePrompt()
         XCTAssertEqual(store.macAITitlePrompt, SettingsStore.defaultMacAITitlePrompt)
+    }
+
+    func testResetForTestingRestoresMacIntroPreference() {
+        let store = makeStore()
+        store.hideMacIntroOnLaunch = true
+        store.resetForTesting()
+        XCTAssertFalse(store.hideMacIntroOnLaunch)
     }
     #endif
 
