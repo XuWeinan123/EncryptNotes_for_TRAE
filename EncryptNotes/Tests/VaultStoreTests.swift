@@ -486,6 +486,86 @@ final class VaultStoreTests: XCTestCase {
 
         try? FileManager.default.removeItem(at: tmpDir)
     }
+
+    #if os(macOS)
+    @MainActor
+    func testMacCreateEncryptedNoteRequiresKeyFileReference() async throws {
+        SettingsStore.shared.resetForTesting()
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_mac_requires_key_file_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "mac-requires-key-file")
+
+        do {
+            _ = try await store.createNote(body: "需要密钥文件", isEncrypted: true)
+            XCTFail("没有密钥文件引用时不应创建加密笔记")
+        } catch {
+            XCTAssertNotNil(error)
+        }
+
+        try? FileManager.default.removeItem(at: tmpDir)
+        SettingsStore.shared.resetForTesting()
+    }
+
+    @MainActor
+    func testMacOpenEncryptedNoteWithWrongKeyFails() async throws {
+        SettingsStore.shared.resetForTesting()
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_mac_wrong_key_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "mac-wrong-key")
+
+        let correctKeyURL = tmpDir.appendingPathComponent("correct.bkwkey")
+        try await store.createKeyFile(at: correctKeyURL)
+        let note = try await store.createNote(body: "加密内容", isEncrypted: true)
+
+        let wrongKey = VaultKeyManager.shared.generateVaultKey(key: SymmetricKey(size: .bits256))
+        let wrongKeyURL = tmpDir.appendingPathComponent("wrong.bkwkey")
+        try JSONEncoder.default.encode(wrongKey).write(to: wrongKeyURL, options: .atomic)
+        try SettingsStore.shared.saveVaultKeyFileReference(for: wrongKeyURL)
+        await store.refreshFromStorage()
+
+        let info = try XCTUnwrap(store.lockedEncryptedNotes.first(where: { $0.id == note.id }))
+        do {
+            _ = try await store.openEncryptedNote(info)
+            XCTFail("错误密钥不应解密成功")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, VaultKeyFileError.keyMismatch.localizedDescription)
+        }
+
+        try? FileManager.default.removeItem(at: tmpDir)
+        SettingsStore.shared.resetForTesting()
+    }
+
+    @MainActor
+    func testMacPermanentDecryptConvertsEncryptedNoteToPlain() async throws {
+        SettingsStore.shared.resetForTesting()
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_mac_permanent_decrypt_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "mac-permanent-decrypt")
+
+        let keyURL = tmpDir.appendingPathComponent("vault.bkwkey")
+        try await store.createKeyFile(at: keyURL)
+        let encrypted = try await store.createNote(body: "转为明文", isEncrypted: true)
+
+        let plain = try await store.decryptNotePermanently(encrypted)
+
+        XCTAssertFalse(plain.isEncrypted)
+        XCTAssertEqual(plain.body, "转为明文")
+        XCTAssertEqual(store.plainNotes.first?.id, encrypted.id)
+        XCTAssertTrue(store.decryptedNotes.isEmpty)
+        let entry = try XCTUnwrap(storage.loadIndex()?.entry(for: encrypted.id))
+        XCTAssertEqual(entry.mode, .plain)
+        let mdURL = try savedNoteURL(in: tmpDir, noteId: encrypted.id)
+        let mdContent = String(data: try Data(contentsOf: mdURL), encoding: .utf8) ?? ""
+        XCTAssertTrue(mdContent.contains("转为明文"))
+        XCTAssertFalse(mdContent.contains("bkwenc:v1:"))
+
+        try? FileManager.default.removeItem(at: tmpDir)
+        SettingsStore.shared.resetForTesting()
+    }
+    #endif
 }
 
 private final class TemporaryStorage: VaultStorage, @unchecked Sendable {

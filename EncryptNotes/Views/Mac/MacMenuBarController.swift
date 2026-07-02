@@ -105,17 +105,23 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        let recentItems = recentMenuNotes()
+        if case .loading = vaultStore.state {
+            let loadingItem = NSMenuItem(title: "正在加载笔记…", action: nil, keyEquivalent: "")
+            loadingItem.isEnabled = false
+            menu.addItem(loadingItem)
+        } else {
+            let recentItems = recentMenuNotes()
 
-        for (index, recentItem) in recentItems.enumerated() {
-            let item = menuItem(for: recentItem, index: index)
-            menu.addItem(item)
-        }
+            for (index, recentItem) in recentItems.enumerated() {
+                let item = menuItem(for: recentItem, index: index)
+                menu.addItem(item)
+            }
 
-        if recentItems.isEmpty {
-            let emptyItem = NSMenuItem(title: "暂无笔记", action: nil, keyEquivalent: "")
-            emptyItem.isEnabled = false
-            menu.addItem(emptyItem)
+            if recentItems.isEmpty {
+                let emptyItem = NSMenuItem(title: "暂无笔记", action: nil, keyEquivalent: "")
+                emptyItem.isEnabled = false
+                menu.addItem(emptyItem)
+            }
         }
 
         let allNotesItem = NSMenuItem(title: "全部笔记…", action: #selector(showAllNotes), keyEquivalent: "")
@@ -135,7 +141,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         if vaultStore.isKeyLoaded {
-            let unloadKeyItem = NSMenuItem(title: "移除本机密钥", action: #selector(unloadKey), keyEquivalent: "")
+            let unloadKeyItem = NSMenuItem(title: "移除密钥引用", action: #selector(unloadKey), keyEquivalent: "")
             unloadKeyItem.target = self
             menu.addItem(unloadKeyItem)
         } else {
@@ -199,7 +205,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
     private func recentMenuNotes() -> [RecentMenuNote] {
         let limit = settings.macRecentNotesLimit
         var items = vaultStore.readableNotes.prefix(limit).map { RecentMenuNote.readable($0) }
-        if !vaultStore.isKeyLoaded, items.count < limit {
+        if items.count < limit {
             let remaining = limit - items.count
             items.append(contentsOf: vaultStore.lockedEncryptedNotes.prefix(remaining).map { .locked($0) })
         }
@@ -215,7 +221,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
             item = NSMenuItem(title: "\(note.isEncrypted ? "🔒" : "📝") \(truncated)", action: #selector(openNote(_:)), keyEquivalent: "")
             item.representedObject = note.id
         case .locked(let info):
-            item = NSMenuItem(title: "🔒 加密笔记 · 未加载密钥", action: #selector(openLockedNote(_:)), keyEquivalent: "")
+            item = NSMenuItem(title: "🔒 加密笔记", action: #selector(openLockedNote(_:)), keyEquivalent: "")
             item.representedObject = info.id
         }
         if index < 3 {
@@ -243,8 +249,16 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
     }
 
     func openLockedStickyNote(for info: EncryptedNoteInfo) {
-        windowStore.openWindow(for: info.id)
-        StickyNoteWindowManager.shared.showLockedNote(info)
+        Task { @MainActor in
+            do {
+                let note = try await vaultStore.openEncryptedNote(info)
+                openStickyNote(for: note)
+            } catch {
+                showError(message: error.localizedDescription)
+                windowStore.openWindow(for: info.id)
+                StickyNoteWindowManager.shared.showLockedNote(info)
+            }
+        }
     }
 
     @objc func loadKeyFile() {
@@ -323,14 +337,62 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func unloadKey() {
         let alert = NSAlert()
-        alert.messageText = "移除本机密钥？"
-        alert.informativeText = "移除后，所有加密笔记将无法查看，直到重新加载密钥。"
-        alert.addButton(withTitle: "移除")
+        alert.messageText = "移除密钥前如何处理加密笔记？"
+        alert.informativeText = "删除会永久移除加密笔记；解密和导出都需要当前密钥文件可用且匹配。"
+        alert.addButton(withTitle: "永久删除加密笔记")
+        alert.addButton(withTitle: "全部解密为明文")
+        alert.addButton(withTitle: "解密导出并移除本地")
         alert.addButton(withTitle: "取消")
-        if alert.runModal() == .alertFirstButtonReturn {
-            Task {
-                try? await vaultStore.unloadKey()
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            confirmPermanentDeleteEncryptedNotes()
+        case .alertSecondButtonReturn:
+            Task { await runKeyRemovalAction { try await self.vaultStore.decryptAllEncryptedNotesAndRemoveKey() } }
+        case .alertThirdButtonReturn:
+            exportPlaintextAndRemoveEncryptedNotes()
+        default:
+            break
+        }
+    }
+
+    private func confirmPermanentDeleteEncryptedNotes() {
+        let alert = NSAlert()
+        alert.messageText = "永久删除所有加密笔记？"
+        alert.informativeText = "这个操作不会移到回收站，删除后无法恢复。"
+        alert.addButton(withTitle: "永久删除")
+        alert.addButton(withTitle: "取消")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        Task { await runKeyRemovalAction { try await self.vaultStore.permanentlyDeleteAllEncryptedNotes() } }
+    }
+
+    private func exportPlaintextAndRemoveEncryptedNotes() {
+        let panel = NSSavePanel()
+        panel.title = "导出解密后的明文笔记"
+        panel.message = "导出成功后，本地加密笔记会被永久移除。"
+        panel.nameFieldStringValue = "Seal Note-解密笔记.zip"
+        panel.allowedContentTypes = [.init(filenameExtension: "zip")!]
+        guard panel.runModal() == .OK, let saveURL = panel.url else { return }
+
+        Task {
+            do {
+                _ = try await vaultStore.exportPlaintextEncryptedNotesAndRemoveLocalNotes(to: saveURL)
                 StickyNoteWindowManager.shared.closeAllWindows()
+            } catch {
+                await MainActor.run {
+                    showError(message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func runKeyRemovalAction(_ action: @escaping () async throws -> Int) async {
+        do {
+            _ = try await action()
+            StickyNoteWindowManager.shared.closeAllWindows()
+        } catch {
+            await MainActor.run {
+                showError(message: error.localizedDescription)
             }
         }
     }

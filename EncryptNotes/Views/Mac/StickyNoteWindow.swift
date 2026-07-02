@@ -2,6 +2,10 @@ import Foundation
 import SwiftUI
 import AppKit
 
+extension Notification.Name {
+    static let sealNoteLockEncryptedNote = Notification.Name("SealNoteLockEncryptedNote")
+}
+
 @MainActor
 final class StickyNoteWindowManager: NSObject {
     static let shared = StickyNoteWindowManager()
@@ -153,6 +157,10 @@ final class StickyNoteWindowManager: NSObject {
         }
         noteWindows.removeAll()
         MacNoteWindowStore.shared.closeAllWindows()
+    }
+
+    func temporarilyLockAllEncryptedNoteWindows() {
+        NotificationCenter.default.post(name: .sealNoteLockEncryptedNote, object: nil)
     }
 
     func fitWindowToContent(noteId: String, text: String, fontSize: CGFloat) {
@@ -321,6 +329,8 @@ extension StickyNoteWindowManager: NSWindowDelegate {
               let id = window.identifier?.rawValue else { return }
         if let state = MacNoteWindowStore.shared.windowState(for: id), state.isPinned {
             applyWindowLevel(window, isPinned: true)
+        } else if SettingsStore.shared.lockUnpinnedEncryptedNotesOnBackground {
+            NotificationCenter.default.post(name: .sealNoteLockEncryptedNote, object: id)
         }
     }
 }

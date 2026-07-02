@@ -6,6 +6,10 @@
 	objectVersion = 90;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		000000000000000620000000 /* MarkdownView in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000610000000 /* MarkdownView */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		000000000000000400000000 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -103,6 +107,7 @@
 		000000000000000530000000 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				000000000000000620000000 /* MarkdownView in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -183,6 +188,9 @@
 				000000000000000000000010 /* EncryptNotes */,
 			);
 			name = EncryptNotesMac;
+			packageProductDependencies = (
+				000000000000000610000000 /* MarkdownView */,
+			);
 			productName = EncryptNotesMac;
 			productReference = 000000000000000000000122 /* EncryptNotesMac.app */;
 			productType = "com.apple.product-type.application";
@@ -218,6 +226,9 @@
 			);
 			mainGroup = 000000000000000000000001;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				000000000000000600000000 /* XCRemoteSwiftPackageReference "MarkdownView" */,
+			);
 			preferredProjectObjectVersion = 90;
 			productRefGroup = 000000000000000000000020 /* Products */;
 			projectDirPath = "";
@@ -643,6 +654,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		000000000000000600000000 /* XCRemoteSwiftPackageReference "MarkdownView" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/LiYanan2004/MarkdownView.git";
+			requirement = {
+				kind = exactVersion;
+				version = 2.7.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		000000000000000610000000 /* MarkdownView */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000600000000 /* XCRemoteSwiftPackageReference "MarkdownView" */;
+			productName = MarkdownView;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 000000000000000000000000 /* Project object */;
 }

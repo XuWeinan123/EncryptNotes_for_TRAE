@@ -56,6 +56,18 @@ enum MarkdownShortcutAction: String, CaseIterable, Identifiable, Codable {
     }
 }
 
+enum EditorShortcutAction: String, CaseIterable, Identifiable, Codable {
+    case markdownPreview
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .markdownPreview: return "切换 Markdown 预览"
+        }
+    }
+}
+
 struct MarkdownShortcut: Codable, Equatable {
     let keyCode: UInt32
     let modifiers: UInt32
@@ -68,6 +80,7 @@ final class ShortcutStore: ObservableObject {
 
     @Published var newNoteKey: (keyCode: UInt32, modifiers: UInt32)
     @Published private(set) var markdownShortcuts: [MarkdownShortcutAction: MarkdownShortcut]
+    @Published private(set) var editorShortcuts: [EditorShortcutAction: MarkdownShortcut]
 
     private var hotKeyRefs: [UInt32: EventHotKeyRef] = [:]
     private var eventHandlerRef: EventHandlerRef?
@@ -75,6 +88,7 @@ final class ShortcutStore: ObservableObject {
 
     private let newNoteKeyDefaults = "mac.shortcut.newNote"
     private let markdownShortcutDefaults = "mac.shortcut.markdownFormatting"
+    private let editorShortcutDefaults = "mac.shortcut.editorActions"
     fileprivate enum HotKeyID {
         static let newNote: UInt32 = 1
         static let openRecentBase: UInt32 = 10
@@ -102,6 +116,19 @@ final class ShortcutStore: ObservableObject {
             self.markdownShortcuts = shortcuts
         } else {
             self.markdownShortcuts = Self.defaultMarkdownShortcuts
+        }
+
+        if let data = defaults.data(forKey: editorShortcutDefaults),
+           let stored = try? JSONDecoder.decode([String: MarkdownShortcut].self, from: data) {
+            var shortcuts = Self.defaultEditorShortcuts
+            for (rawValue, shortcut) in stored {
+                if let action = EditorShortcutAction(rawValue: rawValue) {
+                    shortcuts[action] = shortcut
+                }
+            }
+            self.editorShortcuts = shortcuts
+        } else {
+            self.editorShortcuts = Self.defaultEditorShortcuts
         }
 
         registerHotKeys()
@@ -142,10 +169,19 @@ final class ShortcutStore: ObservableObject {
         markdownShortcuts[action] ?? Self.defaultMarkdownShortcuts[action]!
     }
 
+    func shortcut(for action: EditorShortcutAction) -> MarkdownShortcut {
+        editorShortcuts[action] ?? Self.defaultEditorShortcuts[action]!
+    }
+
     func setMarkdownShortcut(_ shortcut: MarkdownShortcut, for action: MarkdownShortcutAction) {
         markdownShortcuts[action] = shortcut
         persistMarkdownShortcuts()
         MacMainMenuController.shared.installMainMenu()
+    }
+
+    func setEditorShortcut(_ shortcut: MarkdownShortcut, for action: EditorShortcutAction) {
+        editorShortcuts[action] = shortcut
+        persistEditorShortcuts()
     }
 
     func resetMarkdownShortcuts() {
@@ -154,11 +190,18 @@ final class ShortcutStore: ObservableObject {
         MacMainMenuController.shared.installMainMenu()
     }
 
+    func resetEditorShortcuts() {
+        editorShortcuts = Self.defaultEditorShortcuts
+        defaults.removeObject(forKey: editorShortcutDefaults)
+    }
+
     func resetAllShortcuts() {
         newNoteKey = Self.defaultNewNoteShortcut
         markdownShortcuts = Self.defaultMarkdownShortcuts
+        editorShortcuts = Self.defaultEditorShortcuts
         defaults.removeObject(forKey: newNoteKeyDefaults)
         defaults.removeObject(forKey: markdownShortcutDefaults)
+        defaults.removeObject(forKey: editorShortcutDefaults)
         registerHotKeys()
         MacMainMenuController.shared.installMainMenu()
     }
@@ -167,6 +210,15 @@ final class ShortcutStore: ObservableObject {
         let modifiers = Self.carbonModifiers(from: event.modifierFlags)
         let keyCode = UInt32(event.keyCode)
         return MarkdownShortcutAction.allCases.first { action in
+            let shortcut = shortcut(for: action)
+            return shortcut.keyCode == keyCode && shortcut.modifiers == modifiers
+        }
+    }
+
+    func editorAction(matching event: NSEvent) -> EditorShortcutAction? {
+        let modifiers = Self.carbonModifiers(from: event.modifierFlags)
+        let keyCode = UInt32(event.keyCode)
+        return EditorShortcutAction.allCases.first { action in
             let shortcut = shortcut(for: action)
             return shortcut.keyCode == keyCode && shortcut.modifiers == modifiers
         }
@@ -182,6 +234,12 @@ final class ShortcutStore: ObservableObject {
             .inlineMath: MarkdownShortcut(keyCode: 46, modifiers: UInt32(controlKey), keyEquivalent: "m"),
             .strike: MarkdownShortcut(keyCode: 50, modifiers: UInt32(controlKey | shiftKey), keyEquivalent: "`"),
             .htmlComment: MarkdownShortcut(keyCode: 27, modifiers: UInt32(controlKey), keyEquivalent: "-")
+        ]
+    }
+
+    static var defaultEditorShortcuts: [EditorShortcutAction: MarkdownShortcut] {
+        [
+            .markdownPreview: MarkdownShortcut(keyCode: 44, modifiers: UInt32(cmdKey), keyEquivalent: "/")
         ]
     }
 
@@ -233,6 +291,7 @@ final class ShortcutStore: ObservableObject {
         case 37: keyString = "L"
         case 38: keyString = "J"
         case 40: keyString = "K"
+        case 44: keyString = "/"
         case 45: keyString = "N"
         case 46: keyString = "M"
         case 48: keyString = "Tab"
@@ -270,6 +329,12 @@ final class ShortcutStore: ObservableObject {
         let rawShortcuts = Dictionary(uniqueKeysWithValues: markdownShortcuts.map { ($0.key.rawValue, $0.value) })
         let data = try? JSONEncoder.encode(rawShortcuts)
         defaults.set(data, forKey: markdownShortcutDefaults)
+    }
+
+    private func persistEditorShortcuts() {
+        let rawShortcuts = Dictionary(uniqueKeysWithValues: editorShortcuts.map { ($0.key.rawValue, $0.value) })
+        let data = try? JSONEncoder.encode(rawShortcuts)
+        defaults.set(data, forKey: editorShortcutDefaults)
     }
 
     private struct ShortcutData: Codable {

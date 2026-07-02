@@ -93,7 +93,19 @@ final class VaultStore: ObservableObject {
     }
     #endif
 
-    var isKeyLoaded: Bool { currentKey != nil }
+    var isKeyLoaded: Bool {
+        #if os(macOS)
+        settings.vaultKeyFileReference != nil
+        #else
+        currentKey != nil
+        #endif
+    }
+
+    #if os(macOS)
+    var keyFileDisplayPath: String? {
+        settings.vaultKeyFileReference?.displayPath
+    }
+    #endif
 
     var storageContainerURL: URL? { storage.containerURL }
 
@@ -251,6 +263,9 @@ final class VaultStore: ObservableObject {
     private func loadAllNotes() async {
         do {
             let loadedKey: CryptoKit.SymmetricKey?
+            #if os(macOS)
+            loadedKey = nil
+            #else
             if let vId = vaultId,
                let keyMaterial = try? keychainStore.loadKey(forVaultId: vId),
                let key = try? keyManager.keyFromBase64(keyMaterial) {
@@ -258,8 +273,13 @@ final class VaultStore: ObservableObject {
             } else {
                 loadedKey = nil
             }
+            #endif
 
+            #if os(macOS)
+            let preferredMode: NoteFileMode = .plain
+            #else
             let preferredMode = settings.preferredNoteMode
+            #endif
             let snapshot = try await Task.detached(priority: .userInitiated) { [storage, noteIndex, preferredMode] in
                 try Self.loadNotesSnapshot(
                     storage: storage,
@@ -279,8 +299,20 @@ final class VaultStore: ObservableObject {
             trashNotes = snapshot.trashNotes
             noteIndex = snapshot.noteIndex
             state = .ready
+            MaintenanceLogStore.shared.record("vault_loaded", fields: [
+                "plain": plainNotes.count,
+                "decrypted": decryptedNotes.count,
+                "locked": lockedEncryptedNotes.count,
+                "trash": trashNotes.count,
+                "index_entries": noteIndex.entries.count,
+                "storage": isUsingICloudStorage ? "icloud" : "local",
+                "container": storage.containerURL?.path
+            ])
         } catch {
             state = .error(message: error.localizedDescription)
+            MaintenanceLogStore.shared.record("vault_load_failed", fields: [
+                "error": error.localizedDescription
+            ])
         }
     }
 
@@ -474,7 +506,262 @@ final class VaultStore: ObservableObject {
         settings.hasSeededDefaultNotes = true
     }
 
+    private func currentEncryptionKey() throws -> CryptoKit.SymmetricKey {
+        #if os(macOS)
+        return try loadConfiguredKeyFile()
+        #else
+        guard let currentKey else { throw VaultError.keyNotLoaded }
+        return currentKey
+        #endif
+    }
+
+    #if os(macOS)
+    private func loadConfiguredKeyFile() throws -> CryptoKit.SymmetricKey {
+        let resolved = try settings.resolveVaultKeyFileURL()
+        if resolved.isStale {
+            try settings.saveVaultKeyFileReference(for: resolved.url)
+        }
+        return try loadKey(from: resolved.url)
+    }
+
+    private func loadKey(from url: URL) throws -> CryptoKit.SymmetricKey {
+        let hasAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if hasAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw VaultKeyFileError.fileMissing
+        }
+
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            throw VaultKeyFileError.permissionDenied
+        }
+
+        let vaultKey: VaultKey
+        do {
+            vaultKey = try JSONDecoder.default.decode(VaultKey.self, from: data)
+        } catch {
+            throw VaultKeyFileError.invalidFile
+        }
+
+        guard keyManager.validateVaultKey(vaultKey) else {
+            throw VaultKeyFileError.invalidFile
+        }
+
+        return try keyManager.extractKey(vaultKey)
+    }
+
+    func createKeyFile(at url: URL) async throws {
+        guard settings.vaultKeyFileReference == nil else {
+            throw VaultKeyFileError.keyAlreadyConfigured
+        }
+
+        let key = keyManager.generateKey()
+        let vaultKey = keyManager.generateVaultKey(key: key)
+        let data = try JSONEncoder.default.encode(vaultKey)
+        try data.write(to: url, options: .atomic)
+        try settings.saveVaultKeyFileReference(for: url)
+        currentKey = nil
+        await reloadAllNotes(keyReloadMode: .explicit(nil))
+        settings.preferredNoteMode = .encrypted
+    }
+
+    func openEncryptedNote(_ info: EncryptedNoteInfo) async throws -> Note {
+        let key = try currentEncryptionKey()
+        let mdFile = try storage.loadMarkdownFile(at: info.url)
+        let decryptedBody: String
+        do {
+            decryptedBody = try cryptoService.decryptMarkdownBody(mdFile.body, using: key)
+        } catch {
+            throw VaultKeyFileError.keyMismatch
+        }
+
+        let note = Note(
+            id: mdFile.noteId,
+            body: decryptedBody,
+            createdAt: mdFile.createdAt,
+            updatedAt: mdFile.updatedAt,
+            isEncrypted: true
+        )
+        lockedEncryptedNotes.removeAll { $0.id == info.id }
+        if let index = decryptedNotes.firstIndex(where: { $0.id == note.id }) {
+            decryptedNotes[index] = note
+        } else {
+            decryptedNotes.insert(note, at: 0)
+        }
+        return note
+    }
+
+    @discardableResult
+    func decryptNotePermanently(_ note: Note) async throws -> Note {
+        guard let entry = noteIndex.entry(for: note.id),
+              entry.mode == .encrypted,
+              let url = Self.urlForEntry(entry, storage: storage) else {
+            throw StorageError.fileNotFound
+        }
+
+        let key = try currentEncryptionKey()
+        let mdFile = try storage.loadMarkdownFile(at: url)
+        let decryptedBody: String
+        do {
+            decryptedBody = try cryptoService.decryptMarkdownBody(mdFile.body, using: key)
+        } catch {
+            throw VaultKeyFileError.keyMismatch
+        }
+
+        return try saveReadableNote(
+            Note(
+                id: mdFile.noteId,
+                body: decryptedBody,
+                createdAt: mdFile.createdAt,
+                updatedAt: mdFile.updatedAt,
+                isEncrypted: true
+            ),
+            body: decryptedBody,
+            mode: .plain,
+            sourceUpdatedAt: note.updatedAt
+        ).note
+    }
+
+    func permanentlyDeleteAllEncryptedNotes() async throws -> Int {
+        let encryptedEntries = noteIndex.entries.filter { $0.mode == .encrypted }
+        for entry in encryptedEntries {
+            if let url = Self.urlForEntry(entry, storage: storage) {
+                try? storage.permanentlyDeleteFile(at: url)
+            }
+            noteIndex.removeEntry(for: entry.noteId)
+        }
+        try storage.saveIndex(noteIndex)
+        settings.clearVaultKeyFileReference()
+        decryptedNotes.removeAll()
+        lockedEncryptedNotes.removeAll()
+        await reloadAllNotes(keyReloadMode: .explicit(nil))
+        settings.preferredNoteMode = .plain
+        return encryptedEntries.count
+    }
+
+    func decryptAllEncryptedNotesAndRemoveKey() async throws -> Int {
+        let decrypted = try preflightDecryptAllEncryptedNotes()
+        for item in decrypted {
+            try convertEncryptedEntryToPlain(item.entry, mdFile: item.mdFile, decryptedBody: item.body)
+        }
+        try storage.saveIndex(noteIndex)
+        settings.clearVaultKeyFileReference()
+        await reloadAllNotes(keyReloadMode: .explicit(nil))
+        settings.preferredNoteMode = .plain
+        return decrypted.count
+    }
+
+    func exportPlaintextEncryptedNotesAndRemoveLocalNotes(to destinationURL: URL? = nil) async throws -> (url: URL, exportedCount: Int) {
+        let decrypted = try preflightDecryptAllEncryptedNotes()
+        let export = try exportPlaintextNotes(decrypted, to: destinationURL)
+
+        for item in decrypted {
+            if let url = Self.urlForEntry(item.entry, storage: storage) {
+                try? storage.permanentlyDeleteFile(at: url)
+            }
+            noteIndex.removeEntry(for: item.entry.noteId)
+        }
+        try storage.saveIndex(noteIndex)
+        settings.clearVaultKeyFileReference()
+        await reloadAllNotes(keyReloadMode: .explicit(nil))
+        settings.preferredNoteMode = .plain
+        return export
+    }
+
+    private struct DecryptedEncryptedNote {
+        let entry: NoteIndexEntry
+        let mdFile: MarkdownNoteFile
+        let body: String
+    }
+
+    private func preflightDecryptAllEncryptedNotes() throws -> [DecryptedEncryptedNote] {
+        let key = try currentEncryptionKey()
+        var decrypted: [DecryptedEncryptedNote] = []
+        for entry in noteIndex.entries where entry.mode == .encrypted {
+            guard let url = Self.urlForEntry(entry, storage: storage) else { continue }
+            let mdFile = try storage.loadMarkdownFile(at: url)
+            let body: String
+            do {
+                body = try cryptoService.decryptMarkdownBody(mdFile.body, using: key)
+            } catch {
+                throw VaultKeyFileError.keyMismatch
+            }
+            decrypted.append(DecryptedEncryptedNote(entry: entry, mdFile: mdFile, body: body))
+        }
+        return decrypted
+    }
+
+    private func convertEncryptedEntryToPlain(_ entry: NoteIndexEntry, mdFile: MarkdownNoteFile, decryptedBody: String) throws {
+        guard let currentURL = Self.urlForEntry(entry, storage: storage) else {
+            throw StorageError.fileNotFound
+        }
+        let newFileName = Self.fileName(for: entry.noteId, body: decryptedBody)
+        guard let targetURL = Self.urlForFileName(newFileName, location: entry.location, storage: storage) else {
+            throw StorageError.iCloudUnavailable
+        }
+
+        let plainFile = MarkdownNoteFile(
+            noteId: mdFile.noteId,
+            createdAt: mdFile.createdAt,
+            updatedAt: Date(),
+            body: decryptedBody
+        )
+        try storage.saveMarkdownFile(plainFile, at: targetURL)
+        if currentURL != targetURL && FileManager.default.fileExists(atPath: currentURL.path) {
+            try? storage.permanentlyDeleteFile(at: currentURL)
+        }
+        noteIndex.upsert(NoteIndexEntry(
+            noteId: entry.noteId,
+            fileName: newFileName,
+            mode: .plain,
+            location: entry.location,
+            deletedAt: entry.deletedAt,
+            purgeAfter: entry.purgeAfter,
+            originalLocation: entry.originalLocation
+        ))
+    }
+
+    private func exportPlaintextNotes(_ notes: [DecryptedEncryptedNote], to destinationURL: URL? = nil) throws -> (url: URL, exportedCount: Int) {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let dateStr = dateFormatter.string(from: Date())
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Seal Note-解密笔记-\(dateStr)-\(UUID().uuidString.prefix(8))")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+
+        for (index, item) in notes.enumerated() {
+            let safeIndex = String(format: "%03d", index + 1)
+            let fileName = "\(safeIndex)-\(Self.fileName(for: item.entry.noteId, body: item.body))"
+            let fileURL = tmpDir.appendingPathComponent(fileName)
+            let mdFile = MarkdownNoteFile(
+                noteId: item.mdFile.noteId,
+                createdAt: item.mdFile.createdAt,
+                updatedAt: item.mdFile.updatedAt,
+                body: item.body
+            )
+            try mdFile.render().write(to: fileURL, options: .atomic)
+        }
+
+        let zipURL = destinationURL ?? FileManager.default.temporaryDirectory
+            .appendingPathComponent("Seal Note-解密笔记-\(dateStr).zip")
+        try? FileManager.default.removeItem(at: zipURL)
+        try ZipUtility.createZip(from: tmpDir, to: zipURL)
+        try? FileManager.default.removeItem(at: tmpDir)
+        return (zipURL, notes.count)
+    }
+    #endif
+
     func createKey() async throws {
+        #if os(macOS)
+        throw CryptoError.keyNotFound
+        #else
         let vId = vaultId ?? UUID().uuidString
         vaultId = vId
 
@@ -488,9 +775,28 @@ final class VaultStore: ObservableObject {
 
         needsKeyExport = true
         settings.preferredNoteMode = .encrypted
+        #endif
     }
 
     func importKeyFile(from url: URL) async throws -> Bool {
+        #if os(macOS)
+        let key = try loadKey(from: url)
+
+        let encURLs = noteIndex.entries
+            .filter { $0.location == .notes && $0.mode == .encrypted }
+            .compactMap { Self.urlForEntry($0, storage: storage) }
+
+        for encUrl in encURLs {
+            let mdFile = try storage.loadMarkdownFile(at: encUrl)
+            _ = try cryptoService.decryptMarkdownBody(mdFile.body, using: key)
+        }
+
+        try settings.saveVaultKeyFileReference(for: url)
+        currentKey = nil
+        await reloadAllNotes(keyReloadMode: .explicit(nil))
+        settings.preferredNoteMode = .encrypted
+        return true
+        #else
         let vId = vaultId ?? UUID().uuidString
 
         let hasSecurityScopedAccess = url.startAccessingSecurityScopedResource()
@@ -526,9 +832,20 @@ final class VaultStore: ObservableObject {
 
         settings.preferredNoteMode = .encrypted
         return true
+        #endif
     }
 
     func unloadKey() async throws {
+        #if os(macOS)
+        settings.clearVaultKeyFileReference()
+        currentKey = nil
+        decryptedNotes = []
+        await reloadAllNotes(keyReloadMode: .explicit(nil))
+        settings.preferredNoteMode = .plain
+        if let tag = selectedTag, !allTags.contains(where: { $0.tag == tag }) {
+            selectedTag = nil
+        }
+        #else
         guard let vId = vaultId else { return }
         try keychainStore.deleteKey(forVaultId: vId)
         currentKey = nil
@@ -540,6 +857,7 @@ final class VaultStore: ObservableObject {
         if let tag = selectedTag, !allTags.contains(where: { $0.tag == tag }) {
             selectedTag = nil
         }
+        #endif
     }
 
     func resetKey() async throws {
@@ -577,6 +895,9 @@ final class VaultStore: ObservableObject {
             let loadedKey: CryptoKit.SymmetricKey?
             switch keyReloadMode {
             case .keychain:
+                #if os(macOS)
+                loadedKey = nil
+                #else
                 if let vId = vaultId,
                    let keyMaterial = try? keychainStore.loadKey(forVaultId: vId),
                    let key = try? keyManager.keyFromBase64(keyMaterial) {
@@ -584,11 +905,16 @@ final class VaultStore: ObservableObject {
                 } else {
                     loadedKey = nil
                 }
+                #endif
             case .explicit(let key):
                 loadedKey = key
             }
 
+            #if os(macOS)
+            let preferredMode: NoteFileMode = .plain
+            #else
             let preferredMode = settings.preferredNoteMode
+            #endif
             let snapshot = try await Task.detached(priority: .userInitiated) { [storage, noteIndex, preferredMode] in
                 try Self.loadNotesSnapshot(
                     storage: storage,
@@ -648,7 +974,7 @@ final class VaultStore: ObservableObject {
 
         let finalBody: String
         if isEncrypted {
-            guard let key = currentKey else { throw VaultError.keyNotLoaded }
+            let key = try currentEncryptionKey()
             finalBody = try cryptoService.encryptMarkdownBody(body, using: key)
         } else {
             finalBody = body
@@ -675,6 +1001,12 @@ final class VaultStore: ObservableObject {
         )
         noteIndex.upsert(entry)
         try storage.saveIndex(noteIndex)
+        MaintenanceLogStore.shared.record("note_created", fields: [
+            "note_id": noteId,
+            "file": fileName,
+            "mode": isEncrypted ? "encrypted" : "plain",
+            "body_bytes": body.utf8.count
+        ])
 
         let note = Note(
             id: noteId,
@@ -695,17 +1027,19 @@ final class VaultStore: ObservableObject {
 
     func updateNote(_ note: Note, body: String) async throws {
         guard let _ = vaultId else { throw VaultError.notReady }
-        _ = try saveReadableNote(note, body: body, mode: note.isEncrypted ? .encrypted : .plain)
+        let latestNote = readableNotes.first(where: { $0.id == note.id }) ?? note
+        _ = try saveReadableNote(latestNote, body: body, mode: latestNote.isEncrypted ? .encrypted : .plain, sourceUpdatedAt: note.updatedAt)
     }
 
     func encryptNoteForEditing(_ note: Note, body: String) async throws -> (note: Note, ciphertext: String) {
         guard let _ = vaultId else { throw VaultError.notReady }
-        guard currentKey != nil else { throw VaultError.keyNotLoaded }
-        return try saveReadableNote(note, body: body, mode: .encrypted)
+        _ = try currentEncryptionKey()
+        let latestNote = readableNotes.first(where: { $0.id == note.id }) ?? note
+        return try saveReadableNote(latestNote, body: body, mode: .encrypted, sourceUpdatedAt: note.updatedAt)
     }
 
     func decryptEncryptedNoteBody(_ note: Note) async throws -> String {
-        guard let key = currentKey else { throw VaultError.keyNotLoaded }
+        let key = try currentEncryptionKey()
         guard let entry = noteIndex.entry(for: note.id),
               entry.mode == .encrypted,
               let url = Self.urlForEntry(entry, storage: storage) else {
@@ -715,12 +1049,17 @@ final class VaultStore: ObservableObject {
         return try cryptoService.decryptMarkdownBody(mdFile.body, using: key)
     }
 
-    private func saveReadableNote(_ note: Note, body: String, mode: NoteFileMode) throws -> (note: Note, ciphertext: String) {
+    private func saveReadableNote(
+        _ note: Note,
+        body: String,
+        mode: NoteFileMode,
+        sourceUpdatedAt: Date? = nil
+    ) throws -> (note: Note, ciphertext: String) {
         let now = Date()
         let isEncrypted = mode == .encrypted
         let finalBody: String
         if isEncrypted {
-            guard let key = currentKey else { throw VaultError.keyNotLoaded }
+            let key = try currentEncryptionKey()
             finalBody = try cryptoService.encryptMarkdownBody(body, using: key)
         } else {
             finalBody = body
@@ -736,10 +1075,31 @@ final class VaultStore: ObservableObject {
             throw StorageError.iCloudUnavailable
         }
 
-        if let diskFile = try? storage.loadMarkdownFile(at: currentURL),
-           diskFile.updatedAt > note.updatedAt,
-           diskFile.body != finalBody {
-            _ = try storage.createConflictCopy(for: currentURL)
+        if let diskFile = try? storage.loadMarkdownFile(at: currentURL) {
+            let diskIsNewer = diskFile.updatedAt > note.updatedAt
+            let bodyDiffers = diskFile.body != finalBody
+            MaintenanceLogStore.shared.record("note_save_conflict_check", fields: [
+                "note_id": note.id,
+                "current_file": currentURL.lastPathComponent,
+                "target_file": targetURL.lastPathComponent,
+                "mode": mode.rawValue,
+                "source_updated_at": sourceUpdatedAt.map { ISO8601DateFormatter().string(from: $0) },
+                "memory_updated_at": ISO8601DateFormatter().string(from: note.updatedAt),
+                "disk_updated_at": ISO8601DateFormatter().string(from: diskFile.updatedAt),
+                "disk_is_newer": diskIsNewer,
+                "body_differs": bodyDiffers,
+                "body_bytes": body.utf8.count
+            ])
+            if diskIsNewer && bodyDiffers {
+                let conflictURL = try storage.createConflictCopy(for: currentURL)
+                MaintenanceLogStore.shared.record("note_save_conflict_detected", fields: [
+                    "note_id": note.id,
+                    "source_updated_at": sourceUpdatedAt.map { ISO8601DateFormatter().string(from: $0) },
+                    "memory_updated_at": ISO8601DateFormatter().string(from: note.updatedAt),
+                    "disk_updated_at": ISO8601DateFormatter().string(from: diskFile.updatedAt),
+                    "conflict_file": conflictURL.lastPathComponent
+                ])
+            }
         }
 
         let mdFile = MarkdownNoteFile(
@@ -773,6 +1133,15 @@ final class VaultStore: ObservableObject {
             ))
         }
         try storage.saveIndex(noteIndex)
+        MaintenanceLogStore.shared.record("note_saved", fields: [
+            "note_id": note.id,
+            "file": newFileName,
+            "mode": mode.rawValue,
+            "renamed": currentURL != targetURL,
+            "source_updated_at": sourceUpdatedAt.map { ISO8601DateFormatter().string(from: $0) },
+            "saved_updated_at": ISO8601DateFormatter().string(from: now),
+            "body_bytes": body.utf8.count
+        ])
 
         let updatedNote = Note(
             id: note.id,
@@ -827,6 +1196,11 @@ final class VaultStore: ObservableObject {
             originalLocation: entry.originalLocation
         ))
         try storage.saveIndex(noteIndex)
+        MaintenanceLogStore.shared.record("note_renamed", fields: [
+            "note_id": note.id,
+            "from": entry.fileName,
+            "to": newFileName
+        ])
         objectWillChange.send()
     }
 
@@ -863,6 +1237,12 @@ final class VaultStore: ObservableObject {
             ))
             try storage.saveIndex(noteIndex)
         }
+        MaintenanceLogStore.shared.record("note_deleted_to_trash", fields: [
+            "note_id": note.id,
+            "source_file": srcURL.lastPathComponent,
+            "trash_file": trashURL.lastPathComponent,
+            "mode": entry?.mode.rawValue
+        ])
 
         decryptedNotes.removeAll { $0.id == note.id }
         plainNotes.removeAll { $0.id == note.id }
@@ -1147,3 +1527,28 @@ nonisolated enum VaultError: Error, LocalizedError {
         }
     }
 }
+
+#if os(macOS)
+nonisolated enum VaultKeyFileError: Error, LocalizedError {
+    case fileMissing
+    case permissionDenied
+    case invalidFile
+    case keyMismatch
+    case keyAlreadyConfigured
+
+    var errorDescription: String? {
+        switch self {
+        case .fileMissing:
+            return "找不到密钥文件，请确认 U 盘、同步盘或文件位置可用。"
+        case .permissionDenied:
+            return "无法读取密钥文件，请重新选择密钥文件。"
+        case .invalidFile:
+            return "密钥文件格式无效。"
+        case .keyMismatch:
+            return "密钥不匹配，无法解密当前加密笔记。"
+        case .keyAlreadyConfigured:
+            return "已经存在密钥文件，请先移除当前密钥。"
+        }
+    }
+}
+#endif

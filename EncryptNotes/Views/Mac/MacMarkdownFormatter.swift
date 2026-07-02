@@ -147,8 +147,20 @@ final class MacMarkdownFormatter {
 
         if marker.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let newText = nsText.substring(to: lineStart) + nsText.substring(from: cursor)
+            let adjustedText: String
+            if let number = marker.number, let delimiter = marker.delimiter {
+                adjustedText = renumberOrderedListTail(
+                    in: newText,
+                    after: lineStart,
+                    indent: marker.indent,
+                    delimiter: delimiter,
+                    startingAt: number
+                )
+            } else {
+                adjustedText = newText
+            }
             return MacMarkdownListContinuationResult(
-                text: newText,
+                text: adjustedText,
                 selection: NSRange(location: lineStart, length: 0)
             )
         }
@@ -156,9 +168,22 @@ final class MacMarkdownFormatter {
         let nextMarker = marker.nextMarker
         let insertion = "\n\(marker.indent)\(nextMarker)"
         let newText = nsText.substring(to: cursor) + insertion + nsText.substring(from: cursor)
+        let selectionLocation = cursor + (insertion as NSString).length
+        let adjustedText: String
+        if let number = marker.number, let delimiter = marker.delimiter {
+            adjustedText = renumberOrderedListTail(
+                in: newText,
+                after: selectionLocation,
+                indent: marker.indent,
+                delimiter: delimiter,
+                startingAt: number + 2
+            )
+        } else {
+            adjustedText = newText
+        }
         return MacMarkdownListContinuationResult(
-            text: newText,
-            selection: NSRange(location: cursor + (insertion as NSString).length, length: 0)
+            text: adjustedText,
+            selection: NSRange(location: selectionLocation, length: 0)
         )
     }
 
@@ -331,10 +356,90 @@ final class MacMarkdownFormatter {
         return regex.firstMatch(in: line, range: range) != nil
     }
 
+    private static func renumberOrderedListTail(
+        in text: String,
+        after location: Int,
+        indent: String,
+        delimiter: String,
+        startingAt startNumber: Int
+    ) -> String {
+        let nsText = text as NSString
+        guard nsText.length > 0 else { return text }
+        var lineStart = firstLineStartAfter(location: location, in: nsText)
+        guard lineStart < nsText.length else { return text }
+
+        var result = text
+        var currentNumber = startNumber
+        var delta = 0
+
+        while lineStart < (result as NSString).length {
+            let currentText = result as NSString
+            let lineRange = currentText.lineRange(for: NSRange(location: lineStart, length: 0))
+            let line = currentText.substring(with: lineContentRange(from: lineRange, in: currentText))
+
+            guard let marker = OrderedListLine(line: line),
+                  marker.indent == indent,
+                  marker.delimiter == delimiter else {
+                break
+            }
+
+            let replacement = "\(currentNumber)"
+            let absoluteNumberRange = NSRange(
+                location: lineStart + marker.numberRange.location,
+                length: marker.numberRange.length
+            )
+            result = currentText.replacingCharacters(in: absoluteNumberRange, with: replacement)
+
+            let lengthChange = (replacement as NSString).length - marker.numberRange.length
+            delta += lengthChange
+            lineStart = NSMaxRange(lineRange) + lengthChange
+            currentNumber += 1
+
+            if delta == Int.min {
+                break
+            }
+        }
+
+        return result
+    }
+
+    private static func firstLineStartAfter(location: Int, in nsText: NSString) -> Int {
+        let safeLocation = max(0, min(location, nsText.length))
+        guard safeLocation < nsText.length else { return nsText.length }
+
+        let character = nsText.character(at: safeLocation)
+        if character == 10 {
+            return safeLocation + 1
+        }
+        if character == 13 {
+            if safeLocation + 1 < nsText.length, nsText.character(at: safeLocation + 1) == 10 {
+                return safeLocation + 2
+            }
+            return safeLocation + 1
+        }
+
+        return NSMaxRange(nsText.lineRange(for: NSRange(location: safeLocation, length: 0)))
+    }
+
+    private static func lineContentRange(from lineRange: NSRange, in nsText: NSString) -> NSRange {
+        var length = lineRange.length
+        while length > 0 {
+            let character = nsText.character(at: lineRange.location + length - 1)
+            if character == 10 || character == 13 {
+                length -= 1
+            } else {
+                break
+            }
+        }
+        return NSRange(location: lineRange.location, length: length)
+    }
+
     private struct ListMarker {
         let indent: String
         let nextMarker: String
         let content: String
+        let number: Int?
+        let delimiter: String?
 
         init?(line: String) {
             let pattern = #"^(\s*)(?:(\d+)([\.\)])|([-+*]))\s+(.*)$"#
@@ -348,12 +453,35 @@ final class MacMarkdownFormatter {
             if match.range(at: 2).location != NSNotFound {
                 let number = Int(nsLine.substring(with: match.range(at: 2))) ?? 0
                 let delimiter = nsLine.substring(with: match.range(at: 3))
+                self.number = number
+                self.delimiter = delimiter
                 nextMarker = "\(number + 1)\(delimiter) "
             } else if match.range(at: 4).location != NSNotFound {
+                number = nil
+                delimiter = nil
                 nextMarker = nsLine.substring(with: match.range(at: 4)) + " "
             } else {
                 return nil
             }
+        }
+    }
+
+    private struct OrderedListLine {
+        let indent: String
+        let delimiter: String
+        let numberRange: NSRange
+
+        init?(line: String) {
+            let pattern = #"^(\s*)(\d+)([\.\)])\s+"#
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+            let nsLine = line as NSString
+            guard let match = regex.firstMatch(in: line, range: NSRange(location: 0, length: nsLine.length)) else {
+                return nil
+            }
+
+            indent = nsLine.substring(with: match.range(at: 1))
+            delimiter = nsLine.substring(with: match.range(at: 3))
+            numberRange = match.range(at: 2)
         }
     }
 

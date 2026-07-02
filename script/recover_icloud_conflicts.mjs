@@ -9,10 +9,12 @@ const apply = args.has("--apply");
 const verbose = args.has("--verbose");
 const recoverAllUnique = args.has("--recover-all-unique");
 const base = process.env.BKW_VAULT_DIR
-  || path.join(process.env.HOME, "Library/Mobile Documents/iCloud~com~biekanwo~EncryptNotes");
-const notesDir = path.join(base, "notes");
+  || path.join(process.env.HOME, "Library/Mobile Documents/com~apple~CloudDocs/别看我");
+const rootNotesDir = base;
+const legacyNotesDir = path.join(base, "notes");
+const notesDir = fs.existsSync(legacyNotesDir) ? legacyNotesDir : rootNotesDir;
 const trashDir = path.join(base, "trash");
-const metaDir = path.join(base, "meta");
+const metaDir = path.join(base, ".meta");
 const indexPath = path.join(base, "notes.json");
 const runId = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+/, "Z");
 const archiveDir = path.join(metaDir, `conflict-recovery-${runId}`);
@@ -242,6 +244,7 @@ for (const item of unindexedNormalFiles) {
 const summary = {
   mode: apply ? "apply" : "dry-run",
   base,
+  notesDir,
   totalNoteFiles: files.length,
   parsedFiles: parsedFiles.length,
   skippedFiles: skipped.length,

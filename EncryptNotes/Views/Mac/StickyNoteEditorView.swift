@@ -2,15 +2,41 @@ import Foundation
 import SwiftUI
 import AppKit
 import Combine
+import Carbon
+import MarkdownView
 
 #if os(macOS)
 
+private extension View {
+    @ViewBuilder
+    func macKeyboardShortcut(_ shortcut: MarkdownShortcut) -> some View {
+        if let key = shortcut.keyEquivalent.first {
+            keyboardShortcut(KeyEquivalent(key), modifiers: SwiftUI.EventModifiers(carbonModifiers: shortcut.modifiers))
+        } else {
+            self
+        }
+    }
+}
+
+private extension SwiftUI.EventModifiers {
+    init(carbonModifiers: UInt32) {
+        var modifiers: SwiftUI.EventModifiers = []
+        if carbonModifiers & UInt32(controlKey) != 0 { modifiers.insert(.control) }
+        if carbonModifiers & UInt32(optionKey) != 0 { modifiers.insert(.option) }
+        if carbonModifiers & UInt32(shiftKey) != 0 { modifiers.insert(.shift) }
+        if carbonModifiers & UInt32(cmdKey) != 0 { modifiers.insert(.command) }
+        self = modifiers
+    }
+}
+
 struct StickyNoteEditorView: View {
     @ObservedObject private var settings = SettingsStore.shared
+    @ObservedObject private var shortcutStore = ShortcutStore.shared
     @ObservedObject private var syncStore = SyncStatusStore.shared
     @StateObject private var viewModel: StickyNoteEditorViewModel
     @State private var isToolbarHovering = false
     @State private var isFindBarVisible = false
+    @State private var isMarkdownPreviewing = false
 
     init(note: Note, isPreview: Bool = false) {
         _viewModel = StateObject(wrappedValue: StickyNoteEditorViewModel(note: note, isPreview: isPreview))
@@ -18,31 +44,46 @@ struct StickyNoteEditorView: View {
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            MacTextView(
-                text: $viewModel.text,
-                placeholder: "随便写点什么吧",
-                fontSize: CGFloat(settings.macEditorFontSize),
-                lineHeightMultiple: CGFloat(settings.macEditorLineHeightMultiple),
-                autoFocus: true,
-                isEditable: !viewModel.isContentLocked,
-                onChange: { viewModel.textDidChange($0) },
-                onSaveShortcut: { viewModel.saveImmediately() },
-                onApplyShortcut: { viewModel.saveImmediately() },
-                onFitToContent: { viewModel.fitWindowToContent() },
-                onCopyShortcut: { viewModel.copyNoteText() },
-                onFindShortcut: { toggleFindInterface() },
-                onIncreaseFontSize: { adjustFontSize(by: 1) },
-                onDecreaseFontSize: { adjustFontSize(by: -1) },
-                onFindVisibilityChange: { isVisible in
-                    isFindBarVisible = isVisible
-                    updateSystemToolbarBackground(
-                        isActive: isVisible || isToolbarHovering,
-                        showsSeparator: isVisible
-                    )
-                }
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .blur(radius: viewModel.isContentLocked ? 3 : 0)
+            if isMarkdownPreviewing {
+                MacMarkdownPreview(
+                    text: viewModel.text,
+                    fontSize: CGFloat(settings.macEditorFontSize),
+                    lineHeightMultiple: CGFloat(settings.macEditorLineHeightMultiple)
+                )
+                .background(MacMarkdownPreviewShortcutMonitor(
+                    noteId: viewModel.note.id,
+                    onCopy: { viewModel.copyNoteText() },
+                    onTogglePreview: { toggleMarkdownPreview() }
+                ))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                MacTextView(
+                    text: $viewModel.text,
+                    placeholder: "随便写点什么吧",
+                    fontSize: CGFloat(settings.macEditorFontSize),
+                    lineHeightMultiple: CGFloat(settings.macEditorLineHeightMultiple),
+                    autoFocus: true,
+                    isEditable: !viewModel.isContentLocked,
+                    onChange: { viewModel.textDidChange($0) },
+                    onSaveShortcut: { viewModel.saveImmediately() },
+                    onApplyShortcut: { viewModel.saveImmediately() },
+                    onFitToContent: { viewModel.fitWindowToContent() },
+                    onCopyShortcut: { viewModel.copyNoteText() },
+                    onFindShortcut: { toggleFindInterface() },
+                    onToggleMarkdownPreview: { toggleMarkdownPreview() },
+                    onIncreaseFontSize: { adjustFontSize(by: 1) },
+                    onDecreaseFontSize: { adjustFontSize(by: -1) },
+                    onFindVisibilityChange: { isVisible in
+                        isFindBarVisible = isVisible
+                        updateSystemToolbarBackground(
+                            isActive: isVisible || isToolbarHovering,
+                            showsSeparator: isVisible
+                        )
+                    }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .blur(radius: viewModel.isContentLocked ? 3 : 0)
+            }
 
             VStack(spacing: 0) {
                 MacToolbarHoverRegion { hovering in
@@ -75,12 +116,33 @@ struct StickyNoteEditorView: View {
         }
         .onChange(of: viewModel.isContentLocked) { _, locked in
             if locked {
+                isMarkdownPreviewing = false
                 hideFindInterface()
             }
         }
+        .onChange(of: viewModel.isEncryptionToggling) { _, isToggling in
+            if isToggling {
+                isMarkdownPreviewing = false
+            }
+        }
         .toolbar {
+            ToolbarSpacer()
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: { toggleMarkdownPreview() }) {
+                    Label(
+                        isMarkdownPreviewing ? "返回编辑" : "预览",
+                        systemImage: isMarkdownPreviewing ? "stop.fill" : "play.fill"
+                    )
+                    .labelStyle(.iconOnly)
+                    .frame(width: DS.macToolbarIconWidth)
+                }
+                .disabled(viewModel.isContentLocked || viewModel.isEncryptionToggling)
+                .macKeyboardShortcut(markdownPreviewShortcut)
+                .help(isMarkdownPreviewing ? "返回编辑" : "Markdown 预览")
+            }
+            ToolbarSpacer()
             ToolbarItemGroup(placement: .primaryAction) {
-                Button(action: { viewModel.toggleEncryptionLock() }) {
+                Button(action: { toggleEncryptionLock() }) {
                     Label(
                         viewModel.isContentLocked ? "解锁" : "上锁",
                         systemImage: viewModel.isContentLocked ? "lock.fill" : "lock.open.fill"
@@ -112,7 +174,16 @@ struct StickyNoteEditorView: View {
                         Label("搜索", systemImage: "magnifyingglass")
                     }
                     .keyboardShortcut("f", modifiers: .command)
-                    .disabled(viewModel.isContentLocked)
+                    .disabled(viewModel.isContentLocked || isMarkdownPreviewing)
+
+                    if viewModel.note.isEncrypted {
+                        Divider()
+
+                        Button(action: { viewModel.decryptPermanently() }) {
+                            Label("永久解密", systemImage: "lock.open")
+                        }
+                        .disabled(viewModel.isContentLocked || viewModel.isEncryptionToggling)
+                    }
 
                     Divider()
 
@@ -167,12 +238,34 @@ struct StickyNoteEditorView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("请先在设置中创建并导出密钥，或导入已有密钥。")
+            Text("请先在设置中创建或导入 .bkwkey 密钥文件。")
         }
     }
 
     private func adjustFontSize(by delta: Double) {
         settings.macEditorFontSize = SettingsStore.clampedFontSize(settings.macEditorFontSize + delta)
+    }
+
+    private var markdownPreviewShortcut: MarkdownShortcut {
+        shortcutStore.shortcut(for: .markdownPreview)
+    }
+
+    private func toggleMarkdownPreview() {
+        guard !viewModel.isContentLocked, !viewModel.isEncryptionToggling else { return }
+        if isMarkdownPreviewing {
+            isMarkdownPreviewing = false
+        } else {
+            viewModel.saveImmediately()
+            hideFindInterface()
+            isMarkdownPreviewing = true
+        }
+    }
+
+    private func toggleEncryptionLock() {
+        if isMarkdownPreviewing {
+            isMarkdownPreviewing = false
+        }
+        viewModel.toggleEncryptionLock()
     }
 
     private func setToolbarHovering(_ hovering: Bool) {
@@ -190,7 +283,7 @@ struct StickyNoteEditorView: View {
     }
 
     private func toggleFindInterface() {
-        guard !viewModel.isContentLocked else { return }
+        guard !viewModel.isContentLocked, !isMarkdownPreviewing else { return }
         guard let window = NSApp.keyWindow else { return }
         guard let textView = editorTextView(in: window) else {
             let sender = FindPanelActionSender(tag: NSTextFinder.Action.showFindInterface.rawValue)
@@ -277,6 +370,181 @@ enum MacStickyEditorLayout {
             width: baseInset.width + editorHorizontalInset,
             height: baseInset.height
         )
+    }
+}
+
+private struct MacMarkdownPreview: View {
+    let text: String
+    let fontSize: CGFloat
+    let lineHeightMultiple: CGFloat
+    @State private var titlebarHeight: CGFloat = MacStickyEditorLayout.toolbarHoverRegionHeight
+
+    private var previewFont: Font {
+        .system(size: fontSize)
+    }
+
+    private var codeFont: Font {
+        .system(size: max(11, fontSize - 1), design: .monospaced)
+    }
+
+    private var verticalSpacing: CGFloat {
+        max(8, fontSize * (lineHeightMultiple - 0.7))
+    }
+
+    private var textInset: NSSize {
+        MacStickyEditorLayout.textContainerInset(fontSize: fontSize)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("随便写点什么吧")
+                        .font(previewFont)
+                        .foregroundColor(Color(nsColor: .placeholderTextColor))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    MarkdownView(text)
+                        .font(previewFont, for: .body)
+                        .font(codeFont, for: .codeBlock)
+                        .markdownComponentSpacing(verticalSpacing)
+                        .markdownMathRenderingEnabled()
+                        .foregroundStyle(Color(nsColor: .textColor))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.top, titlebarHeight + textInset.height)
+            .padding(.horizontal, textInset.width)
+            .padding(.bottom, MacStickyEditorLayout.editorBottomInset)
+        }
+        .scrollIndicators(.hidden)
+        .background(MacTitlebarHeightReader(height: $titlebarHeight))
+    }
+}
+
+private struct MacTitlebarHeightReader: NSViewRepresentable {
+    @Binding var height: CGFloat
+
+    func makeNSView(context: Context) -> MacTitlebarHeightProbeView {
+        let view = MacTitlebarHeightProbeView()
+        view.onHeightChange = { height = $0 }
+        return view
+    }
+
+    func updateNSView(_ nsView: MacTitlebarHeightProbeView, context: Context) {
+        nsView.onHeightChange = { height = $0 }
+        nsView.updateHeight()
+    }
+}
+
+private final class MacTitlebarHeightProbeView: NSView {
+    var onHeightChange: ((CGFloat) -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        updateHeight()
+    }
+
+    override func layout() {
+        super.layout()
+        updateHeight()
+    }
+
+    func updateHeight() {
+        guard let window else { return }
+        let height = max(0, window.frame.height - window.contentLayoutRect.height)
+        onHeightChange?(height)
+    }
+}
+
+private struct MacMarkdownPreviewShortcutMonitor: NSViewRepresentable {
+    let noteId: String
+    let onCopy: () -> Void
+    let onTogglePreview: () -> Void
+
+    func makeNSView(context: Context) -> MacMarkdownPreviewShortcutMonitorView {
+        let view = MacMarkdownPreviewShortcutMonitorView()
+        view.noteId = noteId
+        view.onCopy = onCopy
+        view.onTogglePreview = onTogglePreview
+        return view
+    }
+
+    func updateNSView(_ nsView: MacMarkdownPreviewShortcutMonitorView, context: Context) {
+        nsView.noteId = noteId
+        nsView.onCopy = onCopy
+        nsView.onTogglePreview = onTogglePreview
+    }
+
+    static func dismantleNSView(_ nsView: MacMarkdownPreviewShortcutMonitorView, coordinator: ()) {
+        nsView.removeMonitor()
+    }
+}
+
+private final class MacMarkdownPreviewShortcutMonitorView: NSView {
+    var noteId = ""
+    var onCopy: (() -> Void)?
+    var onTogglePreview: (() -> Void)?
+    private var monitor: Any?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            removeMonitor()
+        } else {
+            installMonitorIfNeeded()
+        }
+    }
+
+    deinit {
+        removeMonitor()
+    }
+
+    func removeMonitor() {
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+    }
+
+    private func installMonitorIfNeeded() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            return self.handle(event)
+        }
+    }
+
+    private func handle(_ event: NSEvent) -> NSEvent? {
+        guard isEventInCurrentNoteWindow(event) else { return event }
+        guard let chars = event.charactersIgnoringModifiers, !chars.isEmpty else { return event }
+
+        let flags = event.modifierFlags
+        let cmd = flags.contains(.command)
+        let ctrl = flags.contains(.control)
+        let opt = flags.contains(.option)
+
+        if cmd, !ctrl, !opt, chars.lowercased() == "c" {
+            onCopy?()
+            return nil
+        }
+
+        if let action = ShortcutStore.shared.editorAction(matching: event) {
+            switch action {
+            case .markdownPreview:
+                onTogglePreview?()
+                return nil
+            }
+        }
+
+        return event
+    }
+
+    private func isEventInCurrentNoteWindow(_ event: NSEvent) -> Bool {
+        if let eventWindow = event.window {
+            return eventWindow === window || eventWindow.identifier?.rawValue == noteId
+        }
+        return NSApp.keyWindow === window || NSApp.keyWindow?.identifier?.rawValue == noteId
     }
 }
 
@@ -480,6 +748,14 @@ final class StickyNoteEditorViewModel: ObservableObject {
                 StickyNoteWindowManager.shared.updateWindowLevel(for: self.note.id, isPinned: newValue)
             }
             .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .sealNoteLockEncryptedNote)
+            .sink { [weak self] notification in
+                guard let self else { return }
+                if let noteId = notification.object as? String, noteId != self.note.id { return }
+                self.temporarilyLockContent()
+            }
+            .store(in: &cancellables)
     }
 
     func onDisappear() {
@@ -568,6 +844,28 @@ final class StickyNoteEditorViewModel: ObservableObject {
         )
     }
 
+    func decryptPermanently() {
+        guard note.isEncrypted, !isContentLocked else { return }
+        saveTask?.cancel()
+        isEncryptionToggling = true
+        syncStore.setSyncing()
+        let noteToDecrypt = note
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.isEncryptionToggling = false }
+            do {
+                let updatedNote = try await self.vaultStore.decryptNotePermanently(noteToDecrypt)
+                self.note = updatedNote
+                self.text = updatedNote.body
+                self.isContentLocked = false
+                self.syncStore.setSaved()
+            } catch {
+                self.syncStore.setFailed(message: error.localizedDescription)
+            }
+        }
+    }
+
     private func debouncedSave() {
         guard !isContentLocked else { return }
         saveTask?.cancel()
@@ -629,6 +927,11 @@ final class StickyNoteEditorViewModel: ObservableObject {
             return
         }
 
+        guard !note.isEncrypted else {
+            temporarilyLockContent()
+            return
+        }
+
         saveTask?.cancel()
         isEncryptionToggling = true
         syncStore.setSyncing()
@@ -647,7 +950,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
                 print("Seal Note encryption end note=\(noteToEncrypt.id) elapsed_ms=\(String(format: "%.2f", elapsed))")
                 self.note = result.note
                 self.ciphertextPreview = result.ciphertext
-                self.text = result.ciphertext
+                self.text = bodyToEncrypt
                 self.isContentLocked = true
                 self.syncStore.setSaved()
             } catch {
@@ -656,6 +959,14 @@ final class StickyNoteEditorViewModel: ObservableObject {
                 self.syncStore.setFailed(message: error.localizedDescription)
             }
         }
+    }
+
+    private func temporarilyLockContent() {
+        guard note.isEncrypted, !isContentLocked else { return }
+        saveTask?.cancel()
+        ciphertextPreview = ""
+        isContentLocked = true
+        syncStore.setSaved()
     }
 
     private func unlockEncryptedContent() {
@@ -905,6 +1216,7 @@ struct MacTextView: NSViewRepresentable {
     let onFitToContent: () -> Void
     let onCopyShortcut: () -> Void
     let onFindShortcut: () -> Void
+    let onToggleMarkdownPreview: () -> Void
     let onIncreaseFontSize: () -> Void
     let onDecreaseFontSize: () -> Void
     let onFindVisibilityChange: (Bool) -> Void
@@ -922,6 +1234,7 @@ struct MacTextView: NSViewRepresentable {
         onFitToContent: @escaping () -> Void,
         onCopyShortcut: @escaping () -> Void,
         onFindShortcut: @escaping () -> Void,
+        onToggleMarkdownPreview: @escaping () -> Void,
         onIncreaseFontSize: @escaping () -> Void,
         onDecreaseFontSize: @escaping () -> Void,
         onFindVisibilityChange: @escaping (Bool) -> Void
@@ -938,6 +1251,7 @@ struct MacTextView: NSViewRepresentable {
         self.onFitToContent = onFitToContent
         self.onCopyShortcut = onCopyShortcut
         self.onFindShortcut = onFindShortcut
+        self.onToggleMarkdownPreview = onToggleMarkdownPreview
         self.onIncreaseFontSize = onIncreaseFontSize
         self.onDecreaseFontSize = onDecreaseFontSize
         self.onFindVisibilityChange = onFindVisibilityChange
@@ -1267,6 +1581,13 @@ final class AutoFocusTextView: NSTextView {
 
         if let action = ShortcutStore.shared.markdownAction(matching: event) {
             applyFormat(action.command); return
+        }
+
+        if let action = ShortcutStore.shared.editorAction(matching: event) {
+            switch action {
+            case .markdownPreview:
+                coordinator?.parent.onToggleMarkdownPreview(); return
+            }
         }
 
         if cmdShiftOnly && chars.lowercased() == "c" {

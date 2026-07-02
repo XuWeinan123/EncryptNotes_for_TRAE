@@ -88,6 +88,17 @@ struct NoteEditorView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     HStack(spacing: DS.s2) {
+                        #if os(iOS)
+                        Button {} label: {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(DS.textSecondary)
+                        }
+                        .disabled(true)
+                        .accessibilityLabel("Markdown 预览")
+                        .dsGlassToolbarButton()
+                        #endif
+
                         if !isEditing {
                             Button {
                                 toggleEncryption()

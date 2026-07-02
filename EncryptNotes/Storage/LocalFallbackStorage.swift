@@ -32,6 +32,10 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
         for directory in directories {
             if !FileManager.default.fileExists(atPath: directory.path) {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                MaintenanceLogStore.shared.record("storage_directory_created", fields: [
+                    "path": directory.path,
+                    "storage": "local"
+                ])
             }
         }
     }
@@ -56,6 +60,12 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
 
         let data = try JSONEncoder.default.encode(index)
         try data.write(to: url, options: .atomic)
+        MaintenanceLogStore.shared.record("index_saved", fields: [
+            "entries": index.entries.count,
+            "file": url.lastPathComponent,
+            "bytes": data.count,
+            "storage": "local"
+        ])
     }
 
     func listMarkdownFiles(in location: NoteFileLocation) throws -> [URL] {
@@ -77,6 +87,13 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
     func saveMarkdownFile(_ file: MarkdownNoteFile, at url: URL) throws {
         let data = try file.render()
         try data.write(to: url, options: .atomic)
+        MaintenanceLogStore.shared.record("markdown_saved", fields: [
+            "note_id": file.noteId,
+            "file": url.lastPathComponent,
+            "updated_at": ISO8601DateFormatter().string(from: file.updatedAt),
+            "bytes": data.count,
+            "storage": "local"
+        ])
     }
 
     func moveFile(from srcURL: URL, to dstURL: URL) throws {
@@ -91,6 +108,11 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
             try FileManager.default.removeItem(at: dstURL)
         }
         try FileManager.default.moveItem(at: srcURL, to: dstURL)
+        MaintenanceLogStore.shared.record("file_moved", fields: [
+            "from": srcURL.lastPathComponent,
+            "to": dstURL.lastPathComponent,
+            "storage": "local"
+        ])
     }
 
     func permanentlyDeleteFile(at url: URL) throws {
@@ -98,6 +120,10 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
             throw StorageError.fileNotFound
         }
         try FileManager.default.removeItem(at: url)
+        MaintenanceLogStore.shared.record("file_deleted", fields: [
+            "file": url.lastPathComponent,
+            "storage": "local"
+        ])
     }
 
     func createConflictCopy(for url: URL) throws -> URL {
@@ -109,6 +135,12 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
         let conflictFilename = "\(filename)-conflict-\(timestamp).md"
         let conflictURL = container.appendingPathComponent(conflictFilename)
         try FileManager.default.copyItem(at: url, to: conflictURL)
+        MaintenanceLogStore.shared.record("conflict_copy_created", fields: [
+            "source": url.lastPathComponent,
+            "conflict": conflictURL.lastPathComponent,
+            "timestamp": timestamp,
+            "storage": "local"
+        ])
         return conflictURL
     }
 }

@@ -21,7 +21,7 @@ struct AllNotesView: View {
                 HStack(spacing: DS.s2) {
                     SWSearchField(placeholder: "搜索笔记…", text: $searchText)
 
-                    SWStatusBadge("\(filteredNotes.count) 条", systemImage: "doc.text", style: .success)
+                    SWStatusBadge(noteCountText, systemImage: "doc.text", style: isLoading ? .neutral : .success)
                     if !emptyNotes.isEmpty {
                         SWStatusBadge("\(emptyNotes.count) 条空笔记", systemImage: "exclamationmark.triangle", style: .warning)
                     }
@@ -64,7 +64,16 @@ struct AllNotesView: View {
             .padding(.bottom, DS.s2)
 
             List {
-                if filteredNotes.isEmpty {
+                if isLoading {
+                    SWEmptyState(
+                        title: "正在加载笔记",
+                        message: "笔记会在同步和索引读取完成后显示。",
+                        systemImage: "tray.full"
+                    )
+                    .listRowInsets(EdgeInsets(top: DS.s3, leading: DS.s3, bottom: DS.s3, trailing: DS.s3))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(DS.bg)
+                } else if filteredNotes.isEmpty {
                     SWEmptyState(
                         title: "没有匹配的笔记",
                         message: emptyStateMessage,
@@ -131,6 +140,15 @@ struct AllNotesView: View {
         return result
     }
 
+    private var isLoading: Bool {
+        if case .loading = vaultStore.state { return true }
+        return false
+    }
+
+    private var noteCountText: String {
+        isLoading ? "加载中" : "\(filteredNotes.count) 条"
+    }
+
     private var emptyNotes: [Note] {
         vaultStore.readableNotes.filter { isEmptyNote($0) }
     }
@@ -168,7 +186,7 @@ struct AllNotesView: View {
 
         case .locked(let info):
             SWNoteListRow(
-                title: "加密笔记 · 未加载密钥",
+                title: "加密笔记",
                 subtitle: "加密笔记",
                 systemImage: "lock.fill",
                 tint: DS.textSubtle

@@ -10,20 +10,22 @@ struct MacSettingsView: View {
         case aiTitle
         case shortcuts
         case key
+        case about
     }
 
     @ObservedObject private var shortcutStore = ShortcutStore.shared
     @ObservedObject private var vaultStore = VaultStore.shared
     @ObservedObject private var settings = SettingsStore.shared
     @State private var selectedTab: Tab
-    @State private var recordingAction: MarkdownShortcutAction?
+    @State private var recordingAction: MacShortcutRecordingAction?
     @State private var settingsErrorMessage: String?
     @State private var deepSeekAPIKey = ""
     @State private var geminiAPIKey = ""
     @State private var apiKeyStatusMessage: String?
+    @State private var logStatusMessage: String?
 
     init(selectedTab: Tab = .general) {
-        _selectedTab = State(initialValue: selectedTab)
+        _selectedTab = State(initialValue: selectedTab == .aiTitle ? .general : selectedTab)
     }
 
     var body: some View {
@@ -40,12 +42,6 @@ struct MacSettingsView: View {
                 }
                 .tag(Tab.editor)
 
-            aiTitleTab
-                .tabItem {
-                    Label("AI", systemImage: "sparkles")
-                }
-                .tag(Tab.aiTitle)
-
             shortcutTab
                 .tabItem {
                     Label("快捷键", systemImage: "keyboard")
@@ -57,6 +53,12 @@ struct MacSettingsView: View {
                     Label("密钥", systemImage: "key")
                 }
                 .tag(Tab.key)
+
+            aboutTab
+                .tabItem {
+                    Label("关于", systemImage: "info.circle")
+                }
+                .tag(Tab.about)
         }
         .padding(.horizontal, DS.s4)
         .padding(.bottom, DS.s4)
@@ -134,6 +136,86 @@ struct MacSettingsView: View {
                     .labelsHidden()
                     .frame(width: 150)
                     .tint(DS.primary)
+                }
+            }
+        }
+    }
+
+    private var aboutTab: some View {
+        panelStack {
+            SWSectionPanel {
+                VStack(spacing: DS.s6) {
+                    aboutLogo
+
+                    VStack(spacing: DS.s2) {
+                        Text("Seal Note")
+                            .font(.system(size: 34, weight: .semibold))
+                            .foregroundStyle(DS.textEmphasize)
+
+                        Text("快速记录，不打断当前工作。")
+                            .font(.system(size: 16, weight: .regular))
+                            .foregroundStyle(DS.textSecondary)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, DS.s4)
+            }
+
+            macPanel("欢迎") {
+                SWSettingsRow("菜单栏便签", subtitle: "从右上角菜单快速新建、打开最近笔记。", systemImage: "menubar.rectangle") {
+                    EmptyView()
+                }
+                SWRowDivider()
+                SWSettingsRow("Markdown 文件", subtitle: "每条笔记都是可同步、可迁移的 Markdown 文件。", systemImage: "doc.plaintext") {
+                    EmptyView()
+                }
+                SWRowDivider()
+                SWSettingsRow("正文加密", subtitle: "加密笔记只加密正文，密钥来自你选择的 .bkwkey 文件。", systemImage: "lock.shield") {
+                    EmptyView()
+                }
+            }
+
+            macPanel("应用信息") {
+                SWSettingsRow("应用名称", systemImage: "app.badge") {
+                    Text("Seal Note")
+                        .font(DS.body())
+                        .foregroundColor(DS.textSecondary)
+                }
+                SWRowDivider()
+                SWSettingsRow("当前版本", systemImage: "number") {
+                    Text("v0.2")
+                        .font(DS.body())
+                        .foregroundColor(DS.textSecondary)
+                }
+            }
+
+            macPanel("维护日志") {
+                toggleRow("记录维护日志", subtitle: "默认关闭；开启后记录保存、索引、冲突和文件操作元数据，不记录正文或密钥。", systemImage: "doc.text.magnifyingglass", isOn: $settings.maintenanceLoggingEnabled)
+
+                SWRowDivider()
+
+                SWSettingsRow("下载日志", subtitle: "导出本机维护日志，用于后续代码维护和问题排查。", systemImage: "square.and.arrow.down") {
+                    HStack(spacing: DS.s2) {
+                        Button("下载…") {
+                            exportMaintenanceLog()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        Button {
+                            openMaintenanceLogFolder()
+                        } label: {
+                            Label("打开文件夹", systemImage: "folder")
+                                .labelStyle(.iconOnly)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .help("打开日志文件夹")
+                    }
+                }
+
+                if let logStatusMessage {
+                    helperText(logStatusMessage)
                 }
             }
         }
@@ -299,6 +381,23 @@ struct MacSettingsView: View {
                 helperText("默认快捷键：⌃⌘Z")
             }
 
+            macPanel("编辑器操作") {
+                LazyVGrid(columns: shortcutGridColumns, alignment: .leading, spacing: DS.s2) {
+                    ForEach(EditorShortcutAction.allCases) { action in
+                        let shortcut = shortcutStore.shortcut(for: action)
+                        shortcutTile(
+                            title: action.title,
+                            value: ShortcutStore.displayStringForKey(
+                                keyCode: shortcut.keyCode,
+                                modifiers: shortcut.modifiers
+                            ),
+                            isRecording: recordingAction == .editor(action),
+                            onRecord: { recordingAction = .editor(action) }
+                        )
+                    }
+                }
+            }
+
             macPanel("Markdown 格式") {
                 LazyVGrid(columns: shortcutGridColumns, alignment: .leading, spacing: DS.s2) {
                     ForEach(MarkdownShortcutAction.allCases) { action in
@@ -309,8 +408,8 @@ struct MacSettingsView: View {
                                 keyCode: shortcut.keyCode,
                                 modifiers: shortcut.modifiers
                             ),
-                            isRecording: recordingAction == action,
-                            onRecord: { recordingAction = action }
+                            isRecording: recordingAction == .markdown(action),
+                            onRecord: { recordingAction = .markdown(action) }
                         )
                     }
                 }
@@ -338,21 +437,12 @@ struct MacSettingsView: View {
 
             if vaultStore.isKeyLoaded {
                 macPanel("密钥状态") {
-                    SWSettingsRow("密钥已加载到本机", subtitle: "请妥善保存密钥文件，丢失后无法恢复加密笔记。", systemImage: "checkmark.shield.fill", tint: DS.primaryDeep) {
+                    SWSettingsRow("密钥文件已配置", subtitle: vaultStore.keyFileDisplayPath ?? "请妥善保存密钥文件，丢失后无法恢复加密笔记。", systemImage: "checkmark.shield.fill", tint: DS.primaryDeep) {
                         SWStatusBadge("可解锁", style: .success)
                     }
                     SWRowDivider()
 
-                    SWSettingsRow("导出密钥文件", subtitle: "保存为 .bkwkey 文件", systemImage: "square.and.arrow.up") {
-                        Button("导出…") {
-                            exportKey()
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
-                    SWRowDivider()
-
-                    SWSettingsRow("移除本机密钥", subtitle: "不删除笔记，只让加密内容回到锁定状态", systemImage: "lock.slash", tint: DS.destructive) {
+                    SWSettingsRow("移除密钥引用", subtitle: "移除前需要选择如何处理现有加密笔记", systemImage: "lock.slash", tint: DS.destructive) {
                         Button("移除", role: .destructive) {
                             unloadKey()
                         }
@@ -362,7 +452,7 @@ struct MacSettingsView: View {
                 }
             } else {
                 macPanel("密钥状态") {
-                    SWSettingsRow("本机未加载密钥", subtitle: "密钥文件只会在本机读取，不会上传。", systemImage: "lock.shield", tint: DS.textSubtle) {
+                    SWSettingsRow("未配置密钥文件", subtitle: "密钥文件只会在需要解密时读取，不会保存到钥匙串。", systemImage: "lock.shield", tint: DS.textSubtle) {
                         SWStatusBadge("锁定", style: .neutral)
                     }
                     SWRowDivider()
@@ -385,6 +475,12 @@ struct MacSettingsView: View {
                         .tint(DS.primary)
                     }
                 }
+            }
+
+            macPanel("临时锁定") {
+                toggleRow("睡眠或锁屏时临时上锁", subtitle: "打开的加密笔记会进入模糊锁定状态。", systemImage: "moon.zzz", isOn: $settings.lockEncryptedNotesOnSleep)
+                SWRowDivider()
+                toggleRow("非置顶窗口进入后台时临时上锁", subtitle: "未置顶的加密笔记失焦后需要重新解锁。", systemImage: "rectangle.on.rectangle.slash", isOn: $settings.lockUnpinnedEncryptedNotesOnBackground)
             }
         }
     }
@@ -438,7 +534,12 @@ struct MacSettingsView: View {
 
     private var shortcutRecorder: some View {
         ShortcutRecorderView(recordingAction: $recordingAction) { action, shortcut in
-            shortcutStore.setMarkdownShortcut(shortcut, for: action)
+            switch action {
+            case .markdown(let markdownAction):
+                shortcutStore.setMarkdownShortcut(shortcut, for: markdownAction)
+            case .editor(let editorAction):
+                shortcutStore.setEditorShortcut(shortcut, for: editorAction)
+            }
             recordingAction = nil
         }
         .frame(width: 0, height: 0)
@@ -559,6 +660,25 @@ struct MacSettingsView: View {
             .padding(.horizontal, DS.s1)
     }
 
+    @ViewBuilder
+    private var aboutLogo: some View {
+        if let image = NSApp.applicationIconImage, image.isValid {
+            Image(nsImage: image)
+                .resizable()
+                .frame(width: 82, height: 82)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .shadow(color: DS.floatShadow.color, radius: DS.floatShadow.radius, x: DS.floatShadow.x, y: DS.floatShadow.y)
+        } else {
+            Image(systemName: "pencil")
+                .font(.system(size: 40, weight: .semibold))
+                .foregroundStyle(DS.primaryDeep)
+                .frame(width: 82, height: 82)
+                .background(DS.primaryContainer)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .shadow(color: DS.floatShadow.color, radius: DS.floatShadow.radius, x: DS.floatShadow.x, y: DS.floatShadow.y)
+        }
+    }
+
     private func loadAIAPIKeys() {
         deepSeekAPIKey = settings.loadMacAITitleAPIKey(for: .deepSeek)
         geminiAPIKey = settings.loadMacAITitleAPIKey(for: .gemini)
@@ -594,71 +714,147 @@ struct MacSettingsView: View {
         }
     }
 
+    private func exportMaintenanceLog() {
+        do {
+            let logURL = try MaintenanceLogStore.shared.exportLogFile()
+            let panel = NSSavePanel()
+            panel.title = "下载维护日志"
+            panel.message = "保存 Seal Note 的本机维护日志。"
+            panel.nameFieldStringValue = "seal-note-maintenance.log"
+            panel.allowedContentTypes = [.plainText]
+            if panel.runModal() == .OK, let saveURL = panel.url {
+                if FileManager.default.fileExists(atPath: saveURL.path) {
+                    try FileManager.default.removeItem(at: saveURL)
+                }
+                try FileManager.default.copyItem(at: logURL, to: saveURL)
+                logStatusMessage = "维护日志已导出。"
+            }
+        } catch {
+            settingsErrorMessage = "无法导出维护日志：\(error.localizedDescription)"
+        }
+    }
+
+    private func openMaintenanceLogFolder() {
+        let url = MaintenanceLogStore.shared.logsDirectory
+        do {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            if !NSWorkspace.shared.open(url) {
+                settingsErrorMessage = "Finder 未能打开：\(url.path)"
+            }
+        } catch {
+            settingsErrorMessage = "无法打开日志文件夹：\(error.localizedDescription)"
+        }
+    }
+
     private func loadKey() {
         MacMenuBarController.shared.loadKeyFile()
     }
 
     private func unloadKey() {
         let alert = NSAlert()
-        alert.messageText = "移除本机密钥？"
-        alert.informativeText = "移除后，所有加密笔记将无法查看，直到重新加载密钥。"
-        alert.addButton(withTitle: "移除")
+        alert.messageText = "移除密钥前如何处理加密笔记？"
+        alert.informativeText = "删除会永久移除加密笔记；解密和导出都需要当前密钥文件可用且匹配。"
+        alert.addButton(withTitle: "永久删除加密笔记")
+        alert.addButton(withTitle: "全部解密为明文")
+        alert.addButton(withTitle: "解密导出并移除本地")
         alert.addButton(withTitle: "取消")
-        if alert.runModal() == .alertFirstButtonReturn {
-            Task {
-                try? await vaultStore.unloadKey()
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            confirmPermanentDeleteEncryptedNotes()
+        case .alertSecondButtonReturn:
+            decryptAllEncryptedNotesAndRemoveKey()
+        case .alertThirdButtonReturn:
+            exportPlaintextAndRemoveEncryptedNotes()
+        default:
+            break
+        }
+    }
+
+    private func confirmPermanentDeleteEncryptedNotes() {
+        let alert = NSAlert()
+        alert.messageText = "永久删除所有加密笔记？"
+        alert.informativeText = "这个操作不会移到回收站，删除后无法恢复。"
+        alert.addButton(withTitle: "永久删除")
+        alert.addButton(withTitle: "取消")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        Task {
+            do {
+                _ = try await vaultStore.permanentlyDeleteAllEncryptedNotes()
                 StickyNoteWindowManager.shared.closeAllWindows()
+            } catch {
+                await MainActor.run {
+                    settingsErrorMessage = error.localizedDescription
+                }
             }
         }
     }
 
-    private func exportKey() {
-        do {
-            let keyURL = try vaultStore.exportKeyFile()
-            let panel = NSSavePanel()
-            panel.title = "导出密钥文件"
-            panel.message = "请将密钥文件保存到安全的位置。"
-            panel.nameFieldStringValue = keyURL.lastPathComponent
-            panel.allowedContentTypes = [.init(filenameExtension: "bkwkey")!]
-            if panel.runModal() == .OK, let saveURL = panel.url {
-                try? FileManager.default.copyItem(at: keyURL, to: saveURL)
+    private func decryptAllEncryptedNotesAndRemoveKey() {
+        Task {
+            do {
+                _ = try await vaultStore.decryptAllEncryptedNotesAndRemoveKey()
+                StickyNoteWindowManager.shared.closeAllWindows()
+            } catch {
+                await MainActor.run {
+                    settingsErrorMessage = error.localizedDescription
+                }
             }
-            try? FileManager.default.removeItem(at: keyURL)
-        } catch {
-            let alert = NSAlert()
-            alert.messageText = "导出失败"
-            alert.informativeText = error.localizedDescription
-            alert.addButton(withTitle: "确定")
-            alert.runModal()
+        }
+    }
+
+    private func exportPlaintextAndRemoveEncryptedNotes() {
+        let panel = NSSavePanel()
+        panel.title = "导出解密后的明文笔记"
+        panel.message = "导出成功后，本地加密笔记会被永久移除。"
+        panel.nameFieldStringValue = "Seal Note-解密笔记.zip"
+        panel.allowedContentTypes = [.init(filenameExtension: "zip")!]
+        guard panel.runModal() == .OK, let saveURL = panel.url else { return }
+
+        Task {
+            do {
+                _ = try await vaultStore.exportPlaintextEncryptedNotesAndRemoveLocalNotes(to: saveURL)
+                StickyNoteWindowManager.shared.closeAllWindows()
+            } catch {
+                await MainActor.run {
+                    settingsErrorMessage = error.localizedDescription
+                }
+            }
         }
     }
 
     private func createNewKey() {
+        guard !vaultStore.isKeyLoaded else {
+            unloadKey()
+            return
+        }
+
         let alert = NSAlert()
-        alert.messageText = "创建新的加密空间？"
-        alert.informativeText = "将生成新的密钥，你需要妥善保存密钥文件。如果 iCloud 中已有加密笔记，将无法使用新密钥解锁。"
+        alert.messageText = "创建加密密钥？"
+        alert.informativeText = "请将密钥文件保存到安全位置。丢失密钥将无法解密加密笔记。"
         alert.addButton(withTitle: "创建")
         alert.addButton(withTitle: "取消")
         if alert.runModal() == .alertFirstButtonReturn {
+            let savePanel = NSSavePanel()
+            savePanel.title = "保存密钥文件"
+            savePanel.message = "保存成功后，Seal Note 会记住这个密钥文件的位置。"
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            savePanel.nameFieldStringValue = "Seal Note-密钥-\(formatter.string(from: Date())).bkwkey"
+            savePanel.allowedContentTypes = [.init(filenameExtension: "bkwkey")!]
+            guard savePanel.runModal() == .OK, let saveURL = savePanel.url else { return }
+
             Task {
                 do {
-                    try await vaultStore.createKey()
-                    let keyURL = try vaultStore.exportKeyFile()
-                    let savePanel = NSSavePanel()
-                    savePanel.title = "保存密钥文件"
-                    savePanel.message = "请立即将密钥文件保存到安全的位置。丢失密钥将无法解密加密笔记。"
-                    savePanel.nameFieldStringValue = keyURL.lastPathComponent
-                    savePanel.allowedContentTypes = [.init(filenameExtension: "bkwkey")!]
-                    if savePanel.runModal() == .OK, let saveURL = savePanel.url {
-                        try? FileManager.default.copyItem(at: keyURL, to: saveURL)
-                    }
-                    try? FileManager.default.removeItem(at: keyURL)
+                    try await vaultStore.createKeyFile(at: saveURL)
                 } catch {
-                    let errorAlert = NSAlert()
-                    errorAlert.messageText = "创建失败"
-                    errorAlert.informativeText = error.localizedDescription
-                    errorAlert.addButton(withTitle: "确定")
-                    errorAlert.runModal()
+                    await MainActor.run {
+                        let errorAlert = NSAlert()
+                        errorAlert.messageText = "创建失败"
+                        errorAlert.informativeText = error.localizedDescription
+                        errorAlert.addButton(withTitle: "确定")
+                        errorAlert.runModal()
+                    }
                 }
             }
         }
@@ -673,10 +869,6 @@ struct MacSettingsView: View {
     MacSettingsView(selectedTab: .editor)
 }
 
-#Preview("设置 - AI 标题") {
-    MacSettingsView(selectedTab: .aiTitle)
-}
-
 #Preview("设置 - 快捷键") {
     MacSettingsView(selectedTab: .shortcuts)
 }
@@ -685,25 +877,39 @@ struct MacSettingsView: View {
     MacSettingsView(selectedTab: .key)
 }
 
+private enum MacShortcutRecordingAction: Equatable, Identifiable {
+    case markdown(MarkdownShortcutAction)
+    case editor(EditorShortcutAction)
+
+    var id: String {
+        switch self {
+        case .markdown(let action): return "markdown.\(action.rawValue)"
+        case .editor(let action): return "editor.\(action.rawValue)"
+        }
+    }
+}
+
 private struct MacSettingsPage<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.s3) {
-            content()
-            Spacer(minLength: 0)
+        ScrollView {
+            VStack(alignment: .leading, spacing: DS.s3) {
+                content()
+            }
+            .padding(.top, DS.s6)
+            .padding(.horizontal, DS.s3)
+            .padding(.bottom, DS.s4)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(.top, DS.s6)
-        .padding(.horizontal, DS.s3)
-        .padding(.bottom, DS.s4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(DS.bg)
     }
 }
 
 private struct ShortcutRecorderView: NSViewRepresentable {
-    @Binding var recordingAction: MarkdownShortcutAction?
-    let onRecord: (MarkdownShortcutAction, MarkdownShortcut) -> Void
+    @Binding var recordingAction: MacShortcutRecordingAction?
+    let onRecord: (MacShortcutRecordingAction, MarkdownShortcut) -> Void
 
     func makeNSView(context: Context) -> RecorderView {
         let view = RecorderView()
@@ -724,8 +930,8 @@ private struct ShortcutRecorderView: NSViewRepresentable {
     }
 
     final class RecorderView: NSView {
-        var recordingAction: MarkdownShortcutAction?
-        var onRecord: ((MarkdownShortcutAction, MarkdownShortcut) -> Void)?
+        var recordingAction: MacShortcutRecordingAction?
+        var onRecord: ((MacShortcutRecordingAction, MarkdownShortcut) -> Void)?
         var onCancel: (() -> Void)?
 
         override var acceptsFirstResponder: Bool { true }

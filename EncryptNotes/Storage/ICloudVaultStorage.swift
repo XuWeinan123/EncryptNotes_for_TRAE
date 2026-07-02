@@ -22,6 +22,10 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
         ubiquityContainerURL = ubiquityURL
         _containerURL = Self.publicICloudDriveFolderURL()
             ?? ubiquityURL?.appendingPathComponent("Documents")
+        MaintenanceLogStore.shared.record("icloud_storage_init", fields: [
+            "container": _containerURL?.path,
+            "ubiquity_container": ubiquityURL?.path
+        ])
     }
 
     nonisolated private static func developmentContainerURL() -> URL? {
@@ -38,7 +42,19 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
         #if os(macOS)
         let cloudDocsURL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs")
-        return cloudDocsURL.appendingPathComponent("Seal Note")
+        let folderNames = ["Seal Note", "别看我"]
+        let candidates = folderNames.map { cloudDocsURL.appendingPathComponent($0) }
+        if let existingVault = candidates.first(where: {
+            FileManager.default.fileExists(atPath: $0.appendingPathComponent("notes.json").path)
+        }) {
+            return existingVault
+        }
+        if let existingFolder = candidates.first(where: {
+            FileManager.default.fileExists(atPath: $0.path)
+        }) {
+            return existingFolder
+        }
+        return candidates[0]
         #else
         return nil
         #endif
@@ -62,6 +78,9 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
         for directory in directories {
             if !FileManager.default.fileExists(atPath: directory.path) {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                MaintenanceLogStore.shared.record("storage_directory_created", fields: [
+                    "path": directory.path
+                ])
             }
         }
     }
@@ -154,6 +173,11 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
 
         let data = try JSONEncoder.default.encode(index)
         try atomicWrite(data: data, to: url)
+        MaintenanceLogStore.shared.record("index_saved", fields: [
+            "entries": index.entries.count,
+            "file": url.lastPathComponent,
+            "bytes": data.count
+        ])
     }
 
     func listMarkdownFiles(in location: NoteFileLocation) throws -> [URL] {
@@ -175,6 +199,12 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
     func saveMarkdownFile(_ file: MarkdownNoteFile, at url: URL) throws {
         let data = try file.render()
         try atomicWrite(data: data, to: url)
+        MaintenanceLogStore.shared.record("markdown_saved", fields: [
+            "note_id": file.noteId,
+            "file": url.lastPathComponent,
+            "updated_at": ISO8601DateFormatter().string(from: file.updatedAt),
+            "bytes": data.count
+        ])
     }
 
     func moveFile(from srcURL: URL, to dstURL: URL) throws {
@@ -189,6 +219,10 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
             try FileManager.default.removeItem(at: dstURL)
         }
         try FileManager.default.moveItem(at: srcURL, to: dstURL)
+        MaintenanceLogStore.shared.record("file_moved", fields: [
+            "from": srcURL.lastPathComponent,
+            "to": dstURL.lastPathComponent
+        ])
     }
 
     func permanentlyDeleteFile(at url: URL) throws {
@@ -196,6 +230,9 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
             throw StorageError.fileNotFound
         }
         try FileManager.default.removeItem(at: url)
+        MaintenanceLogStore.shared.record("file_deleted", fields: [
+            "file": url.lastPathComponent
+        ])
     }
 
     func createConflictCopy(for url: URL) throws -> URL {
@@ -207,6 +244,11 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
         let conflictFilename = "\(filename)-conflict-\(timestamp).md"
         let conflictURL = container.appendingPathComponent(conflictFilename)
         try FileManager.default.copyItem(at: url, to: conflictURL)
+        MaintenanceLogStore.shared.record("conflict_copy_created", fields: [
+            "source": url.lastPathComponent,
+            "conflict": conflictURL.lastPathComponent,
+            "timestamp": timestamp
+        ])
         return conflictURL
     }
 

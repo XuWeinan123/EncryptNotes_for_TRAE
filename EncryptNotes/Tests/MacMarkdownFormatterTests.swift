@@ -185,6 +185,69 @@ final class MacMarkdownFormatterTests: XCTestCase {
         XCTAssertEqual(result?.selection, NSRange(location: 12, length: 0))
     }
 
+    func testNumberedListReturnRenumbersFollowingItems() {
+        let text = """
+        1. 登录
+        2. 租户选择（含登录）
+        3. Worker 设备管理
+        4. Connector 连接器
+        5. 自动任务页面
+        6. 工作流编辑含协作
+        7. 工作流管理
+        8. 个人账号管理页面
+        9. 官网登录页面
+        """
+        let cursor = (text as NSString).range(of: "5. 自动任务页面").location + ("5. 自动任务页面" as NSString).length
+        let result = MacMarkdownFormatter.continueListIfNeeded(
+            in: text,
+            selection: NSRange(location: cursor, length: 0)
+        )
+        XCTAssertEqual(result?.text, """
+        1. 登录
+        2. 租户选择（含登录）
+        3. Worker 设备管理
+        4. Connector 连接器
+        5. 自动任务页面
+        6. 
+        7. 工作流编辑含协作
+        8. 工作流管理
+        9. 个人账号管理页面
+        10. 官网登录页面
+        """)
+    }
+
+    func testEmptyGeneratedNumberedListMarkerExitsListAndRenumbersFollowingItems() {
+        let text = """
+        1. 登录
+        2. 租户选择（含登录）
+        3. Worker 设备管理
+        4. Connector 连接器
+        5. 自动任务页面
+        6. 
+        7. 工作流编辑含协作
+        8. 工作流管理
+        9. 个人账号管理页面
+        10. 官网登录页面
+        """
+        let cursor = (text as NSString).range(of: "6. ").location + ("6. " as NSString).length
+        let result = MacMarkdownFormatter.continueListIfNeeded(
+            in: text,
+            selection: NSRange(location: cursor, length: 0)
+        )
+        XCTAssertEqual(result?.text, """
+        1. 登录
+        2. 租户选择（含登录）
+        3. Worker 设备管理
+        4. Connector 连接器
+        5. 自动任务页面
+
+        6. 工作流编辑含协作
+        7. 工作流管理
+        8. 个人账号管理页面
+        9. 官网登录页面
+        """)
+    }
+
     func testBulletListReturnContinuesSameMarker() {
         let text = "- hello"
         let result = MacMarkdownFormatter.continueListIfNeeded(

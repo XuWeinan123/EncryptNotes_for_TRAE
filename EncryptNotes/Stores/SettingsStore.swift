@@ -22,6 +22,11 @@ enum MacTheme: String, CaseIterable, Identifiable, Codable {
 }
 
 #if os(macOS)
+struct VaultKeyFileReference: Codable, Equatable {
+    let bookmarkData: Data
+    let displayPath: String
+}
+
 enum MacAITitleProvider: String, CaseIterable, Identifiable, Codable {
     case deepSeek
     case gemini
@@ -63,6 +68,8 @@ final class SettingsStore: ObservableObject {
     #if os(macOS)
     static let defaultLaunchAtLogin = false
     static let defaultPinNewNotes = true
+    static let defaultLockEncryptedNotesOnSleep = true
+    static let defaultLockUnpinnedEncryptedNotesOnBackground = true
     static let defaultMacAITitleProvider: MacAITitleProvider = .deepSeek
     static let defaultMacAITitlePrompt = "请为以下笔记生成一个简洁标题，最多 20 个中文字符或 8 个英文单词。只返回标题，不要解释、不要引号、不要 Markdown。"
     #endif
@@ -120,6 +127,15 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(autoDeleteEmptyNotes, forKey: Keys.autoDeleteEmptyNotes) }
     }
 
+    @Published var maintenanceLoggingEnabled: Bool {
+        didSet {
+            defaults.set(maintenanceLoggingEnabled, forKey: Keys.maintenanceLoggingEnabled)
+            MaintenanceLogStore.shared.record(
+                maintenanceLoggingEnabled ? "maintenance_logging_enabled" : "maintenance_logging_disabled"
+            )
+        }
+    }
+
     @Published var macTheme: MacTheme {
         didSet { defaults.set(macTheme.rawValue, forKey: Self.macThemeDefaultsKey) }
     }
@@ -142,6 +158,25 @@ final class SettingsStore: ObservableObject {
 
     @Published var pinNewNotesByDefault: Bool {
         didSet { defaults.set(pinNewNotesByDefault, forKey: Keys.pinNewNotesByDefault) }
+    }
+
+    @Published var lockEncryptedNotesOnSleep: Bool {
+        didSet { defaults.set(lockEncryptedNotesOnSleep, forKey: Keys.lockEncryptedNotesOnSleep) }
+    }
+
+    @Published var lockUnpinnedEncryptedNotesOnBackground: Bool {
+        didSet { defaults.set(lockUnpinnedEncryptedNotesOnBackground, forKey: Keys.lockUnpinnedEncryptedNotesOnBackground) }
+    }
+
+    @Published private(set) var vaultKeyFileReference: VaultKeyFileReference? {
+        didSet {
+            if let vaultKeyFileReference,
+               let data = try? JSONEncoder.default.encode(vaultKeyFileReference) {
+                defaults.set(data, forKey: Keys.vaultKeyFileReference)
+            } else {
+                defaults.removeObject(forKey: Keys.vaultKeyFileReference)
+            }
+        }
     }
 
     @Published var macAITitleEnabled: Bool {
@@ -190,6 +225,7 @@ final class SettingsStore: ObservableObject {
 
         self.copyAddsParagraphSpacing = defaults.object(forKey: Keys.copyAddsParagraphSpacing) as? Bool ?? false
         self.autoDeleteEmptyNotes = defaults.object(forKey: Keys.autoDeleteEmptyNotes) as? Bool ?? true
+        self.maintenanceLoggingEnabled = defaults.object(forKey: Keys.maintenanceLoggingEnabled) as? Bool ?? false
         self.macTheme = MacTheme(rawValue: defaults.string(forKey: Self.macThemeDefaultsKey) ?? "") ?? Self.defaultMacTheme
         let storedRecentNotesLimit = defaults.integer(forKey: Keys.macRecentNotesLimit)
         self.macRecentNotesLimit = storedRecentNotesLimit > 0
@@ -198,6 +234,14 @@ final class SettingsStore: ObservableObject {
         #if os(macOS)
         self.launchAtLogin = defaults.object(forKey: Keys.launchAtLogin) as? Bool ?? Self.defaultLaunchAtLogin
         self.pinNewNotesByDefault = defaults.object(forKey: Keys.pinNewNotesByDefault) as? Bool ?? Self.defaultPinNewNotes
+        self.lockEncryptedNotesOnSleep = defaults.object(forKey: Keys.lockEncryptedNotesOnSleep) as? Bool ?? Self.defaultLockEncryptedNotesOnSleep
+        self.lockUnpinnedEncryptedNotesOnBackground = defaults.object(forKey: Keys.lockUnpinnedEncryptedNotesOnBackground) as? Bool ?? Self.defaultLockUnpinnedEncryptedNotesOnBackground
+        if let referenceData = defaults.data(forKey: Keys.vaultKeyFileReference),
+           let reference = try? JSONDecoder.default.decode(VaultKeyFileReference.self, from: referenceData) {
+            self.vaultKeyFileReference = reference
+        } else {
+            self.vaultKeyFileReference = nil
+        }
         self.macAITitleEnabled = defaults.object(forKey: Keys.macAITitleEnabled) as? Bool ?? false
         self.macAITitleProvider = MacAITitleProvider(rawValue: defaults.string(forKey: Keys.macAITitleProvider) ?? "") ?? Self.defaultMacAITitleProvider
         let storedPrompt = defaults.string(forKey: Keys.macAITitlePrompt) ?? ""
@@ -218,11 +262,15 @@ final class SettingsStore: ObservableObject {
         macEditorLineHeightMultiple = Self.defaultMacEditorLineHeightMultiple
         copyAddsParagraphSpacing = false
         autoDeleteEmptyNotes = true
+        maintenanceLoggingEnabled = false
         macTheme = Self.defaultMacTheme
         macRecentNotesLimit = Self.defaultMacRecentNotesLimit
         #if os(macOS)
         launchAtLogin = Self.defaultLaunchAtLogin
         pinNewNotesByDefault = Self.defaultPinNewNotes
+        lockEncryptedNotesOnSleep = Self.defaultLockEncryptedNotesOnSleep
+        lockUnpinnedEncryptedNotesOnBackground = Self.defaultLockUnpinnedEncryptedNotesOnBackground
+        clearVaultKeyFileReference()
         macAITitleEnabled = false
         macAITitleProvider = Self.defaultMacAITitleProvider
         macAITitlePrompt = Self.defaultMacAITitlePrompt
@@ -251,6 +299,37 @@ final class SettingsStore: ObservableObject {
 
     func resetMacAITitlePrompt() {
         macAITitlePrompt = Self.defaultMacAITitlePrompt
+    }
+
+    func saveVaultKeyFileReference(for url: URL) throws {
+        let bookmarkData = try url.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        vaultKeyFileReference = VaultKeyFileReference(
+            bookmarkData: bookmarkData,
+            displayPath: url.path
+        )
+    }
+
+    func resolveVaultKeyFileURL() throws -> (url: URL, isStale: Bool) {
+        guard let reference = vaultKeyFileReference else {
+            throw CryptoError.keyNotFound
+        }
+
+        var isStale = false
+        let url = try URL(
+            resolvingBookmarkData: reference.bookmarkData,
+            options: [.withSecurityScope],
+            relativeTo: nil,
+            bookmarkDataIsStale: &isStale
+        )
+        return (url, isStale)
+    }
+
+    func clearVaultKeyFileReference() {
+        vaultKeyFileReference = nil
     }
 
     func saveMacAITitleAPIKey(_ key: String, for provider: MacAITitleProvider) throws {
@@ -294,10 +373,14 @@ final class SettingsStore: ObservableObject {
         static let macEditorLineHeightMultiple = "BKMacEditorLineHeightMultiple"
         static let copyAddsParagraphSpacing = "BKCopyAddsParagraphSpacing"
         static let autoDeleteEmptyNotes = "BKAutoDeleteEmptyNotes"
+        static let maintenanceLoggingEnabled = "BKMaintenanceLoggingEnabled"
         static let macRecentNotesLimit = "BKMacRecentNotesLimit"
         #if os(macOS)
         static let launchAtLogin = "BKLaunchAtLogin"
         static let pinNewNotesByDefault = "BKPinNewNotesByDefault"
+        static let lockEncryptedNotesOnSleep = "BKLockEncryptedNotesOnSleep"
+        static let lockUnpinnedEncryptedNotesOnBackground = "BKLockUnpinnedEncryptedNotesOnBackground"
+        static let vaultKeyFileReference = "BKVaultKeyFileReference"
         static let macAITitleEnabled = "BKMacAITitleEnabled"
         static let macAITitleProvider = "BKMacAITitleProvider"
         static let macAITitlePrompt = "BKMacAITitlePrompt"
