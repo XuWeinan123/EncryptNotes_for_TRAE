@@ -55,7 +55,7 @@ nonisolated struct NoteIndex: Codable, Sendable {
 
     init(entries: [NoteIndexEntry] = []) {
         self.version = 1
-        self.app = "BieKanWo"
+        self.app = "Seal Note"
         self.type = "note_index"
         self.entries = entries
     }

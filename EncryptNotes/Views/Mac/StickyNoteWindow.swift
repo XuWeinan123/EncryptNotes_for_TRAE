@@ -4,6 +4,7 @@ import AppKit
 
 extension Notification.Name {
     static let sealNoteLockEncryptedNote = Notification.Name("SealNoteLockEncryptedNote")
+    static let sealNotePresentKeyIssue = Notification.Name("SealNotePresentKeyIssue")
 }
 
 @MainActor
@@ -114,10 +115,11 @@ final class StickyNoteWindowManager: NSObject {
         NSEvent.mouseLocation
     }
 
-    func showLockedNote(_ info: EncryptedNoteInfo) {
+    func showLockedNote(_ info: EncryptedNoteInfo, keyIssue: Error = CryptoError.keyNotFound) {
         if let existingWindow = noteWindows[info.id] {
             existingWindow.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+            presentKeyIssue(keyIssue, for: info.id)
             return
         }
 
@@ -126,8 +128,15 @@ final class StickyNoteWindowManager: NSObject {
         let frame = windowState?.frame ?? defaultWindowFrame()
         let isPinned = windowState?.isPinned ?? true
 
-        let lockedView = LockedStickyNoteView(noteInfo: info)
-        let hostingView = NSHostingView(rootView: lockedView)
+        let lockedNote = Note(
+            id: info.id,
+            body: info.ciphertextPreview,
+            createdAt: info.updatedAt,
+            updatedAt: info.updatedAt,
+            isEncrypted: true
+        )
+        let editorView = StickyNoteEditorView(note: lockedNote, startsLocked: true, initialKeyIssue: keyIssue)
+        let hostingView = NSHostingView(rootView: editorView)
 
         let window = StickyNoteWindow(
             contentRect: NSRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height),
@@ -144,6 +153,14 @@ final class StickyNoteWindowManager: NSObject {
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func presentKeyIssue(_ error: Error, for noteId: String) {
+        NotificationCenter.default.post(
+            name: .sealNotePresentKeyIssue,
+            object: noteId,
+            userInfo: ["error": error]
+        )
     }
 
     func closeWindow(for noteId: String) {

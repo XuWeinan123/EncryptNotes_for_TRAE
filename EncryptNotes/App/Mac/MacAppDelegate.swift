@@ -14,6 +14,7 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
         privacyLockCoordinator.start()
         menuBarController.setup()
         MacMainMenuController.shared.installMainMenu()
+        MacAppIconController.shared.apply(theme: SettingsStore.shared.macTheme)
         _ = shortcutStore
         menuBarController.openIntroWindowIfNeeded()
 

@@ -8,6 +8,7 @@ nonisolated struct TrashNote: Identifiable, Equatable, Sendable {
     let deletedAt: Date
     let purgeAfter: Date
     let url: URL
+    let title: String
 
     let body: String?
     let ciphertextPreview: String?

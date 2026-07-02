@@ -21,6 +21,40 @@ enum MacTheme: String, CaseIterable, Identifiable, Codable {
     }
 }
 
+#if os(iOS)
+enum IOSAppIconChoice: String, CaseIterable, Identifiable {
+    case primary
+    case cyan
+    case green
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .primary: return "粉色"
+        case .cyan: return "青色"
+        case .green: return "绿色"
+        }
+    }
+
+    var iconName: String? {
+        switch self {
+        case .primary: return nil
+        case .cyan: return "Icon2"
+        case .green: return "Icon3"
+        }
+    }
+
+    static func choice(for iconName: String?) -> IOSAppIconChoice {
+        switch iconName {
+        case "Icon2": return .cyan
+        case "Icon3": return .green
+        default: return .primary
+        }
+    }
+}
+#endif
+
 #if os(macOS)
 struct VaultKeyFileReference: Codable, Equatable {
     let bookmarkData: Data
@@ -137,7 +171,12 @@ final class SettingsStore: ObservableObject {
     }
 
     @Published var macTheme: MacTheme {
-        didSet { defaults.set(macTheme.rawValue, forKey: Self.macThemeDefaultsKey) }
+        didSet {
+            defaults.set(macTheme.rawValue, forKey: Self.macThemeDefaultsKey)
+            #if os(macOS)
+            MacAppIconController.shared.apply(theme: macTheme)
+            #endif
+        }
     }
 
     @Published var macRecentNotesLimit: Int {
@@ -148,6 +187,16 @@ final class SettingsStore: ObservableObject {
                 return
             }
             defaults.set(macRecentNotesLimit, forKey: Keys.macRecentNotesLimit)
+        }
+    }
+
+    @Published var iOSAppIconName: String? {
+        didSet {
+            if let iOSAppIconName {
+                defaults.set(iOSAppIconName, forKey: Keys.iOSAppIconName)
+            } else {
+                defaults.removeObject(forKey: Keys.iOSAppIconName)
+            }
         }
     }
 
@@ -231,6 +280,7 @@ final class SettingsStore: ObservableObject {
         self.macRecentNotesLimit = storedRecentNotesLimit > 0
             ? Self.clampedRecentNotesLimit(storedRecentNotesLimit)
             : Self.defaultMacRecentNotesLimit
+        self.iOSAppIconName = defaults.string(forKey: Keys.iOSAppIconName)
         #if os(macOS)
         self.launchAtLogin = defaults.object(forKey: Keys.launchAtLogin) as? Bool ?? Self.defaultLaunchAtLogin
         self.pinNewNotesByDefault = defaults.object(forKey: Keys.pinNewNotesByDefault) as? Bool ?? Self.defaultPinNewNotes
@@ -265,6 +315,7 @@ final class SettingsStore: ObservableObject {
         maintenanceLoggingEnabled = false
         macTheme = Self.defaultMacTheme
         macRecentNotesLimit = Self.defaultMacRecentNotesLimit
+        iOSAppIconName = nil
         #if os(macOS)
         launchAtLogin = Self.defaultLaunchAtLogin
         pinNewNotesByDefault = Self.defaultPinNewNotes
@@ -375,6 +426,7 @@ final class SettingsStore: ObservableObject {
         static let autoDeleteEmptyNotes = "BKAutoDeleteEmptyNotes"
         static let maintenanceLoggingEnabled = "BKMaintenanceLoggingEnabled"
         static let macRecentNotesLimit = "BKMacRecentNotesLimit"
+        static let iOSAppIconName = "BKIOSAppIconName"
         #if os(macOS)
         static let launchAtLogin = "BKLaunchAtLogin"
         static let pinNewNotesByDefault = "BKPinNewNotesByDefault"

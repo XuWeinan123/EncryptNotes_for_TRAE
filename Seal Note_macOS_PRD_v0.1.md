@@ -272,7 +272,7 @@ iCloud Drive / Seal Note /
 ```json
 {
   "version": 1,
-  "app": "BieKanWo",
+  "app": "Seal Note",
   "type": "plain_note",
   "note_id": "A7F3D9B2-82D1-4A41-9C22-31F9B21A901C",
   "created_at": "2026-06-26T10:00:00Z",

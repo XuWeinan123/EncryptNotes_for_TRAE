@@ -111,7 +111,7 @@ struct TrashView: View {
         if let body = trashNote.body {
             return firstLine(of: body)
         } else if trashNote.isEncrypted {
-            return "加密笔记"
+            return trashNote.title
         } else {
             return "(无内容)"
         }

@@ -62,8 +62,7 @@ final class VaultStoreTests: XCTestCase {
         let originalBody = "第一行正文\n\n更多内容"
         let note = try await store.createNote(body: originalBody, isEncrypted: false)
         let oldURL = try savedNoteURL(in: tmpDir, noteId: note.id)
-        let oldData = try Data(contentsOf: oldURL)
-        let oldContent = String(data: oldData, encoding: .utf8) ?? ""
+        let oldFile = try storage.loadMarkdownFile(at: oldURL)
 
         try await store.renameNote(note, title: "AI 总结/标题?")
 
@@ -72,10 +71,9 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertTrue(newURL.lastPathComponent.hasPrefix("AI 总结-标题-"))
         XCTAssertFalse(FileManager.default.fileExists(atPath: oldURL.path))
 
-        let newData = try Data(contentsOf: newURL)
-        let newContent = String(data: newData, encoding: .utf8) ?? ""
-        XCTAssertEqual(newContent, oldContent)
-        XCTAssertTrue(newContent.contains(originalBody))
+        let newFile = try storage.loadMarkdownFile(at: newURL)
+        XCTAssertEqual(newFile.body, oldFile.body)
+        XCTAssertEqual(newFile.body, originalBody)
         XCTAssertEqual(store.displayTitle(for: note), "AI 总结-标题")
 
         try? FileManager.default.removeItem(at: tmpDir)
@@ -116,10 +114,9 @@ final class VaultStoreTests: XCTestCase {
         let noteId = store.decryptedNotes.first!.id
         let mdURL = try savedNoteURL(in: tmpDir, noteId: noteId)
         XCTAssertTrue(mdURL.lastPathComponent.hasPrefix("加密笔记内容-"))
-        let mdData = try Data(contentsOf: mdURL)
-        let mdContent = String(data: mdData, encoding: .utf8) ?? ""
-        XCTAssertTrue(mdContent.contains("bkwenc:v1:"), "加密笔记文件 body 应为密文")
-        XCTAssertFalse(mdContent.contains("加密笔记内容"), "加密笔记文件不应包含明文正文")
+        let mdFile = try storage.loadMarkdownFile(at: mdURL)
+        XCTAssertTrue(mdFile.body.contains("bkwenc:v1:"), "加密笔记文件 body 应为密文")
+        XCTAssertFalse(mdFile.body.contains("加密笔记内容"), "加密笔记文件 body 不应包含明文正文")
 
         try? FileManager.default.removeItem(at: tmpDir)
     }
@@ -148,11 +145,74 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertEqual(result.ciphertext, mdFile.body)
         XCTAssertTrue(mdFile.body.hasPrefix("bkwenc:v1:"))
 
-        let mdContent = String(data: try Data(contentsOf: mdURL), encoding: .utf8) ?? ""
-        XCTAssertFalse(mdContent.contains("需要加密的内容"))
+        let encryptedFile = try storage.loadMarkdownFile(at: mdURL)
+        XCTAssertFalse(encryptedFile.body.contains("需要加密的内容"))
 
         let decrypted = try await store.decryptEncryptedNoteBody(result.note)
         XCTAssertEqual(decrypted, "需要加密的内容")
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
+    func testUpdateNoteModeConvertsPlainToEncryptedAndBackToPlain() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_update_mode_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let key = SymmetricKey(size: .bits256)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "test-vault-update-mode", key: key)
+
+        let plain = try await store.createNote(body: "转换模式", isEncrypted: false)
+        let encrypted = try await store.updateNoteMode(plain, body: "转换模式", mode: .encrypted)
+
+        XCTAssertTrue(encrypted.isEncrypted)
+        XCTAssertTrue(store.plainNotes.isEmpty)
+        XCTAssertEqual(store.decryptedNotes.first?.id, plain.id)
+        XCTAssertEqual(try XCTUnwrap(storage.loadIndex()?.entry(for: plain.id)).mode, .encrypted)
+
+        var mdURL = try savedNoteURL(in: tmpDir, noteId: plain.id)
+        var mdContent = String(data: try Data(contentsOf: mdURL), encoding: .utf8) ?? ""
+        XCTAssertTrue(mdContent.contains("bkwenc:v1:"))
+        XCTAssertFalse(mdContent.contains("转换模式\n"))
+
+        let restored = try await store.updateNoteMode(encrypted, body: "转换模式", mode: .plain)
+
+        XCTAssertFalse(restored.isEncrypted)
+        XCTAssertEqual(store.plainNotes.first?.id, plain.id)
+        XCTAssertTrue(store.decryptedNotes.isEmpty)
+        XCTAssertEqual(try XCTUnwrap(storage.loadIndex()?.entry(for: plain.id)).mode, .plain)
+
+        mdURL = try savedNoteURL(in: tmpDir, noteId: plain.id)
+        mdContent = String(data: try Data(contentsOf: mdURL), encoding: .utf8) ?? ""
+        XCTAssertTrue(mdContent.contains("转换模式"))
+        XCTAssertFalse(mdContent.contains("bkwenc:v1:"))
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
+    func testUpdateNoteModeFailsWithoutKeyAndDoesNotChangeFile() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_update_mode_no_key_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "test-vault-update-mode-no-key")
+
+        let plain = try await store.createNote(body: "保持明文", isEncrypted: false)
+        let beforeURL = try savedNoteURL(in: tmpDir, noteId: plain.id)
+        let beforeContent = String(data: try Data(contentsOf: beforeURL), encoding: .utf8) ?? ""
+
+        do {
+            _ = try await store.updateNoteMode(plain, body: "保持明文", mode: .encrypted)
+            XCTFail("缺少密钥时不应转为加密")
+        } catch VaultError.keyNotLoaded {
+        } catch {
+            XCTFail("应抛出 keyNotLoaded，实际：\(error)")
+        }
+
+        XCTAssertEqual(try XCTUnwrap(storage.loadIndex()?.entry(for: plain.id)).mode, .plain)
+        let afterURL = try savedNoteURL(in: tmpDir, noteId: plain.id)
+        let afterContent = String(data: try Data(contentsOf: afterURL), encoding: .utf8) ?? ""
+        XCTAssertEqual(afterContent, beforeContent)
 
         try? FileManager.default.removeItem(at: tmpDir)
     }
@@ -238,6 +298,7 @@ final class VaultStoreTests: XCTestCase {
         let locked = EncryptedNoteInfo(
             id: "l1",
             url: URL(fileURLWithPath: "/tmp/l1.md"),
+            title: "锁定标题",
             ciphertextPreview: "cipher",
             fileSize: 12,
             updatedAt: Date()
@@ -253,6 +314,40 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertEqual(store.encryptedNoteCount, 2)
         XCTAssertEqual(store.lockedNoteCount, 1)
         XCTAssertEqual(store.totalNoteCount, 3)
+    }
+
+    @MainActor
+    func testEncryptedReadableNotesSearchTitleOnly() {
+        let store = VaultStore(storage: try? TemporaryStorage(baseURL: FileManager.default.temporaryDirectory))
+        let encrypted = Note(id: "e1", body: "# 项目标题\n隐藏正文关键词", isEncrypted: true)
+        let plain = Note(id: "p1", body: "普通标题\n隐藏正文关键词", isEncrypted: false)
+        store.configureForTesting(vaultId: "v", decryptedNotes: [encrypted], plainNotes: [plain])
+
+        store.searchText = "隐藏正文关键词"
+        XCTAssertEqual(store.filteredNotes, [.readable(plain)])
+
+        store.searchText = "项目标题"
+        XCTAssertEqual(store.filteredNotes, [.readable(encrypted)])
+    }
+
+    @MainActor
+    func testLockedEncryptedNotesSearchTitleOnly() {
+        let store = VaultStore(storage: try? TemporaryStorage(baseURL: FileManager.default.temporaryDirectory))
+        let locked = EncryptedNoteInfo(
+            id: "l1",
+            url: URL(fileURLWithPath: "/tmp/l1.md"),
+            title: "锁定项目标题",
+            ciphertextPreview: "隐藏正文关键词",
+            fileSize: 12,
+            updatedAt: Date()
+        )
+        store.configureForTesting(vaultId: "v", lockedEncryptedNotes: [locked])
+
+        store.searchText = "隐藏正文关键词"
+        XCTAssertTrue(store.filteredNotes.isEmpty)
+
+        store.searchText = "锁定项目标题"
+        XCTAssertEqual(store.filteredNotes, [.locked(locked)])
     }
 
     @MainActor
@@ -318,6 +413,41 @@ final class VaultStoreTests: XCTestCase {
         let contents = try FileManager.default.contentsOfDirectory(at: trashURL, includingPropertiesForKeys: nil)
         let mdFiles = contents.filter { $0.lastPathComponent.hasSuffix(".md") }
         XCTAssertTrue(mdFiles.isEmpty, "回收站应清空")
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
+    func testClearEmptyReadableNotesMovesOnlyReadableEmptyNotesToTrash() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_clear_empty_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        try await storage.initializeVault()
+
+        let key = SymmetricKey(size: .bits256)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "clear-empty-vault", key: key)
+
+        let emptyPlain = try await store.createNote(body: " \n\t ", isEncrypted: false)
+        let nonEmptyPlain = try await store.createNote(body: "正文", isEncrypted: false)
+        let emptyEncrypted = try await store.createNote(body: "\n\n", isEncrypted: true)
+
+        try await store.unloadKey()
+        let lockedEncrypted = try XCTUnwrap(store.lockedEncryptedNotes.first(where: { $0.id == emptyEncrypted.id }))
+
+        let movedCount = try await store.clearEmptyReadableNotes()
+
+        XCTAssertEqual(movedCount, 1)
+        XCTAssertFalse(store.plainNotes.contains { $0.id == emptyPlain.id })
+        XCTAssertTrue(store.plainNotes.contains { $0.id == nonEmptyPlain.id })
+        XCTAssertTrue(store.lockedEncryptedNotes.contains { $0.id == lockedEncrypted.id })
+
+        let index = try XCTUnwrap(storage.loadIndex())
+        XCTAssertEqual(index.entry(for: emptyPlain.id)?.location, .trash)
+        XCTAssertEqual(index.entry(for: nonEmptyPlain.id)?.location, .notes)
+        XCTAssertEqual(index.entry(for: emptyEncrypted.id)?.location, .notes)
+
+        let trashURL = tmpDir.appendingPathComponent("trash").appendingPathComponent("\(emptyPlain.id).md")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: trashURL.path))
 
         try? FileManager.default.removeItem(at: tmpDir)
     }

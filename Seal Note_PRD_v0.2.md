@@ -1157,7 +1157,7 @@ iCloud Drive / Seal Note /
 ```json
 {
   "version": 1,
-  "app": "BieKanWo",
+  "app": "Seal Note",
   "type": "plain_note",
   "note_id": "A7F3D9B2-82D1-4A41-9C22-31F9B21A901C",
   "vault_id": "8E0A9B6C-44F3-4B88-8E8A-04B9B6C78111",
@@ -1187,7 +1187,7 @@ iCloud Drive / Seal Note /
 ```json
 {
   "version": 1,
-  "app": "BieKanWo",
+  "app": "Seal Note",
   "type": "encrypted_note",
   "note_id": "A7F3D9B2-82D1-4A41-9C22-31F9B21A901C",
   "vault_id": "8E0A9B6C-44F3-4B88-8E8A-04B9B6C78111",

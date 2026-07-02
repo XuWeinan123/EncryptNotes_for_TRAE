@@ -16,5 +16,6 @@ nonisolated struct VaultKey: Codable {
         case keyMaterial = "key_material"
     }
 
+    static let appName = "Seal Note"
     static let algorithmAES256 = "AES-GCM-256"
 }

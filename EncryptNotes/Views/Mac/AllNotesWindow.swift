@@ -118,6 +118,7 @@ struct AllNotesView: View {
 
     private var filteredNotes: [NoteListItem] {
         var items = vaultStore.readableNotes
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if let tag = selectedTag {
             items = items.filter { note in
@@ -125,16 +126,17 @@ struct AllNotesView: View {
             }
         }
 
-        if !searchText.isEmpty {
-            items = items.filter {
-                $0.body.localizedCaseInsensitiveContains(searchText)
-            }
+        if !query.isEmpty {
+            items = items.filter { vaultStore.noteMatchesSearch($0, searchText: query) }
         }
 
         var result: [NoteListItem] = items.map { .readable($0) }
 
-        if selectedTag == nil && searchText.isEmpty {
-            result.append(contentsOf: vaultStore.lockedEncryptedNotes.map { .locked($0) })
+        if selectedTag == nil {
+            let locked = query.isEmpty
+                ? vaultStore.lockedEncryptedNotes
+                : vaultStore.lockedEncryptedNotes.filter { vaultStore.lockedNoteMatchesSearch($0, searchText: query) }
+            result.append(contentsOf: locked.map { .locked($0) })
         }
 
         return result
@@ -154,7 +156,7 @@ struct AllNotesView: View {
     }
 
     private var emptyStateMessage: String {
-        if !searchText.isEmpty {
+        if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "换个关键词试试，或清空搜索内容。"
         }
         if selectedTag != nil {
@@ -186,7 +188,7 @@ struct AllNotesView: View {
 
         case .locked(let info):
             SWNoteListRow(
-                title: "加密笔记",
+                title: info.title,
                 subtitle: "加密笔记",
                 systemImage: "lock.fill",
                 tint: DS.textSubtle

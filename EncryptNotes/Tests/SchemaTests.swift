@@ -18,7 +18,7 @@ final class SchemaTests: XCTestCase {
         let decoded = try JSONDecoder.default.decode(NoteIndex.self, from: data)
 
         XCTAssertEqual(decoded.version, 1)
-        XCTAssertEqual(decoded.app, "BieKanWo")
+        XCTAssertEqual(decoded.app, "Seal Note")
         XCTAssertEqual(decoded.type, "note_index")
         XCTAssertEqual(decoded.entries.count, 1)
         XCTAssertEqual(decoded.entries.first?.noteId, "test-note-id")
@@ -48,7 +48,7 @@ final class SchemaTests: XCTestCase {
     func testVaultKeyV2Coding() throws {
         let key = VaultKey(
             version: 2,
-            app: "BieKanWo",
+            app: VaultKey.appName,
             type: "vault_key",
             keyId: "test-key-id",
             algorithm: "AES-GCM-256",
@@ -60,10 +60,32 @@ final class SchemaTests: XCTestCase {
         let decoded = try JSONDecoder.default.decode(VaultKey.self, from: data)
 
         XCTAssertEqual(decoded.version, 2)
+        XCTAssertEqual(decoded.app, "Seal Note")
         XCTAssertEqual(decoded.keyId, "test-key-id")
         XCTAssertEqual(decoded.algorithm, "AES-GCM-256")
         XCTAssertEqual(decoded.keyMaterial, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
         XCTAssertNil(decoded.value(forKey: "vaultId") as? String)
+    }
+
+    func testGeneratedVaultKeyUsesSealNoteAppName() {
+        let key = VaultKeyManager.shared.generateVaultKey(key: SymmetricKey(size: .bits256))
+
+        XCTAssertEqual(key.app, "Seal Note")
+        XCTAssertTrue(VaultKeyManager.shared.validateVaultKey(key))
+    }
+
+    func testVaultKeyValidationRejectsLegacyAppName() {
+        let legacyKey = VaultKey(
+            version: 2,
+            app: "BieKanWo",
+            type: "vault_key",
+            keyId: "test-key-id",
+            algorithm: "AES-GCM-256",
+            createdAt: Date(timeIntervalSince1970: 1000000),
+            keyMaterial: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+        )
+
+        XCTAssertFalse(VaultKeyManager.shared.validateVaultKey(legacyKey))
     }
 
     func testMarkdownNoteFileParseAndRender() throws {
@@ -83,6 +105,26 @@ final class SchemaTests: XCTestCase {
         XCTAssertEqual(parsed.updatedAt, now)
         XCTAssertEqual(parsed.body, "这是一段测试正文\n\n#标签1 #标签2")
         XCTAssertFalse(parsed.isEncrypted)
+    }
+
+    func testMarkdownNoteFilePreservesPlaintextTitle() throws {
+        let now = Date(timeIntervalSince1970: 1000000)
+        let original = MarkdownNoteFile(
+            noteId: "title-md-id",
+            createdAt: now,
+            updatedAt: now,
+            title: "明文标题 \"A\"",
+            body: "bkwenc:v1:ABCDEFGHIJKLMNOP"
+        )
+
+        let data = try original.render()
+        let rendered = String(data: data, encoding: .utf8)
+        let parsed = try MarkdownNoteFile.parse(from: data)
+
+        XCTAssertTrue(rendered?.contains("title: \"明文标题 \\\"A\\\"\"") == true)
+        XCTAssertEqual(parsed.title, "明文标题 \"A\"")
+        XCTAssertEqual(parsed.body, "bkwenc:v1:ABCDEFGHIJKLMNOP")
+        XCTAssertTrue(parsed.isEncrypted)
     }
 
     func testMarkdownNoteFileParseSkipsSeparatorBlankLine() throws {

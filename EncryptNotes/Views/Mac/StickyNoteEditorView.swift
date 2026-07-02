@@ -4,6 +4,7 @@ import AppKit
 import Combine
 import Carbon
 import MarkdownView
+import UniformTypeIdentifiers
 
 #if os(macOS)
 
@@ -38,8 +39,13 @@ struct StickyNoteEditorView: View {
     @State private var isFindBarVisible = false
     @State private var isMarkdownPreviewing = false
 
-    init(note: Note, isPreview: Bool = false) {
-        _viewModel = StateObject(wrappedValue: StickyNoteEditorViewModel(note: note, isPreview: isPreview))
+    init(note: Note, isPreview: Bool = false, startsLocked: Bool = false, initialKeyIssue: Error? = nil) {
+        _viewModel = StateObject(wrappedValue: StickyNoteEditorViewModel(
+            note: note,
+            isPreview: isPreview,
+            startsLocked: startsLocked,
+            initialKeyIssue: initialKeyIssue
+        ))
     }
 
     var body: some View {
@@ -82,7 +88,6 @@ struct StickyNoteEditorView: View {
                     }
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .blur(radius: viewModel.isContentLocked ? 3 : 0)
             }
 
             VStack(spacing: 0) {
@@ -94,6 +99,10 @@ struct StickyNoteEditorView: View {
                 Spacer(minLength: 0)
             }
             .allowsHitTesting(true)
+
+            if viewModel.isContentLocked {
+                lockedContentOverlay
+            }
 
             if !syncStore.isNetworkAvailable {
                 Text("无网络")
@@ -108,6 +117,7 @@ struct StickyNoteEditorView: View {
         .ignoresSafeArea(edges: .top)
         .dsMacStickyToolbarScrollEdge()
         .navigationTitle("")
+        .onAppear { viewModel.presentInitialKeyIssueIfNeeded() }
         .onDisappear { viewModel.onDisappear() }
         .onChange(of: viewModel.forceClose) { _, shouldClose in
             if shouldClose {
@@ -142,16 +152,18 @@ struct StickyNoteEditorView: View {
             }
             ToolbarSpacer()
             ToolbarItemGroup(placement: .primaryAction) {
-                Button(action: { toggleEncryptionLock() }) {
-                    Label(
-                        viewModel.isContentLocked ? "解锁" : "上锁",
-                        systemImage: viewModel.isContentLocked ? "lock.fill" : "lock.open.fill"
-                    )
-                    .labelStyle(.iconOnly)
-                    .frame(width: DS.macToolbarIconWidth)
+                if viewModel.note.isEncrypted {
+                    Button(action: { toggleEncryptionLock() }) {
+                        Label(
+                            viewModel.isContentLocked ? "解锁" : "上锁",
+                            systemImage: viewModel.isContentLocked ? "lock.fill" : "lock.open.fill"
+                        )
+                        .labelStyle(.iconOnly)
+                        .frame(width: DS.macToolbarIconWidth)
+                    }
+                    .disabled(viewModel.isEncryptionToggling)
+                    .help(viewModel.isContentLocked ? "解锁" : "上锁")
                 }
-                .disabled(viewModel.isEncryptionToggling)
-                .help(viewModel.isContentLocked ? "解锁" : "加密并锁定")
 
                 Button(action: { viewModel.copyNoteText() }) {
                     Label(
@@ -180,7 +192,14 @@ struct StickyNoteEditorView: View {
                         Divider()
 
                         Button(action: { viewModel.decryptPermanently() }) {
-                            Label("永久解密", systemImage: "lock.open")
+                            Label("转为明文笔记", systemImage: "lock.open")
+                        }
+                        .disabled(viewModel.isContentLocked || viewModel.isEncryptionToggling)
+                    } else {
+                        Divider()
+
+                        Button(action: { viewModel.encryptAndLock() }) {
+                            Label("转为加密笔记", systemImage: "lock")
                         }
                         .disabled(viewModel.isContentLocked || viewModel.isEncryptionToggling)
                     }
@@ -195,6 +214,7 @@ struct StickyNoteEditorView: View {
                         .labelStyle(.iconOnly)
                         .frame(width: DS.macToolbarIconWidth)
                 }
+                .disabled(viewModel.isContentLocked)
                 .menuIndicator(.hidden)
                 .help("更多")
             }
@@ -232,14 +252,30 @@ struct StickyNoteEditorView: View {
                 secondaryButton: .cancel()
             )
         }
-        .alert("需要密钥", isPresented: $viewModel.showingKeyRequiredAlert) {
+        .alert("需要密钥", isPresented: $viewModel.showingKeyIssueAlert) {
+            Button("重新定位密钥") {
+                viewModel.relocateKeyFile()
+            }
             Button("打开设置") {
                 MacMenuBarController.shared.openSettingsWindow()
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("请先在设置中创建或导入 .bkwkey 密钥文件。")
+            Text(viewModel.keyIssueMessage)
         }
+    }
+
+    private var lockedContentOverlay: some View {
+        ZStack {
+            Color(nsColor: .textBackgroundColor)
+
+            Image(systemName: "lock.fill")
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundColor(DS.textSubtle)
+                .accessibilityLabel("已上锁")
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .allowsHitTesting(false)
     }
 
     private func adjustFontSize(by delta: Double) {
@@ -718,7 +754,8 @@ final class StickyNoteEditorViewModel: ObservableObject {
     @Published var isContentLocked = false
     @Published var ciphertextPreview = ""
     @Published var isEncryptionToggling = false
-    @Published var showingKeyRequiredAlert = false
+    @Published var showingKeyIssueAlert = false
+    @Published var keyIssueMessage = "请重新选择 .bkwkey 密钥文件。"
 
     private let vaultStore = VaultStore.shared
     private let windowStore = MacNoteWindowStore.shared
@@ -729,17 +766,20 @@ final class StickyNoteEditorViewModel: ObservableObject {
     private var saveTask: Task<Void, Never>?
     private var copyResetTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
+    private var initialKeyIssue: Error?
 
     var isContentEmpty: Bool {
         let body = isContentLocked ? note.body : text
         return body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    init(note: Note, isPreview: Bool = false) {
+    init(note: Note, isPreview: Bool = false, startsLocked: Bool = false, initialKeyIssue: Error? = nil) {
         self.note = note
         self.text = note.body
         self.isPreview = isPreview
         self.isPinned = windowStore.windowState(for: note.id)?.isPinned ?? true
+        self.isContentLocked = startsLocked
+        self.initialKeyIssue = initialKeyIssue
 
         $isPinned
             .sink { [weak self] newValue in
@@ -756,6 +796,21 @@ final class StickyNoteEditorViewModel: ObservableObject {
                 self.temporarilyLockContent()
             }
             .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .sealNotePresentKeyIssue)
+            .sink { [weak self] notification in
+                guard let self else { return }
+                guard let noteId = notification.object as? String, noteId == self.note.id else { return }
+                let error = notification.userInfo?["error"] as? Error ?? CryptoError.keyNotFound
+                self.presentKeyIssue(error)
+            }
+            .store(in: &cancellables)
+    }
+
+    func presentInitialKeyIssueIfNeeded() {
+        guard let error = initialKeyIssue else { return }
+        initialKeyIssue = nil
+        presentKeyIssue(error)
     }
 
     func onDisappear() {
@@ -797,7 +852,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
         if isContentLocked {
             unlockEncryptedContent()
         } else {
-            lockContent()
+            temporarilyLockContent()
         }
     }
 
@@ -861,9 +916,17 @@ final class StickyNoteEditorViewModel: ObservableObject {
                 self.isContentLocked = false
                 self.syncStore.setSaved()
             } catch {
+                if self.isKeyIssue(error) {
+                    self.presentKeyIssue(error)
+                    return
+                }
                 self.syncStore.setFailed(message: error.localizedDescription)
             }
         }
+    }
+
+    func encryptAndLock() {
+        lockContent()
     }
 
     private func debouncedSave() {
@@ -915,6 +978,10 @@ final class StickyNoteEditorViewModel: ObservableObject {
             syncStore.setSaved()
             return true
         } catch {
+            if isKeyIssue(error) {
+                presentKeyIssue(error)
+                return false
+            }
             syncStore.setFailed(message: error.localizedDescription)
             return false
         }
@@ -923,7 +990,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
     private func lockContent() {
         guard !isPreview else { return }
         guard vaultStore.isKeyLoaded else {
-            showingKeyRequiredAlert = true
+            presentKeyIssue(CryptoError.keyNotFound)
             return
         }
 
@@ -956,6 +1023,10 @@ final class StickyNoteEditorViewModel: ObservableObject {
             } catch {
                 let elapsed = Date().timeIntervalSince(start) * 1000
                 print("Seal Note encryption failed note=\(noteToEncrypt.id) elapsed_ms=\(String(format: "%.2f", elapsed)) error=\(error.localizedDescription)")
+                if self.isKeyIssue(error) {
+                    self.presentKeyIssue(error)
+                    return
+                }
                 self.syncStore.setFailed(message: error.localizedDescription)
             }
         }
@@ -996,9 +1067,91 @@ final class StickyNoteEditorViewModel: ObservableObject {
             } catch {
                 let elapsed = Date().timeIntervalSince(start) * 1000
                 print("Seal Note decryption failed note=\(noteToDecrypt.id) elapsed_ms=\(String(format: "%.2f", elapsed)) error=\(error.localizedDescription)")
+                if self.isKeyIssue(error) {
+                    self.presentKeyIssue(error)
+                    return
+                }
                 self.syncStore.setFailed(message: error.localizedDescription)
             }
         }
+    }
+
+    func relocateKeyFile() {
+        let panel = NSOpenPanel()
+        panel.title = "重新定位密钥文件"
+        panel.message = "请选择用于解锁当前加密笔记的 .bkwkey 文件。"
+        panel.allowedContentTypes = [.init(filenameExtension: "bkwkey")!]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                _ = try await self.vaultStore.importKeyFile(from: url)
+                self.syncStore.setSaved()
+                if self.note.isEncrypted, self.isContentLocked {
+                    self.unlockEncryptedContent()
+                }
+            } catch {
+                self.presentKeyRelocationFailure(error)
+            }
+        }
+    }
+
+    private func presentKeyIssue(_ error: Error) {
+        keyIssueMessage = keyIssueMessage(for: error)
+        showingKeyIssueAlert = true
+        syncStore.setFailed(message: keyIssueMessage)
+    }
+
+    private func presentKeyRelocationFailure(_ error: Error) {
+        if let keyError = error as? VaultKeyFileError {
+            switch keyError {
+            case .keyMismatch:
+                keyIssueMessage = "所选密钥无法解锁当前加密笔记，请确认选择的是原始密钥文件。"
+            default:
+                keyIssueMessage = "无法使用所选密钥文件：\(keyError.localizedDescription)"
+            }
+        } else {
+            keyIssueMessage = "无法使用所选密钥文件：\(error.localizedDescription)"
+        }
+        showingKeyIssueAlert = true
+        syncStore.setFailed(message: keyIssueMessage)
+    }
+
+    private func isKeyIssue(_ error: Error) -> Bool {
+        if error is VaultKeyFileError { return true }
+        if let cryptoError = error as? CryptoError {
+            switch cryptoError {
+            case .keyNotFound: return true
+            default: return false
+            }
+        }
+        return false
+    }
+
+    private func keyIssueMessage(for error: Error) -> String {
+        if let keyError = error as? VaultKeyFileError {
+            switch keyError {
+            case .fileMissing:
+                return "找不到密钥文件。它可能已被删除或所在磁盘不可用，请重新定位 .bkwkey 文件。"
+            case .fileMoved:
+                return "密钥文件已不在原位置，请重新定位 .bkwkey 文件。"
+            case .permissionDenied:
+                return "无法读取密钥文件，请重新选择 .bkwkey 文件。"
+            case .invalidFile:
+                return "密钥文件格式无效，请选择有效的 .bkwkey 文件。"
+            case .keyMismatch:
+                return "密钥不匹配，无法解锁当前加密笔记。"
+            case .keyAlreadyConfigured:
+                return "已经配置了密钥文件。"
+            }
+        }
+
+        return "请先选择用于解锁加密笔记的 .bkwkey 密钥文件。"
     }
 
     private func handleWindowWillClose() {

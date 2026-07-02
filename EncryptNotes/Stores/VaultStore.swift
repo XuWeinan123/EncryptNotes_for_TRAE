@@ -25,6 +25,7 @@ nonisolated enum VaultState: Equatable {
 nonisolated struct EncryptedNoteInfo: Identifiable, Equatable {
     let id: String
     let url: URL
+    let title: String
     let ciphertextPreview: String
     let fileSize: Int
     let updatedAt: Date
@@ -105,6 +106,15 @@ final class VaultStore: ObservableObject {
     var keyFileDisplayPath: String? {
         settings.vaultKeyFileReference?.displayPath
     }
+
+    var isConfiguredKeyFileAvailable: Bool {
+        do {
+            _ = try loadConfiguredKeyFile()
+            return true
+        } catch {
+            return false
+        }
+    }
     #endif
 
     var storageContainerURL: URL? { storage.containerURL }
@@ -125,8 +135,26 @@ final class VaultStore: ObservableObject {
         return NoteTitleFormatter.displayTitle(from: note.body, emptyTitle: emptyTitle)
     }
 
+    func noteMatchesSearch(_ note: Note, searchText: String) -> Bool {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+
+        if note.isEncrypted {
+            return displayTitle(for: note, emptyTitle: "").localizedCaseInsensitiveContains(query)
+        }
+
+        return note.body.localizedCaseInsensitiveContains(query)
+    }
+
+    func lockedNoteMatchesSearch(_ info: EncryptedNoteInfo, searchText: String) -> Bool {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+        return info.title.localizedCaseInsensitiveContains(query)
+    }
+
     var filteredNotes: [NoteListItem] {
         var readable = readableNotes
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if let tag = selectedTag {
             readable = readable.filter { note in
@@ -134,16 +162,17 @@ final class VaultStore: ObservableObject {
             }
         }
 
-        if !searchText.isEmpty {
-            readable = readable.filter {
-                $0.body.localizedCaseInsensitiveContains(searchText)
-            }
+        if !query.isEmpty {
+            readable = readable.filter { noteMatchesSearch($0, searchText: query) }
         }
 
         var items: [NoteListItem] = readable.map { .readable($0) }
 
-        if selectedTag == nil && searchText.isEmpty {
-            items.append(contentsOf: lockedEncryptedNotes.map { .locked($0) })
+        if selectedTag == nil {
+            let locked = query.isEmpty
+                ? lockedEncryptedNotes
+                : lockedEncryptedNotes.filter { lockedNoteMatchesSearch($0, searchText: query) }
+            items.append(contentsOf: locked.map { .locked($0) })
         }
 
         return items
@@ -369,6 +398,7 @@ final class VaultStore: ObservableObject {
                             lockedEncryptedNotes.append(EncryptedNoteInfo(
                                 id: mdFile.noteId,
                                 url: url,
+                                title: title(for: entry, mdFile: mdFile),
                                 ciphertextPreview: String(mdFile.body.prefix(50)),
                                 fileSize: size,
                                 updatedAt: mdFile.updatedAt
@@ -378,6 +408,7 @@ final class VaultStore: ObservableObject {
                         lockedEncryptedNotes.append(EncryptedNoteInfo(
                             id: mdFile.noteId,
                             url: url,
+                            title: title(for: entry, mdFile: mdFile),
                             ciphertextPreview: String(mdFile.body.prefix(50)),
                             fileSize: size,
                             updatedAt: mdFile.updatedAt
@@ -422,6 +453,19 @@ final class VaultStore: ObservableObject {
         NoteTitleFormatter.fileName(for: noteId, body: body)
     }
 
+    nonisolated private static func title(for entry: NoteIndexEntry, mdFile: MarkdownNoteFile) -> String {
+        if let title = mdFile.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+            return title
+        }
+        return NoteTitleFormatter.displayTitle(fromFileName: entry.fileName, noteId: entry.noteId, emptyTitle: "加密笔记")
+    }
+
+    nonisolated private static func title(for body: String) -> String? {
+        let title = NoteTitleFormatter.displayTitle(from: body, emptyTitle: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? nil : title
+    }
+
     nonisolated private static func loadTrashNote(entry: NoteIndexEntry, url: URL, key: SymmetricKey?, storage: VaultStorage) -> TrashNote? {
         guard let mdFile = try? storage.loadMarkdownFile(at: url) else { return nil }
 
@@ -455,6 +499,7 @@ final class VaultStore: ObservableObject {
             deletedAt: deletedAt,
             purgeAfter: purgeAfter,
             url: url,
+            title: title(for: entry, mdFile: mdFile),
             body: body,
             ciphertextPreview: preview,
             fileSize: size
@@ -481,6 +526,7 @@ final class VaultStore: ObservableObject {
                 noteId: noteId,
                 createdAt: date,
                 updatedAt: date,
+                title: Self.title(for: body),
                 body: body
             )
             let fileName = Self.fileName(for: noteId, body: body)
@@ -518,8 +564,12 @@ final class VaultStore: ObservableObject {
     #if os(macOS)
     private func loadConfiguredKeyFile() throws -> CryptoKit.SymmetricKey {
         let resolved = try settings.resolveVaultKeyFileURL()
+        guard let expectedPath = settings.vaultKeyFileReference?.displayPath,
+              resolved.url.path == expectedPath else {
+            throw VaultKeyFileError.fileMoved
+        }
         if resolved.isStale {
-            try settings.saveVaultKeyFileReference(for: resolved.url)
+            throw VaultKeyFileError.fileMoved
         }
         return try loadKey(from: resolved.url)
     }
@@ -571,6 +621,7 @@ final class VaultStore: ObservableObject {
         await reloadAllNotes(keyReloadMode: .explicit(nil))
         settings.preferredNoteMode = .encrypted
     }
+    #endif
 
     func openEncryptedNote(_ info: EncryptedNoteInfo) async throws -> Note {
         let key = try currentEncryptionKey()
@@ -638,7 +689,7 @@ final class VaultStore: ObservableObject {
             noteIndex.removeEntry(for: entry.noteId)
         }
         try storage.saveIndex(noteIndex)
-        settings.clearVaultKeyFileReference()
+        try clearLoadedKeyReference()
         decryptedNotes.removeAll()
         lockedEncryptedNotes.removeAll()
         await reloadAllNotes(keyReloadMode: .explicit(nil))
@@ -652,7 +703,7 @@ final class VaultStore: ObservableObject {
             try convertEncryptedEntryToPlain(item.entry, mdFile: item.mdFile, decryptedBody: item.body)
         }
         try storage.saveIndex(noteIndex)
-        settings.clearVaultKeyFileReference()
+        try clearLoadedKeyReference()
         await reloadAllNotes(keyReloadMode: .explicit(nil))
         settings.preferredNoteMode = .plain
         return decrypted.count
@@ -669,7 +720,7 @@ final class VaultStore: ObservableObject {
             noteIndex.removeEntry(for: item.entry.noteId)
         }
         try storage.saveIndex(noteIndex)
-        settings.clearVaultKeyFileReference()
+        try clearLoadedKeyReference()
         await reloadAllNotes(keyReloadMode: .explicit(nil))
         settings.preferredNoteMode = .plain
         return export
@@ -711,6 +762,7 @@ final class VaultStore: ObservableObject {
             noteId: mdFile.noteId,
             createdAt: mdFile.createdAt,
             updatedAt: Date(),
+            title: Self.title(for: decryptedBody),
             body: decryptedBody
         )
         try storage.saveMarkdownFile(plainFile, at: targetURL)
@@ -744,6 +796,7 @@ final class VaultStore: ObservableObject {
                 noteId: item.mdFile.noteId,
                 createdAt: item.mdFile.createdAt,
                 updatedAt: item.mdFile.updatedAt,
+                title: Self.title(for: item.body),
                 body: item.body
             )
             try mdFile.render().write(to: fileURL, options: .atomic)
@@ -756,7 +809,18 @@ final class VaultStore: ObservableObject {
         try? FileManager.default.removeItem(at: tmpDir)
         return (zipURL, notes.count)
     }
-    #endif
+
+    private func clearLoadedKeyReference() throws {
+        #if os(macOS)
+        settings.clearVaultKeyFileReference()
+        currentKey = nil
+        #else
+        if let vId = vaultId {
+            try keychainStore.deleteKey(forVaultId: vId)
+        }
+        currentKey = nil
+        #endif
+    }
 
     func createKey() async throws {
         #if os(macOS)
@@ -788,7 +852,11 @@ final class VaultStore: ObservableObject {
 
         for encUrl in encURLs {
             let mdFile = try storage.loadMarkdownFile(at: encUrl)
-            _ = try cryptoService.decryptMarkdownBody(mdFile.body, using: key)
+            do {
+                _ = try cryptoService.decryptMarkdownBody(mdFile.body, using: key)
+            } catch {
+                throw VaultKeyFileError.keyMismatch
+            }
         }
 
         try settings.saveVaultKeyFileReference(for: url)
@@ -984,6 +1052,7 @@ final class VaultStore: ObservableObject {
             noteId: noteId,
             createdAt: now,
             updatedAt: now,
+            title: Self.title(for: body),
             body: finalBody
         )
 
@@ -1031,6 +1100,19 @@ final class VaultStore: ObservableObject {
         _ = try saveReadableNote(latestNote, body: body, mode: latestNote.isEncrypted ? .encrypted : .plain, sourceUpdatedAt: note.updatedAt)
     }
 
+    @discardableResult
+    func updateNoteMode(_ note: Note, body: String, mode: NoteMode) async throws -> Note {
+        guard let _ = vaultId else { throw VaultError.notReady }
+        let latestNote = readableNotes.first(where: { $0.id == note.id }) ?? note
+        let fileMode: NoteFileMode = mode == .encrypted ? .encrypted : .plain
+        return try saveReadableNote(
+            latestNote,
+            body: body,
+            mode: fileMode,
+            sourceUpdatedAt: note.updatedAt
+        ).note
+    }
+
     func encryptNoteForEditing(_ note: Note, body: String) async throws -> (note: Note, ciphertext: String) {
         guard let _ = vaultId else { throw VaultError.notReady }
         _ = try currentEncryptionKey()
@@ -1049,6 +1131,12 @@ final class VaultStore: ObservableObject {
         return try cryptoService.decryptMarkdownBody(mdFile.body, using: key)
     }
 
+    private func logicalBody(for file: MarkdownNoteFile, key: CryptoKit.SymmetricKey?) throws -> String {
+        guard file.isEncrypted else { return file.body }
+        let resolvedKey = try key ?? currentEncryptionKey()
+        return try cryptoService.decryptMarkdownBody(file.body, using: resolvedKey)
+    }
+
     private func saveReadableNote(
         _ note: Note,
         body: String,
@@ -1057,11 +1145,14 @@ final class VaultStore: ObservableObject {
     ) throws -> (note: Note, ciphertext: String) {
         let now = Date()
         let isEncrypted = mode == .encrypted
+        let encryptionKey: CryptoKit.SymmetricKey?
         let finalBody: String
         if isEncrypted {
             let key = try currentEncryptionKey()
+            encryptionKey = key
             finalBody = try cryptoService.encryptMarkdownBody(body, using: key)
         } else {
+            encryptionKey = nil
             finalBody = body
         }
 
@@ -1076,8 +1167,10 @@ final class VaultStore: ObservableObject {
         }
 
         if let diskFile = try? storage.loadMarkdownFile(at: currentURL) {
-            let diskIsNewer = diskFile.updatedAt > note.updatedAt
-            let bodyDiffers = diskFile.body != finalBody
+            let baselineUpdatedAt = sourceUpdatedAt ?? note.updatedAt
+            let diskIsNewer = diskFile.updatedAt.timeIntervalSince(baselineUpdatedAt) > 1
+            let diskBody = try logicalBody(for: diskFile, key: encryptionKey)
+            let bodyDiffers = diskBody != note.body
             MaintenanceLogStore.shared.record("note_save_conflict_check", fields: [
                 "note_id": note.id,
                 "current_file": currentURL.lastPathComponent,
@@ -1106,6 +1199,7 @@ final class VaultStore: ObservableObject {
             noteId: note.id,
             createdAt: note.createdAt,
             updatedAt: now,
+            title: Self.title(for: body),
             body: finalBody
         )
         try storage.saveMarkdownFile(mdFile, at: targetURL)
@@ -1179,13 +1273,17 @@ final class VaultStore: ObservableObject {
         }
 
         let newFileName = NoteTitleFormatter.fileName(for: note.id, title: cleanedTitle)
-        guard newFileName != entry.fileName else { return }
         guard let currentURL = Self.urlForEntry(entry, storage: storage),
               let targetURL = Self.urlForFileName(newFileName, storage: storage) else {
             throw StorageError.iCloudUnavailable
         }
 
-        try storage.moveFile(from: currentURL, to: targetURL)
+        var mdFile = try storage.loadMarkdownFile(at: currentURL)
+        mdFile.title = cleanedTitle
+        try storage.saveMarkdownFile(mdFile, at: targetURL)
+        if currentURL != targetURL && FileManager.default.fileExists(atPath: currentURL.path) {
+            try storage.permanentlyDeleteFile(at: currentURL)
+        }
         noteIndex.upsert(NoteIndexEntry(
             noteId: entry.noteId,
             fileName: newFileName,
@@ -1220,6 +1318,7 @@ final class VaultStore: ObservableObject {
             noteId: mdFile.noteId,
             createdAt: mdFile.createdAt,
             updatedAt: now,
+            title: mdFile.title ?? Self.title(for: note.body),
             body: mdFile.body
         )
         try storage.saveMarkdownFile(trashFile, at: trashURL)
@@ -1266,6 +1365,16 @@ final class VaultStore: ObservableObject {
         lockedEncryptedNotes.removeAll { $0.id == note.id }
     }
 
+    func clearEmptyReadableNotes() async throws -> Int {
+        let emptyNotes = readableNotes.filter {
+            $0.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        for note in emptyNotes {
+            try await deleteNote(note)
+        }
+        return emptyNotes.count
+    }
+
     func deleteLockedNote(_ info: EncryptedNoteInfo) async throws {
         let now = Date()
         let purgeAfter = now.addingTimeInterval(30 * 86400)
@@ -1279,6 +1388,7 @@ final class VaultStore: ObservableObject {
             noteId: mdFile.noteId,
             createdAt: mdFile.createdAt,
             updatedAt: now,
+            title: mdFile.title,
             body: mdFile.body
         )
         try storage.saveMarkdownFile(trashFile, at: trashURL)
@@ -1308,7 +1418,7 @@ final class VaultStore: ObservableObject {
         guard FileManager.default.fileExists(atPath: srcURL.path) else { return }
 
         let mdFile = try storage.loadMarkdownFile(at: srcURL)
-        let restoredBody = trashNote.body ?? "加密笔记"
+        let restoredBody = trashNote.body ?? trashNote.title
         let restoredFileName = Self.fileName(for: trashNote.id, body: restoredBody)
         guard let dstURL = Self.urlForFileName(restoredFileName, storage: storage) else {
             throw StorageError.iCloudUnavailable
@@ -1317,6 +1427,7 @@ final class VaultStore: ObservableObject {
             noteId: mdFile.noteId,
             createdAt: mdFile.createdAt,
             updatedAt: Date(),
+            title: mdFile.title ?? Self.title(for: restoredBody),
             body: mdFile.body
         )
         try storage.saveMarkdownFile(restoredFile, at: dstURL)
@@ -1474,6 +1585,7 @@ final class VaultStore: ObservableObject {
                 noteId: note.id,
                 createdAt: note.createdAt,
                 updatedAt: note.updatedAt,
+                title: Self.title(for: note.body),
                 body: note.body
             )
             let data = try mdFile.render()
@@ -1528,9 +1640,9 @@ nonisolated enum VaultError: Error, LocalizedError {
     }
 }
 
-#if os(macOS)
 nonisolated enum VaultKeyFileError: Error, LocalizedError {
     case fileMissing
+    case fileMoved
     case permissionDenied
     case invalidFile
     case keyMismatch
@@ -1540,6 +1652,8 @@ nonisolated enum VaultKeyFileError: Error, LocalizedError {
         switch self {
         case .fileMissing:
             return "找不到密钥文件，请确认 U 盘、同步盘或文件位置可用。"
+        case .fileMoved:
+            return "密钥文件已不在原位置，请将它移回原路径，或重新加载密钥文件。"
         case .permissionDenied:
             return "无法读取密钥文件，请重新选择密钥文件。"
         case .invalidFile:
@@ -1551,4 +1665,3 @@ nonisolated enum VaultKeyFileError: Error, LocalizedError {
         }
     }
 }
-#endif

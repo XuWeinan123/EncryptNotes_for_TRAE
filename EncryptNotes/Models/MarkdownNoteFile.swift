@@ -4,6 +4,7 @@ nonisolated struct MarkdownNoteFile: Sendable {
     let noteId: String
     let createdAt: Date
     var updatedAt: Date
+    var title: String?
     var body: String
 
     var isEncrypted: Bool {
@@ -12,10 +13,11 @@ nonisolated struct MarkdownNoteFile: Sendable {
 
     static let encryptedPrefix = "bkwenc:v1:"
 
-    init(noteId: String, createdAt: Date, updatedAt: Date, body: String) {
+    init(noteId: String, createdAt: Date, updatedAt: Date, title: String? = nil, body: String) {
         self.noteId = noteId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.title = title
         self.body = body
     }
 
@@ -76,6 +78,7 @@ nonisolated struct MarkdownNoteFile: Sendable {
         var noteId: String?
         var createdAt: Date?
         var updatedAt: Date?
+        var title: String?
 
         let lines = frontmatterStr.split(separator: "\n", omittingEmptySubsequences: false)
         for line in lines {
@@ -86,9 +89,7 @@ nonisolated struct MarkdownNoteFile: Sendable {
             let key = String(trimmed[..<colonIdx]).trimmingCharacters(in: .whitespaces)
             var value = String(trimmed[trimmed.index(after: colonIdx)...]).trimmingCharacters(in: .whitespaces)
 
-            if value.hasPrefix("\"") && value.hasSuffix("\"") && value.count >= 2 {
-                value = String(value.dropFirst().dropLast())
-            }
+            value = unquoteYAMLString(value)
 
             switch key {
             case "note_id":
@@ -97,6 +98,8 @@ nonisolated struct MarkdownNoteFile: Sendable {
                 createdAt = iso8601Date(from: value)
             case "updated_at":
                 updatedAt = iso8601Date(from: value)
+            case "title":
+                title = value
             default:
                 break
             }
@@ -116,6 +119,7 @@ nonisolated struct MarkdownNoteFile: Sendable {
             noteId: nid,
             createdAt: ca,
             updatedAt: ua,
+            title: title,
             body: body
         )
     }
@@ -124,7 +128,17 @@ nonisolated struct MarkdownNoteFile: Sendable {
         let createdStr = iso8601String(from: createdAt)
         let updatedStr = iso8601String(from: updatedAt)
 
-        let frontmatter = "---\nnote_id: \"\(noteId)\"\ncreated_at: \"\(createdStr)\"\nupdated_at: \"\(updatedStr)\"\n---"
+        var frontmatterLines = [
+            "---",
+            "note_id: \"\(escapeYAMLString(noteId))\"",
+            "created_at: \"\(createdStr)\"",
+            "updated_at: \"\(updatedStr)\""
+        ]
+        if let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            frontmatterLines.append("title: \"\(escapeYAMLString(title))\"")
+        }
+        frontmatterLines.append("---")
+        let frontmatter = frontmatterLines.joined(separator: "\n")
 
         let md: String
         if body.isEmpty {
@@ -148,6 +162,35 @@ nonisolated struct MarkdownNoteFile: Sendable {
             isEncrypted: isEncrypted
         )
     }
+}
+
+nonisolated private func unquoteYAMLString(_ string: String) -> String {
+    guard string.hasPrefix("\""), string.hasSuffix("\""), string.count >= 2 else {
+        return string
+    }
+    let unquoted = String(string.dropFirst().dropLast())
+    var result = ""
+    var isEscaping = false
+    for character in unquoted {
+        if isEscaping {
+            result.append(character)
+            isEscaping = false
+        } else if character == "\\" {
+            isEscaping = true
+        } else {
+            result.append(character)
+        }
+    }
+    if isEscaping {
+        result.append("\\")
+    }
+    return result
+}
+
+nonisolated private func escapeYAMLString(_ string: String) -> String {
+    string
+        .replacingOccurrences(of: "\\", with: "\\\\")
+        .replacingOccurrences(of: "\"", with: "\\\"")
 }
 
 nonisolated private func iso8601Date(from string: String) -> Date? {

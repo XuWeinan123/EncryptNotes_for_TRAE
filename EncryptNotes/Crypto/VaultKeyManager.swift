@@ -51,7 +51,7 @@ final class VaultKeyManager {
     func generateVaultKey(key: SymmetricKey) -> VaultKey {
         VaultKey(
             version: 2,
-            app: "BieKanWo",
+            app: VaultKey.appName,
             type: "vault_key",
             keyId: UUID().uuidString,
             algorithm: VaultKey.algorithmAES256,
@@ -62,7 +62,7 @@ final class VaultKeyManager {
 
     func validateVaultKey(_ key: VaultKey) -> Bool {
         guard key.version == 2 else { return false }
-        guard key.app == "BieKanWo" else { return false }
+        guard key.app == VaultKey.appName else { return false }
         guard key.type == "vault_key" else { return false }
         guard !key.keyId.isEmpty else { return false }
         guard key.algorithm == VaultKey.algorithmAES256 else { return false }

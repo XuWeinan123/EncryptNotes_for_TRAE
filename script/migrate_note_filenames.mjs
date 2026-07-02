@@ -4,6 +4,7 @@ import path from "node:path";
 
 const apply = process.argv.includes("--apply");
 const container =
+  process.env.SEAL_NOTE_VAULT_DIR ||
   process.env.BKW_VAULT_DIR ||
   path.join(
     process.env.HOME,

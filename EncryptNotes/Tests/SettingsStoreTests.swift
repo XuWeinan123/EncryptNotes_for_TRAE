@@ -103,6 +103,31 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.macTheme, .cyan)
     }
 
+    func testEditingPrivacyAndDataPreferencesPersist() {
+        let store = makeStore()
+        store.preferredNoteMode = .encrypted
+        store.hideContentOnBackground = false
+        store.autoDeleteEmptyNotes = false
+        store.maintenanceLoggingEnabled = true
+
+        let reloaded = makeStore()
+        XCTAssertEqual(reloaded.preferredNoteMode, .encrypted)
+        XCTAssertFalse(reloaded.hideContentOnBackground)
+        XCTAssertFalse(reloaded.autoDeleteEmptyNotes)
+        XCTAssertTrue(reloaded.maintenanceLoggingEnabled)
+    }
+
+    #if os(iOS)
+    func testIOSAppIconPreferencePersists() {
+        let store = makeStore()
+        store.iOSAppIconName = IOSAppIconChoice.cyan.iconName
+
+        let reloaded = makeStore()
+        XCTAssertEqual(reloaded.iOSAppIconName, IOSAppIconChoice.cyan.iconName)
+        XCTAssertEqual(IOSAppIconChoice.choice(for: reloaded.iOSAppIconName), .cyan)
+    }
+    #endif
+
     func testRecentNotesLimitIsClamped() {
         let store = makeStore()
         store.macRecentNotesLimit = 1

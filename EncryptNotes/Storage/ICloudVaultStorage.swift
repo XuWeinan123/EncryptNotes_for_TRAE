@@ -42,19 +42,27 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
         #if os(macOS)
         let cloudDocsURL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs")
-        let folderNames = ["Seal Note", "别看我"]
-        let candidates = folderNames.map { cloudDocsURL.appendingPathComponent($0) }
-        if let existingVault = candidates.first(where: {
-            FileManager.default.fileExists(atPath: $0.appendingPathComponent("notes.json").path)
-        }) {
-            return existingVault
+        let preferred = cloudDocsURL.appendingPathComponent("Seal Note")
+        let legacy = cloudDocsURL.appendingPathComponent("别看我")
+        let fileManager = FileManager.default
+
+        if fileManager.fileExists(atPath: preferred.appendingPathComponent("notes.json").path)
+            || fileManager.fileExists(atPath: preferred.path) {
+            return preferred
         }
-        if let existingFolder = candidates.first(where: {
-            FileManager.default.fileExists(atPath: $0.path)
-        }) {
-            return existingFolder
+
+        var isDirectory: ObjCBool = false
+        if fileManager.fileExists(atPath: legacy.path, isDirectory: &isDirectory),
+           isDirectory.boolValue {
+            do {
+                try fileManager.moveItem(at: legacy, to: preferred)
+                return preferred
+            } catch {
+                return legacy
+            }
         }
-        return candidates[0]
+
+        return preferred
         #else
         return nil
         #endif

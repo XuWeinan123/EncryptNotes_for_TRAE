@@ -108,6 +108,9 @@ struct MacSettingsView: View {
 
             macPanel("笔记") {
                 toggleRow("笔记默认置顶", subtitle: "新建笔记窗口默认保持在其他窗口上方。", systemImage: "pin.fill", isOn: $settings.pinNewNotesByDefault)
+                SWRowDivider()
+                toggleRow("新建笔记自动加密", subtitle: vaultStore.isKeyLoaded ? "从菜单栏新建的笔记会直接保存为加密笔记。" : "需要先在“密钥”中创建或加载 .bkwkey 文件。", systemImage: "lock", isOn: newEncryptedNoteBinding)
+                    .disabled(!vaultStore.isKeyLoaded)
             }
 
             macPanel("存储") {
@@ -152,6 +155,10 @@ struct MacSettingsView: View {
                             .font(.system(size: 34, weight: .semibold))
                             .foregroundStyle(DS.textEmphasize)
 
+                        Text("v0.2")
+                            .font(DS.caption())
+                            .foregroundStyle(DS.textSubtle)
+
                         Text("快速记录，不打断当前工作。")
                             .font(.system(size: 16, weight: .regular))
                             .foregroundStyle(DS.textSecondary)
@@ -172,20 +179,6 @@ struct MacSettingsView: View {
                 SWRowDivider()
                 SWSettingsRow("正文加密", subtitle: "加密笔记只加密正文，密钥来自你选择的 .bkwkey 文件。", systemImage: "lock.shield") {
                     EmptyView()
-                }
-            }
-
-            macPanel("应用信息") {
-                SWSettingsRow("应用名称", systemImage: "app.badge") {
-                    Text("Seal Note")
-                        .font(DS.body())
-                        .foregroundColor(DS.textSecondary)
-                }
-                SWRowDivider()
-                SWSettingsRow("当前版本", systemImage: "number") {
-                    Text("v0.2")
-                        .font(DS.body())
-                        .foregroundColor(DS.textSecondary)
                 }
             }
 
@@ -368,7 +361,7 @@ struct MacSettingsView: View {
                 tint: DS.primaryDeep
             )
 
-            macPanel("新建笔记") {
+            macPanel("常用操作") {
                 shortcutRow(
                     title: "新建笔记",
                     value: ShortcutStore.displayStringForKey(
@@ -378,24 +371,22 @@ struct MacSettingsView: View {
                     isRecording: false,
                     onRecord: {}
                 )
-                helperText("默认快捷键：⌃⌘Z")
-            }
+                SWRowDivider()
 
-            macPanel("编辑器操作") {
-                LazyVGrid(columns: shortcutGridColumns, alignment: .leading, spacing: DS.s2) {
-                    ForEach(EditorShortcutAction.allCases) { action in
-                        let shortcut = shortcutStore.shortcut(for: action)
-                        shortcutTile(
-                            title: action.title,
-                            value: ShortcutStore.displayStringForKey(
-                                keyCode: shortcut.keyCode,
-                                modifiers: shortcut.modifiers
-                            ),
-                            isRecording: recordingAction == .editor(action),
-                            onRecord: { recordingAction = .editor(action) }
-                        )
-                    }
+                ForEach(EditorShortcutAction.allCases) { action in
+                    let shortcut = shortcutStore.shortcut(for: action)
+                    shortcutTile(
+                        title: action.title,
+                        value: ShortcutStore.displayStringForKey(
+                            keyCode: shortcut.keyCode,
+                            modifiers: shortcut.modifiers
+                        ),
+                        isRecording: recordingAction == .editor(action),
+                        onRecord: { recordingAction = .editor(action) }
+                    )
                 }
+
+                helperText("新建笔记默认快捷键：⌃⌘Z")
             }
 
             macPanel("Markdown 格式") {
@@ -428,17 +419,33 @@ struct MacSettingsView: View {
 
     private var keyTab: some View {
         panelStack {
+            let keyFileAvailable = vaultStore.isConfiguredKeyFileAvailable
             SWPageHeader(
                 title: "密钥",
-                subtitle: vaultStore.isKeyLoaded ? "这台 Mac 已经可以解锁加密笔记" : "加载密钥后才能查看加密笔记正文",
-                systemImage: vaultStore.isKeyLoaded ? "checkmark.shield.fill" : "lock.shield",
+                subtitle: vaultStore.isKeyLoaded
+                    ? (keyFileAvailable ? "这台 Mac 已经可以解锁加密笔记" : "密钥文件需要重新定位后才能解锁加密笔记")
+                    : "加载密钥后才能查看加密笔记正文",
+                systemImage: vaultStore.isKeyLoaded && keyFileAvailable ? "checkmark.shield.fill" : "lock.shield",
                 tint: DS.primaryDeep
             )
 
             if vaultStore.isKeyLoaded {
                 macPanel("密钥状态") {
-                    SWSettingsRow("密钥文件已配置", subtitle: vaultStore.keyFileDisplayPath ?? "请妥善保存密钥文件，丢失后无法恢复加密笔记。", systemImage: "checkmark.shield.fill", tint: DS.primaryDeep) {
-                        SWStatusBadge("可解锁", style: .success)
+                    SWSettingsRow(
+                        keyFileAvailable ? "密钥文件已配置" : "密钥文件不在原位置",
+                        subtitle: vaultStore.keyFileDisplayPath ?? "请妥善保存密钥文件，丢失后无法恢复加密笔记。",
+                        systemImage: keyFileAvailable ? "checkmark.shield.fill" : "exclamationmark.triangle",
+                        tint: keyFileAvailable ? DS.primaryDeep : DS.destructive
+                    ) {
+                        if keyFileAvailable {
+                            SWStatusBadge("可解锁", style: .success)
+                        } else {
+                            Button("重新定位") {
+                                loadKey()
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
                     }
                     SWRowDivider()
 
@@ -498,6 +505,15 @@ struct MacSettingsView: View {
         Binding(
             get: { settings.macEditorLineHeightMultiple },
             set: { settings.macEditorLineHeightMultiple = $0 }
+        )
+    }
+
+    private var newEncryptedNoteBinding: Binding<Bool> {
+        Binding(
+            get: { settings.preferredNoteMode == .encrypted },
+            set: { isOn in
+                settings.preferredNoteMode = isOn && vaultStore.isKeyLoaded ? .encrypted : .plain
+            }
         )
     }
 
@@ -893,15 +909,13 @@ private struct MacSettingsPage<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: DS.s3) {
-                content()
-            }
-            .padding(.top, DS.s6)
-            .padding(.horizontal, DS.s3)
-            .padding(.bottom, DS.s4)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+        VStack(alignment: .leading, spacing: DS.s3) {
+            content()
+            Spacer(minLength: 0)
         }
+        .padding(.top, DS.s6)
+        .padding(.horizontal, DS.s3)
+        .padding(.bottom, DS.s4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(DS.bg)
     }

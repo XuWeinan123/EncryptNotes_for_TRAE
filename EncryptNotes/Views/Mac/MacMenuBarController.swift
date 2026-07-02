@@ -221,7 +221,8 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
             item = NSMenuItem(title: "\(note.isEncrypted ? "🔒" : "📝") \(truncated)", action: #selector(openNote(_:)), keyEquivalent: "")
             item.representedObject = note.id
         case .locked(let info):
-            item = NSMenuItem(title: "🔒 加密笔记", action: #selector(openLockedNote(_:)), keyEquivalent: "")
+            let truncated = String(info.title.prefix(30))
+            item = NSMenuItem(title: "🔒 \(truncated)", action: #selector(openLockedNote(_:)), keyEquivalent: "")
             item.representedObject = info.id
         }
         if index < 3 {
@@ -254,9 +255,8 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
                 let note = try await vaultStore.openEncryptedNote(info)
                 openStickyNote(for: note)
             } catch {
-                showError(message: error.localizedDescription)
                 windowStore.openWindow(for: info.id)
-                StickyNoteWindowManager.shared.showLockedNote(info)
+                StickyNoteWindowManager.shared.showLockedNote(info, keyIssue: error)
             }
         }
     }

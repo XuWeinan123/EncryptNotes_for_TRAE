@@ -4,9 +4,9 @@ import UniformTypeIdentifiers
 struct HomeView: View {
     @StateObject private var vaultStore = VaultStore.shared
     @StateObject private var appLockStore = AppLockStore.shared
+    @StateObject private var syncStore = SyncStatusStore.shared
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var showSidebar = false
     @State private var showSettings = false
     @State private var showTrash = false
     @State private var showNewNoteEditor = false
@@ -67,10 +67,8 @@ struct HomeView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $showSettings) {
+        .fullScreenCover(isPresented: $showSettings) {
             SettingsView(isPresented: $showSettings, showTrash: $showTrash)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showTrash) {
             TrashView()
@@ -153,131 +151,124 @@ struct HomeView: View {
             }
 
         case .ready:
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    NavigationStack {
-                        ZStack {
-                            DS.bg.ignoresSafeArea()
-                            homeFeed
-                        }
-                        .navigationBarTitleDisplayMode(.inline)
-                        .dsLiquidGlassToolbar()
-                        .toolbar {
-                            ToolbarItem(placement: .topBarLeading) {
-                                if isSelecting {
-                                    Button {
-                                        if selectedItems.count == filteredItems.count {
-                                            selectedIDs.removeAll()
-                                        } else {
-                                            selectedIDs = Set(filteredItems.map { $0.id })
-                                        }
-                                    } label: {
-                                        Text(selectedItems.count == filteredItems.count && !filteredItems.isEmpty ? "取消全选" : "全选")
-                                            .font(DS.body())
-                                    }
-                                    .disabled(filteredItems.isEmpty)
-                                } else {
-                                    Button {
-                                        withAnimation(.easeInOut(duration: 0.3)) {
-                                            showSidebar.toggle()
-                                        }
-                                    }
-                                    label: {
-                                        Image(systemName: "line.3.horizontal")
-                                            .font(.system(size: 17, weight: .semibold))
-                                    }
-                                }
-                            }
-                            ToolbarItem(placement: .principal) {
-                                if isSelecting {
-                                    Text("\(selectedItems.count) selected")
-                                        .font(DS.title())
-                                        .foregroundColor(DS.textEmphasize)
-                                } else {
-                                    Text("Seal Note")
-                                        .font(DS.page())
-                                        .foregroundColor(DS.textEmphasize)
-                                }
-                            }
-                            ToolbarItem(placement: .topBarTrailing) {
-                                if isSelecting {
-                                    Button {
-                                        exitSelectMode()
-                                    } label: {
-                                        Image(systemName: "checkmark")
-                                            .font(.system(size: 17, weight: .semibold))
-                                    }
-                                } else {
-                                    Menu {
-                                        Button {
-                                            enterSelectMode()
-                                        } label: {
-                                            Label("多选笔记", systemImage: "checkmark.circle")
-                                        }
-                                        Button {
-                                            exportNotes()
-                                        } label: {
-                                            Label("导出笔记", systemImage: "square.and.arrow.up")
-                                        }
-                                    } label: {
-                                        Image(systemName: "ellipsis.circle")
-                                            .font(.system(size: 17, weight: .regular))
-                                    }
-                                }
-                            }
-
-                            if isSelecting {
-                                ToolbarItemGroup(placement: .bottomBar) {
-                                    Button {
-                                        performBatchCopy()
-                                    } label: {
-                                        Label("复制", systemImage: "doc.on.doc")
-                                    }
-                                    .disabled(selectedItems.isEmpty)
-
-                                    Spacer()
-
-                                    Button(role: .destructive) {
-                                        showBatchDeleteConfirmation = true
-                                    } label: {
-                                        Label("删除", systemImage: "trash")
-                                    }
-                                    .disabled(selectedItems.isEmpty)
-                                }
-                            } else if #available(iOS 26.0, *) {
-                                DefaultToolbarItem(kind: .search, placement: .bottomBar)
-                                ToolbarSpacer(.fixed, placement: .bottomBar)
-                                ToolbarItem(placement: .bottomBar) {
-                                    Button {
-                                        withAnimation(.easeInOut(duration: 0.2)) {
-                                            showNewNoteEditor = true
-                                        }
-                                    } label: {
-                                        Image(systemName: "square.and.pencil")
-                                    }
-                                    .accessibilityLabel("新建笔记")
-                                }
-                            }
-                        }
-                        .searchable(
-                            text: $vaultStore.searchText,
-                            placement: .toolbar,
-                            prompt: "搜索"
-                        )
-                        .autocorrectionDisabled()
-                        .safeAreaInset(edge: .bottom) {
-                            if !isSelecting && !isSystemBottomSearchAvailable {
-                                bottomSearchBar
-                            }
-                        }
-                    }
-
-                    if showSidebar {
-                        sidebarOverlay(width: geo.size.width)
+            NavigationStack {
+                ZStack {
+                    DS.bg.ignoresSafeArea()
+                    homeFeed
+                }
+                .navigationBarTitleDisplayMode(.inline)
+                .dsLiquidGlassToolbar()
+                .toolbar { homeToolbar }
+                .searchable(
+                    text: $vaultStore.searchText,
+                    placement: .toolbar,
+                    prompt: "搜索"
+                )
+                .autocorrectionDisabled()
+                .safeAreaInset(edge: .bottom) {
+                    if !isSelecting && !isSystemBottomSearchAvailable {
+                        bottomSearchBar
                     }
                 }
             }
             .animation(.easeInOut(duration: 0.2), value: vaultStore.filteredNotes.count)
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var homeToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            if isSelecting {
+                Button {
+                    if selectedItems.count == filteredItems.count {
+                        selectedIDs.removeAll()
+                    } else {
+                        selectedIDs = Set(filteredItems.map { $0.id })
+                    }
+                } label: {
+                    Text(selectedItems.count == filteredItems.count && !filteredItems.isEmpty ? "取消全选" : "全选")
+                        .font(DS.body())
+                }
+                .disabled(filteredItems.isEmpty)
+            } else {
+                Button { showSettings = true } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 17, weight: .semibold))
+                }
+                .accessibilityLabel("设置")
+            }
+        }
+
+        ToolbarItem(placement: .principal) {
+            if isSelecting {
+                Text("\(selectedItems.count) selected")
+                    .font(DS.title())
+                    .foregroundColor(DS.textEmphasize)
+            } else {
+                Text("Seal Note")
+                    .font(DS.page())
+                    .foregroundColor(DS.textEmphasize)
+            }
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            if isSelecting {
+                Button {
+                    exitSelectMode()
+                } label: {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 17, weight: .semibold))
+                }
+            } else {
+                Menu {
+                    Button {
+                        enterSelectMode()
+                    } label: {
+                        Label("多选笔记", systemImage: "checkmark.circle")
+                    }
+                    Button {
+                        exportNotes()
+                    } label: {
+                        Label("导出笔记", systemImage: "square.and.arrow.up")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 17, weight: .regular))
+                }
+            }
+        }
+
+        if isSelecting {
+            ToolbarItemGroup(placement: .bottomBar) {
+                Button {
+                    performBatchCopy()
+                } label: {
+                    Label("复制", systemImage: "doc.on.doc")
+                }
+                .disabled(selectedItems.isEmpty)
+
+                Spacer()
+
+                Button(role: .destructive) {
+                    showBatchDeleteConfirmation = true
+                } label: {
+                    Label("删除", systemImage: "trash")
+                }
+                .disabled(selectedItems.isEmpty)
+            }
+        } else if #available(iOS 26.0, *) {
+            DefaultToolbarItem(kind: .search, placement: .bottomBar)
+            ToolbarSpacer(.fixed, placement: .bottomBar)
+            ToolbarItem(placement: .bottomBar) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showNewNoteEditor = true
+                    }
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .accessibilityLabel("新建笔记")
+            }
         }
     }
 
@@ -306,36 +297,6 @@ struct HomeView: View {
             .padding(DS.cardPadding)
             .frame(maxWidth: DS.contentMax)
             .frame(maxWidth: .infinity)
-        }
-    }
-
-    private func sidebarOverlay(width: CGFloat) -> some View {
-        ZStack(alignment: .leading) {
-            ZStack {
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                Rectangle()
-                    .fill(Color.black.opacity(0.34))
-            }
-            .ignoresSafeArea()
-            .onTapGesture {
-                withAnimation(.easeInOut(duration: 0.3)) { showSidebar = false }
-            }
-            .transition(.opacity)
-
-            SidebarView(
-                isPresented: $showSidebar,
-                showSettings: $showSettings,
-                showTrash: $showTrash
-            )
-            .frame(width: DS.sidebarWidth)
-            .frame(maxHeight: .infinity)
-            .background(DS.surfaceRaised)
-            .shadow(color: DS.popoverShadow.color,
-                    radius: DS.popoverShadow.radius,
-                    x: DS.popoverShadow.x,
-                    y: DS.popoverShadow.y)
-            .transition(.move(edge: .leading).combined(with: .opacity))
         }
     }
 
@@ -410,30 +371,15 @@ struct HomeView: View {
     private var homeFeed: some View {
         ScrollView {
             VStack(spacing: DS.memoGap) {
+                if case .failed(let message) = syncStore.status {
+                    syncErrorBanner(message)
+                }
+
                 if !vaultStore.isKeyLoaded && vaultStore.lockedNoteCount > 0 {
                     keyStatusBanner
                 }
 
-                if vaultStore.selectedTag != nil {
-                    HStack {
-                        Button {
-                            vaultStore.selectedTag = nil
-                        } label: {
-                            HStack(spacing: DS.s1) {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 11, weight: .semibold))
-                                Text(vaultStore.selectedTag ?? "")
-                            }
-                            .font(DS.caption())
-                            .foregroundColor(DS.primaryDeep)
-                            .padding(.horizontal, DS.s2)
-                            .padding(.vertical, DS.s1)
-                            .background(DS.primaryContainer)
-                            .clipShape(Capsule())
-                        }
-                        Spacer()
-                    }
-                }
+                tagChips
 
                 if filteredItems.isEmpty {
                     emptyState
@@ -451,12 +397,81 @@ struct HomeView: View {
             .frame(maxWidth: DS.contentMax)
             .frame(maxWidth: .infinity)
         }
+        .refreshable {
+            await vaultStore.refreshFromStorage()
+        }
         .animation(.easeInOut(duration: 0.2), value: filteredItems.count)
         .animation(.easeInOut(duration: 0.2), value: isSelecting)
         .animation(.easeInOut(duration: 0.2), value: selectedIDs)
         .onAppear {
             vaultStore.searchText = ""
         }
+    }
+
+    private var tagChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DS.s2) {
+                tagChip(title: "全部", count: vaultStore.totalNoteCount, isSelected: vaultStore.selectedTag == nil) {
+                    vaultStore.selectedTag = nil
+                }
+
+                ForEach(vaultStore.allTags) { tagCount in
+                    tagChip(title: tagCount.tag, count: tagCount.count, isSelected: vaultStore.selectedTag == tagCount.tag) {
+                        vaultStore.selectedTag = vaultStore.selectedTag == tagCount.tag ? nil : tagCount.tag
+                    }
+                }
+            }
+            .padding(.horizontal, DS.s3)
+        }
+        .padding(.horizontal, -DS.s3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func tagChip(title: String, count: Int, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: DS.s1) {
+                Text(title)
+                    .lineLimit(1)
+                Text("\(count)")
+                    .foregroundColor(isSelected ? DS.onPrimary.opacity(0.78) : DS.textSubtle)
+            }
+            .font(DS.caption())
+            .foregroundColor(isSelected ? DS.onPrimary : DS.textBody)
+            .padding(.horizontal, DS.s3)
+            .frame(height: 30)
+            .background(isSelected ? DS.primary : DS.surfaceCard)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(isSelected ? Color.clear : DS.line, lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func syncErrorBanner(_ message: String) -> some View {
+        HStack(spacing: DS.s3) {
+            Image(systemName: "exclamationmark.icloud")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(DS.destructive)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("同步失败")
+                    .font(DS.body())
+                    .foregroundColor(DS.textEmphasize)
+                Text(message)
+                    .font(DS.caption())
+                    .foregroundColor(DS.textSecondary)
+                    .lineLimit(2)
+            }
+            Spacer()
+            Button("重试") {
+                Task { await vaultStore.refreshFromStorage() }
+            }
+            .font(DS.caption())
+            .foregroundColor(DS.primaryDeep)
+        }
+        .padding(DS.s3)
+        .dsCardSurface(cornerRadius: DS.rMd, shadow: false)
     }
 
     private var bottomSearchBar: some View {
