@@ -11,7 +11,7 @@ final class CryptoServiceTests: XCTestCase {
 
         let encrypted = try cryptoService.encryptMarkdownBody(body, using: key)
 
-        XCTAssertTrue(encrypted.hasPrefix("bkwenc:v1:"))
+        XCTAssertTrue(encrypted.hasPrefix("snenc:v1:"))
         XCTAssertNotEqual(encrypted, body)
 
         let decrypted = try cryptoService.decryptMarkdownBody(encrypted, using: key)
@@ -34,7 +34,7 @@ final class CryptoServiceTests: XCTestCase {
 
         let encrypted = try cryptoService.encryptMarkdownBody("原始内容", using: key)
 
-        let base64Start = encrypted.index(encrypted.startIndex, offsetBy: "bkwenc:v1:".count)
+        let base64Start = encrypted.index(encrypted.startIndex, offsetBy: "snenc:v1:".count)
         let prefix = encrypted[..<base64Start]
         var base64 = String(encrypted[base64Start...])
         if let firstChar = base64.first, firstChar != "A" {
@@ -52,8 +52,21 @@ final class CryptoServiceTests: XCTestCase {
         let key = SymmetricKey(size: .bits256)
 
         XCTAssertThrowsError(try cryptoService.decryptMarkdownBody("not-encrypted", using: key))
-        XCTAssertThrowsError(try cryptoService.decryptMarkdownBody("bkwenc:v1:", using: key))
-        XCTAssertThrowsError(try cryptoService.decryptMarkdownBody("bkwenc:v1:!!!", using: key))
+        XCTAssertThrowsError(try cryptoService.decryptMarkdownBody("snenc:v1:", using: key))
+        XCTAssertThrowsError(try cryptoService.decryptMarkdownBody("snenc:v1:!!!", using: key))
+    }
+
+    func testLegacyEncryptedPrefixIsRejected() throws {
+        let cryptoService = CryptoService.shared
+        let key = SymmetricKey(size: .bits256)
+        let legacyPrefix = "bk" + "wenc:v1:"
+
+        XCTAssertThrowsError(try cryptoService.decryptMarkdownBody(legacyPrefix + "ABCDEFGHIJKLMNOP", using: key)) { error in
+            guard case CryptoServiceError.invalidEncryptedFormat = error else {
+                XCTFail("旧加密前缀应被识别为无效格式，实际：\(error)")
+                return
+            }
+        }
     }
 
     func testEncryptedBodyDoesNotContainPlaintext() throws {
@@ -92,7 +105,7 @@ final class CryptoServiceTests: XCTestCase {
         let key = SymmetricKey(size: .bits256)
 
         let encrypted = try cryptoService.encryptMarkdownBody("test", using: key)
-        let afterPrefix = String(encrypted.dropFirst("bkwenc:v1:".count))
+        let afterPrefix = String(encrypted.dropFirst("snenc:v1:".count))
 
         XCTAssertFalse(afterPrefix.contains("+"), "base64url should not contain +")
         XCTAssertFalse(afterPrefix.contains("/"), "base64url should not contain /")

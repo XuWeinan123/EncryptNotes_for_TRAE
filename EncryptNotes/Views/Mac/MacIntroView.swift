@@ -39,7 +39,7 @@ struct MacIntroView: View {
             VStack(alignment: .leading, spacing: DS.s6) {
                 introRow(systemImage: "menubar.rectangle", title: "菜单栏便签", text: "从右上角菜单快速新建、打开最近笔记。")
                 introRow(systemImage: "doc.plaintext", title: "Markdown 文件", text: "每条笔记都是可同步、可迁移的 Markdown 文件。")
-                introRow(systemImage: "lock.shield", title: "正文加密", text: "加密笔记只加密正文，密钥来自你选择的 .bkwkey 文件。")
+                introRow(systemImage: "lock.shield", title: "正文加密", text: "加密笔记只加密正文，密钥来自你选择的密钥。")
             }
             .frame(width: 460, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)

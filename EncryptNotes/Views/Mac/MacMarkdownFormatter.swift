@@ -133,6 +133,27 @@ final class MacMarkdownFormatter {
         return nsText.substring(with: NSRange(location: range.location, length: safeLength))
     }
 
+    static func completeCodeFenceIfNeeded(in text: String, selection: NSRange) -> MacMarkdownCodeFenceCompletionResult? {
+        guard selection.length == 0 else { return nil }
+        let nsText = text as NSString
+        let cursor = max(0, min(selection.location, nsText.length))
+
+        let lineRange = nsText.lineRange(for: NSRange(location: cursor, length: 0))
+        let lineStart = lineRange.location
+        guard !isInsideFencedCodeBlock(text: text, cursor: lineStart) else { return nil }
+
+        let lineLengthToCursor = max(0, cursor - lineStart)
+        let currentLine = nsText.substring(with: NSRange(location: lineStart, length: lineLengthToCursor))
+        guard let opening = CodeFenceOpening(line: currentLine) else { return nil }
+
+        let insertion = "\n\n\(opening.indent)\(opening.marker)"
+        let newText = nsText.substring(to: cursor) + insertion + nsText.substring(from: cursor)
+        return MacMarkdownCodeFenceCompletionResult(
+            text: newText,
+            selection: NSRange(location: cursor + 1, length: 0)
+        )
+    }
+
     static func continueListIfNeeded(in text: String, selection: NSRange) -> MacMarkdownListContinuationResult? {
         guard selection.length == 0 else { return nil }
         let nsText = text as NSString
@@ -184,24 +205,6 @@ final class MacMarkdownFormatter {
         return MacMarkdownListContinuationResult(
             text: adjustedText,
             selection: NSRange(location: selectionLocation, length: 0)
-        )
-    }
-
-    static func completeCodeFenceIfNeeded(in text: String, selection: NSRange) -> MacMarkdownCodeFenceCompletionResult? {
-        guard selection.length == 0 else { return nil }
-        let nsText = text as NSString
-        let cursor = max(0, min(selection.location, nsText.length))
-        let lineRange = nsText.lineRange(for: NSRange(location: cursor, length: 0))
-        let lineStart = lineRange.location
-        let lineLengthToCursor = max(0, cursor - lineStart)
-        let currentLine = nsText.substring(with: NSRange(location: lineStart, length: lineLengthToCursor))
-        guard let marker = CodeFenceOpening(line: currentLine) else { return nil }
-
-        let insertion = "\n\n\(marker.closingMarker)"
-        let newText = nsText.substring(to: cursor) + insertion + nsText.substring(from: cursor)
-        return MacMarkdownCodeFenceCompletionResult(
-            text: newText,
-            selection: NSRange(location: cursor + 1, length: 0)
         )
     }
 
@@ -434,6 +437,26 @@ final class MacMarkdownFormatter {
         return NSRange(location: lineRange.location, length: length)
     }
 
+    private struct CodeFenceOpening {
+        let indent: String
+        let marker: String
+
+        init?(line: String) {
+            let pattern = #"^([ \t]{0,3})(`{3,}|~{3,})(.*)$"#
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+            let nsLine = line as NSString
+            guard let match = regex.firstMatch(in: line, range: NSRange(location: 0, length: nsLine.length)) else {
+                return nil
+            }
+
+            let info = nsLine.substring(with: match.range(at: 3)).trimmingCharacters(in: .whitespaces)
+            guard !info.isEmpty else { return nil }
+
+            indent = nsLine.substring(with: match.range(at: 1))
+            marker = nsLine.substring(with: match.range(at: 2))
+        }
+    }
+
     private struct ListMarker {
         let indent: String
         let nextMarker: String
@@ -485,17 +508,4 @@ final class MacMarkdownFormatter {
         }
     }
 
-    private struct CodeFenceOpening {
-        let closingMarker: String
-
-        init?(line: String) {
-            let pattern = #"^[ \t]{0,3}(```|~~~)(?:[ \t]*[A-Za-z0-9_+\-.#]+)?[ \t]*$"#
-            guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
-            let nsLine = line as NSString
-            guard let match = regex.firstMatch(in: line, range: NSRange(location: 0, length: nsLine.length)) else {
-                return nil
-            }
-            closingMarker = nsLine.substring(with: match.range(at: 1))
-        }
-    }
 }

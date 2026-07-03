@@ -221,7 +221,7 @@ private struct KeyManagementView: View {
         .navigationBarTitleDisplayMode(.inline)
         .fileImporter(
             isPresented: $showKeyImporter,
-            allowedContentTypes: [UTType(filenameExtension: "bkwkey") ?? .json],
+            allowedContentTypes: [UTType(filenameExtension: "snkey") ?? .json],
             allowsMultipleSelection: false
         ) { result in
             handleKeyImport(result)
@@ -242,7 +242,7 @@ private struct KeyManagementView: View {
                 Task { await unloadKey() }
             }
         } message: {
-            Text("卸载后，这台设备将无法查看加密笔记内容。\n你可以稍后重新导入密钥恢复查看。\n建议先导出并保存密钥文件。")
+            Text("卸载后，这台设备将无法查看加密笔记内容。\n你可以稍后重新导入密钥恢复查看。\n建议先导出并保存密钥。")
         }
         .alert("全部转为明文？", isPresented: $showDecryptAllConfirmation) {
             Button("取消", role: .cancel) {}
@@ -272,7 +272,7 @@ private struct KeyManagementView: View {
             Button("取消", role: .cancel) {}
             Button("继续", role: .destructive) { showResetSecondConfirmation = true }
         } message: {
-            Text("重置密钥将删除所有加密笔记，包括回收站中的加密笔记。\n明文笔记会保留。\n如果你还需要旧加密笔记，请先确认自己保存了旧密钥文件。")
+            Text("重置密钥将删除所有加密笔记，包括回收站中的加密笔记。\n明文笔记会保留。\n如果你还需要旧加密笔记，请先确认自己保存了旧密钥。")
         }
         .alert("最终确认", isPresented: $showResetSecondConfirmation) {
             Button("取消", role: .cancel) {}
@@ -289,7 +289,7 @@ private struct KeyManagementView: View {
             Button {
                 exportKeyFile()
             } label: {
-                SWSettingsRow("导出密钥", subtitle: "保存为 .bkwkey 文件", systemImage: "square.and.arrow.up") {
+                SWSettingsRow("导出密钥", subtitle: "保存当前密钥", systemImage: "square.and.arrow.up") {
                     EmptyView()
                 }
             }
@@ -307,7 +307,7 @@ private struct KeyManagementView: View {
     }
 
     private var advancedKeyActions: some View {
-        SWSectionPanel("加密笔记处理", footer: "这些操作会改变现有加密笔记，请先确认密钥文件已妥善保存。") {
+        SWSectionPanel("加密笔记处理", footer: "这些操作会改变现有加密笔记，请先确认密钥已妥善保存。") {
             Button {
                 showDecryptAllConfirmation = true
             } label: {
@@ -338,7 +338,7 @@ private struct KeyManagementView: View {
     }
 
     private var unloadedKeyActions: some View {
-        SWSectionPanel("密钥操作", footer: "密钥文件只会在本机读取，不会上传。") {
+        SWSectionPanel("密钥操作", footer: "密钥只会在本机读取，不会上传。") {
             Button {
                 Task { await createKey() }
             } label: {
@@ -351,7 +351,7 @@ private struct KeyManagementView: View {
             Button {
                 showKeyImporter = true
             } label: {
-                SWSettingsRow("导入密钥文件", subtitle: "加载已有 .bkwkey 文件", systemImage: "square.and.arrow.down") {
+                SWSettingsRow("导入密钥", subtitle: "加载已有密钥", systemImage: "square.and.arrow.down") {
                     EmptyView()
                 }
             }

@@ -109,7 +109,7 @@ struct MacSettingsView: View {
             macPanel("笔记") {
                 toggleRow("笔记默认置顶", subtitle: "新建笔记窗口默认保持在其他窗口上方。", systemImage: "pin.fill", isOn: $settings.pinNewNotesByDefault)
                 SWRowDivider()
-                toggleRow("新建笔记自动加密", subtitle: vaultStore.isKeyLoaded ? "从菜单栏新建的笔记会直接保存为加密笔记。" : "需要先在“密钥”中创建或加载 .bkwkey 文件。", systemImage: "lock", isOn: newEncryptedNoteBinding)
+                toggleRow("新建笔记自动加密", subtitle: vaultStore.isKeyLoaded ? "从菜单栏新建的笔记会直接保存为加密笔记。" : "需要先在“密钥”中创建或加载密钥。", systemImage: "lock", isOn: newEncryptedNoteBinding)
                     .disabled(!vaultStore.isKeyLoaded)
             }
 
@@ -177,7 +177,7 @@ struct MacSettingsView: View {
                     EmptyView()
                 }
                 SWRowDivider()
-                SWSettingsRow("正文加密", subtitle: "加密笔记只加密正文，密钥来自你选择的 .bkwkey 文件。", systemImage: "lock.shield") {
+                SWSettingsRow("正文加密", subtitle: "加密笔记只加密正文，密钥来自你选择的密钥。", systemImage: "lock.shield") {
                     EmptyView()
                 }
             }
@@ -368,8 +368,8 @@ struct MacSettingsView: View {
                         keyCode: shortcutStore.newNoteKey.keyCode,
                         modifiers: shortcutStore.newNoteKey.modifiers
                     ),
-                    isRecording: false,
-                    onRecord: {}
+                    isRecording: recordingAction == .newNote,
+                    onRecord: { recordingAction = .newNote }
                 )
                 SWRowDivider()
 
@@ -419,75 +419,23 @@ struct MacSettingsView: View {
 
     private var keyTab: some View {
         panelStack {
-            let keyFileAvailable = vaultStore.isConfiguredKeyFileAvailable
+            let keyStatus = vaultStore.macKeyStatus
             SWPageHeader(
                 title: "密钥",
-                subtitle: vaultStore.isKeyLoaded
-                    ? (keyFileAvailable ? "这台 Mac 已经可以解锁加密笔记" : "密钥文件需要重新定位后才能解锁加密笔记")
-                    : "加载密钥后才能查看加密笔记正文",
-                systemImage: vaultStore.isKeyLoaded && keyFileAvailable ? "checkmark.shield.fill" : "lock.shield",
+                subtitle: keyStatusSubtitle(keyStatus),
+                systemImage: vaultStore.isKeyLoaded ? "checkmark.shield.fill" : "lock.shield",
                 tint: DS.primaryDeep
             )
 
-            if vaultStore.isKeyLoaded {
-                macPanel("密钥状态") {
-                    SWSettingsRow(
-                        keyFileAvailable ? "密钥文件已配置" : "密钥文件不在原位置",
-                        subtitle: vaultStore.keyFileDisplayPath ?? "请妥善保存密钥文件，丢失后无法恢复加密笔记。",
-                        systemImage: keyFileAvailable ? "checkmark.shield.fill" : "exclamationmark.triangle",
-                        tint: keyFileAvailable ? DS.primaryDeep : DS.destructive
-                    ) {
-                        if keyFileAvailable {
-                            SWStatusBadge("可解锁", style: .success)
-                        } else {
-                            Button("重新定位") {
-                                loadKey()
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        }
-                    }
-                    SWRowDivider()
-
-                    SWSettingsRow("移除密钥引用", subtitle: "移除前需要选择如何处理现有加密笔记", systemImage: "lock.slash", tint: DS.destructive) {
-                        Button("移除", role: .destructive) {
-                            unloadKey()
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
+            macPanel("密钥状态") {
+                SWSettingsRow(
+                    keyStatusTitle(keyStatus),
+                    subtitle: keyManagementSubtitle(for: keyStatus),
+                    systemImage: keyManagementIcon(for: keyStatus),
+                    tint: keyManagementTint(for: keyStatus)
+                ) {
+                    keyManagementActions(for: keyStatus)
                 }
-            } else {
-                macPanel("密钥状态") {
-                    SWSettingsRow("未配置密钥文件", subtitle: "密钥文件只会在需要解密时读取，不会保存到钥匙串。", systemImage: "lock.shield", tint: DS.textSubtle) {
-                        SWStatusBadge("锁定", style: .neutral)
-                    }
-                    SWRowDivider()
-
-                    SWSettingsRow("加载密钥文件", subtitle: "选择已有 .bkwkey 文件", systemImage: "square.and.arrow.down") {
-                        Button("加载…") {
-                            loadKey()
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
-                    SWRowDivider()
-
-                    SWSettingsRow("创建新的加密空间", subtitle: "生成新密钥并立即保存密钥文件", systemImage: "key.fill", tint: DS.primaryDeep) {
-                        Button("创建…") {
-                            createNewKey()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                        .tint(DS.primary)
-                    }
-                }
-            }
-
-            macPanel("临时锁定") {
-                toggleRow("睡眠或锁屏时临时上锁", subtitle: "打开的加密笔记会进入模糊锁定状态。", systemImage: "moon.zzz", isOn: $settings.lockEncryptedNotesOnSleep)
-                SWRowDivider()
-                toggleRow("非置顶窗口进入后台时临时上锁", subtitle: "未置顶的加密笔记失焦后需要重新解锁。", systemImage: "rectangle.on.rectangle.slash", isOn: $settings.lockUnpinnedEncryptedNotesOnBackground)
             }
         }
     }
@@ -499,6 +447,135 @@ struct MacSettingsView: View {
                 settings.macEditorFontSize = newValue
             }
         )
+    }
+
+    private func keyStatusTitle(_ status: MacVaultKeyStatus) -> String {
+        switch status {
+        case .noReference:
+            return "未加载密钥"
+        case .available:
+            return "密钥已加载"
+        case .invalid(.keyReplaced):
+            return "密钥已被替换"
+        case .invalid:
+            return "密钥失效"
+        }
+    }
+
+    private func keyStatusSubtitle(_ status: MacVaultKeyStatus) -> String {
+        switch status {
+        case .noReference:
+            return "加载密钥后才能查看加密笔记正文"
+        case .available:
+            return "这台 Mac 已经可以解锁加密笔记"
+        case .invalid:
+            return "密钥需要重新定位后才能解锁加密笔记"
+        }
+    }
+
+    private func keyManagementSubtitle(for status: MacVaultKeyStatus) -> String {
+        let encryptedCount = vaultStore.encryptedEntryCount
+        switch status {
+        case .noReference where encryptedCount > 0:
+            return "发现 \(encryptedCount) 条加密笔记，请优先加载原密钥。"
+        case .noReference:
+            return "当前未加载密钥。密钥只会在本机读取，不会保存到钥匙串。"
+        case .available:
+            return vaultStore.keyFileDisplayPath ?? "请妥善保存密钥，丢失后无法恢复加密笔记。"
+        case .invalid where encryptedCount > 0:
+            return "密钥失效，\(encryptedCount) 条加密笔记需要原密钥解锁。"
+        case .invalid:
+            return "密钥不可用、格式无效，或内容已被替换。"
+        }
+    }
+
+    private func keyManagementIcon(for status: MacVaultKeyStatus) -> String {
+        switch status {
+        case .noReference:
+            return "lock.shield"
+        case .available:
+            return "checkmark.shield.fill"
+        case .invalid:
+            return "exclamationmark.triangle"
+        }
+    }
+
+    private func keyManagementTint(for status: MacVaultKeyStatus) -> Color {
+        switch status {
+        case .noReference:
+            return DS.textSubtle
+        case .available:
+            return DS.primaryDeep
+        case .invalid:
+            return DS.destructive
+        }
+    }
+
+    @ViewBuilder
+    private func keyManagementActions(for status: MacVaultKeyStatus) -> some View {
+        switch status {
+        case .noReference:
+            if vaultStore.encryptedEntryCount > 0 {
+                HStack(spacing: DS.s2) {
+                    Button("加载已有密钥") {
+                        loadKey()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .tint(DS.primary)
+
+                    Button("创建新密钥") {
+                        createNewKey()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            } else {
+                HStack(spacing: DS.s2) {
+                    Button("创建新密钥") {
+                        createNewKey()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .tint(DS.primary)
+
+                    Button("加载已有密钥") {
+                        loadKey()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+        case .available:
+            HStack(spacing: DS.s2) {
+                Button("打开密钥位置") {
+                    openKeyLocation()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Button("移除密钥引用", role: .destructive) {
+                    unloadKey()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        case .invalid:
+            HStack(spacing: DS.s2) {
+                Button("重新定位密钥") {
+                    loadKey()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .tint(DS.primary)
+
+                Button("移除密钥引用", role: .destructive) {
+                    unloadKey()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
     }
 
     private var lineHeightBinding: Binding<Double> {
@@ -551,6 +628,8 @@ struct MacSettingsView: View {
     private var shortcutRecorder: some View {
         ShortcutRecorderView(recordingAction: $recordingAction) { action, shortcut in
             switch action {
+            case .newNote:
+                shortcutStore.setNewNoteShortcut(keyCode: shortcut.keyCode, modifiers: shortcut.modifiers)
             case .markdown(let markdownAction):
                 shortcutStore.setMarkdownShortcut(shortcut, for: markdownAction)
             case .editor(let editorAction):
@@ -730,6 +809,23 @@ struct MacSettingsView: View {
         }
     }
 
+    private func openKeyLocation() {
+        guard let displayPath = vaultStore.keyFileDisplayPath else {
+            settingsErrorMessage = "当前没有可打开的密钥位置。"
+            return
+        }
+
+        let url = URL(fileURLWithPath: displayPath)
+        if FileManager.default.fileExists(atPath: url.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } else {
+            let parentURL = url.deletingLastPathComponent()
+            if !NSWorkspace.shared.open(parentURL) {
+                settingsErrorMessage = "Finder 未能打开：\(parentURL.path)"
+            }
+        }
+    }
+
     private func exportMaintenanceLog() {
         do {
             let logURL = try MaintenanceLogStore.shared.exportLogFile()
@@ -763,116 +859,207 @@ struct MacSettingsView: View {
     }
 
     private func loadKey() {
-        MacMenuBarController.shared.loadKeyFile()
+        let panel = NSOpenPanel()
+        panel.title = "加载已有密钥"
+        panel.message = "密钥只会在本机读取，不会上传。"
+        panel.allowedContentTypes = [.init(filenameExtension: "snkey")!]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        Task {
+            do {
+                _ = try await vaultStore.importKeyFile(from: url)
+            } catch {
+                await MainActor.run {
+                    handleKeyImportFailure(error, selectedURL: url)
+                }
+            }
+        }
     }
 
     private func unloadKey() {
+        if vaultStore.encryptedEntryCount == 0 {
+            confirmRemoveKeyReference()
+        } else if vaultStore.isKeyLoaded {
+            confirmUsableKeyRemoval()
+        } else {
+            confirmInvalidKeyRemoval()
+        }
+    }
+
+    private func confirmRemoveKeyReference() {
         let alert = NSAlert()
-        alert.messageText = "移除密钥前如何处理加密笔记？"
-        alert.informativeText = "删除会永久移除加密笔记；解密和导出都需要当前密钥文件可用且匹配。"
-        alert.addButton(withTitle: "永久删除加密笔记")
-        alert.addButton(withTitle: "全部解密为明文")
-        alert.addButton(withTitle: "解密导出并移除本地")
+        alert.messageText = "移除密钥引用？"
+        alert.informativeText = "只会让 Seal Note 忘记密钥位置，不会删除密钥本身。"
+        alert.addButton(withTitle: "移除密钥引用")
         alert.addButton(withTitle: "取消")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        Task {
+            do {
+                try await vaultStore.unloadKey()
+            } catch {
+                await MainActor.run {
+                    settingsErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func confirmUsableKeyRemoval() {
+        let alert = NSAlert()
+        alert.messageText = "移除密钥引用前如何处理加密笔记？"
+        alert.informativeText = affectedEncryptedNotesMessage(prefix: "移除密钥引用前，需要先删除这些加密笔记，或全部解密为明文。")
+        alert.addButton(withTitle: "删除全部加密笔记")
+        alert.addButton(withTitle: "先全部解密成明文")
+        alert.addButton(withTitle: "取消")
+        alert.buttons.first?.hasDestructiveAction = true
 
         switch alert.runModal() {
         case .alertFirstButtonReturn:
-            confirmPermanentDeleteEncryptedNotes()
+            Task { await runKeyRemovalAction { try await self.vaultStore.permanentlyDeleteAllEncryptedNotes() } }
         case .alertSecondButtonReturn:
             decryptAllEncryptedNotesAndRemoveKey()
-        case .alertThirdButtonReturn:
-            exportPlaintextAndRemoveEncryptedNotes()
         default:
             break
         }
     }
 
-    private func confirmPermanentDeleteEncryptedNotes() {
+    private func confirmInvalidKeyRemoval() {
         let alert = NSAlert()
-        alert.messageText = "永久删除所有加密笔记？"
-        alert.informativeText = "这个操作不会移到回收站，删除后无法恢复。"
-        alert.addButton(withTitle: "永久删除")
+        alert.messageText = "密钥失效时移除密钥引用？"
+        alert.informativeText = affectedEncryptedNotesMessage(prefix: "当前密钥不可用，无法在此时解密加密笔记。若仍保留原密钥，请取消并先重新定位密钥。")
+        alert.addButton(withTitle: "删除全部加密笔记")
         alert.addButton(withTitle: "取消")
+        alert.buttons.first?.hasDestructiveAction = true
+
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        Task {
-            do {
-                _ = try await vaultStore.permanentlyDeleteAllEncryptedNotes()
-                StickyNoteWindowManager.shared.closeAllWindows()
-            } catch {
-                await MainActor.run {
-                    settingsErrorMessage = error.localizedDescription
-                }
-            }
-        }
+        Task { await runKeyRemovalAction { try await self.vaultStore.permanentlyDeleteAllEncryptedNotes() } }
     }
 
     private func decryptAllEncryptedNotesAndRemoveKey() {
-        Task {
-            do {
-                _ = try await vaultStore.decryptAllEncryptedNotesAndRemoveKey()
-                StickyNoteWindowManager.shared.closeAllWindows()
-            } catch {
-                await MainActor.run {
-                    settingsErrorMessage = error.localizedDescription
-                }
+        Task { await runKeyRemovalAction { try await self.vaultStore.decryptAllEncryptedNotesAndRemoveKey() } }
+    }
+
+    private func runKeyRemovalAction(_ action: @escaping () async throws -> Int) async {
+        do {
+            _ = try await action()
+            StickyNoteWindowManager.shared.closeAllWindows()
+        } catch {
+            await MainActor.run {
+                settingsErrorMessage = error.localizedDescription
             }
         }
     }
 
-    private func exportPlaintextAndRemoveEncryptedNotes() {
-        let panel = NSSavePanel()
-        panel.title = "导出解密后的明文笔记"
-        panel.message = "导出成功后，本地加密笔记会被永久移除。"
-        panel.nameFieldStringValue = "Seal Note-解密笔记.zip"
-        panel.allowedContentTypes = [.init(filenameExtension: "zip")!]
-        guard panel.runModal() == .OK, let saveURL = panel.url else { return }
-
-        Task {
-            do {
-                _ = try await vaultStore.exportPlaintextEncryptedNotesAndRemoveLocalNotes(to: saveURL)
-                StickyNoteWindowManager.shared.closeAllWindows()
-            } catch {
-                await MainActor.run {
-                    settingsErrorMessage = error.localizedDescription
-                }
-            }
-        }
+    private func affectedEncryptedNotesMessage(prefix: String) -> String {
+        "\(prefix)\n\n受影响范围包括当前列表和回收站中的 \(vaultStore.encryptedEntryCount) 条加密笔记。"
     }
 
     private func createNewKey() {
-        guard !vaultStore.isKeyLoaded else {
+        guard !vaultStore.hasKeyReference else {
             unloadKey()
             return
         }
 
+        guard vaultStore.encryptedEntryCount == 0 else {
+            confirmDeleteEncryptedNotesAndCreateKey()
+            return
+        }
+
+        presentCreateKeyPanel()
+    }
+
+    private func confirmDeleteEncryptedNotesAndCreateKey() {
         let alert = NSAlert()
-        alert.messageText = "创建加密密钥？"
-        alert.informativeText = "请将密钥文件保存到安全位置。丢失密钥将无法解密加密笔记。"
+        alert.messageText = "创建新密钥会影响已有加密笔记"
+        alert.informativeText = affectedEncryptedNotesMessage(prefix: "新密钥无法解锁现有加密笔记。继续前必须删除这些加密笔记。")
+        alert.addButton(withTitle: "删除这些加密笔记并创建新密钥")
+        alert.addButton(withTitle: "取消")
+        alert.buttons.first?.hasDestructiveAction = true
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        Task {
+            do {
+                _ = try await vaultStore.permanentlyDeleteAllEncryptedNotes()
+                await MainActor.run {
+                    presentCreateKeyPanel()
+                }
+            } catch {
+                await MainActor.run {
+                    settingsErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func presentCreateKeyPanel() {
+        let alert = NSAlert()
+        alert.messageText = "创建新密钥？"
+        alert.informativeText = "请将密钥保存到安全位置。丢失密钥将无法解密加密笔记。"
         alert.addButton(withTitle: "创建")
         alert.addButton(withTitle: "取消")
-        if alert.runModal() == .alertFirstButtonReturn {
-            let savePanel = NSSavePanel()
-            savePanel.title = "保存密钥文件"
-            savePanel.message = "保存成功后，Seal Note 会记住这个密钥文件的位置。"
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd"
-            savePanel.nameFieldStringValue = "Seal Note-密钥-\(formatter.string(from: Date())).bkwkey"
-            savePanel.allowedContentTypes = [.init(filenameExtension: "bkwkey")!]
-            guard savePanel.runModal() == .OK, let saveURL = savePanel.url else { return }
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
 
+        let savePanel = NSSavePanel()
+        savePanel.title = "保存密钥"
+        savePanel.message = "保存成功后，Seal Note 会记住这个密钥的位置。"
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        savePanel.nameFieldStringValue = "Seal Note-密钥-\(formatter.string(from: Date())).snkey"
+        savePanel.allowedContentTypes = [.init(filenameExtension: "snkey")!]
+        guard savePanel.runModal() == .OK, let saveURL = savePanel.url else { return }
+
+        Task {
+            do {
+                try await vaultStore.createKeyFile(at: saveURL)
+            } catch {
+                await MainActor.run {
+                    let errorAlert = NSAlert()
+                    errorAlert.messageText = "创建失败"
+                    errorAlert.informativeText = error.localizedDescription
+                    errorAlert.addButton(withTitle: "确定")
+                    errorAlert.runModal()
+                }
+            }
+        }
+    }
+
+    private func handleKeyImportFailure(_ error: Error, selectedURL: URL) {
+        guard let keyError = error as? VaultKeyFileError, keyError == .keyMismatch else {
+            settingsErrorMessage = error.localizedDescription
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "所选密钥无法解锁现有加密笔记"
+        alert.informativeText = affectedEncryptedNotesMessage(prefix: "默认不会保存这次选择的密钥。")
+        alert.addButton(withTitle: "重新选择密钥")
+        alert.addButton(withTitle: "删除这些加密笔记并使用此密钥")
+        alert.addButton(withTitle: "取消")
+        if alert.buttons.indices.contains(1) {
+            alert.buttons[1].hasDestructiveAction = true
+        }
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            loadKey()
+        case .alertSecondButtonReturn:
             Task {
                 do {
-                    try await vaultStore.createKeyFile(at: saveURL)
+                    _ = try await vaultStore.permanentlyDeleteAllEncryptedNotes()
+                    _ = try await vaultStore.importKeyFile(from: selectedURL)
+                    StickyNoteWindowManager.shared.closeAllWindows()
                 } catch {
                     await MainActor.run {
-                        let errorAlert = NSAlert()
-                        errorAlert.messageText = "创建失败"
-                        errorAlert.informativeText = error.localizedDescription
-                        errorAlert.addButton(withTitle: "确定")
-                        errorAlert.runModal()
+                        settingsErrorMessage = error.localizedDescription
                     }
                 }
             }
+        default:
+            break
         }
     }
 }
@@ -894,11 +1081,13 @@ struct MacSettingsView: View {
 }
 
 private enum MacShortcutRecordingAction: Equatable, Identifiable {
+    case newNote
     case markdown(MarkdownShortcutAction)
     case editor(EditorShortcutAction)
 
     var id: String {
         switch self {
+        case .newNote: return "newNote"
         case .markdown(let action): return "markdown.\(action.rawValue)"
         case .editor(let action): return "editor.\(action.rawValue)"
         }

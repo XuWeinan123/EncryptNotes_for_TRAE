@@ -60,7 +60,7 @@ function parseMarkdown(content) {
     createdAt: values.created_at,
     updatedAt: values.updated_at,
     body,
-    encrypted: body.startsWith("bkwenc:v1:")
+    encrypted: body.startsWith("snenc:v1:")
   };
 }
 

@@ -82,16 +82,16 @@ struct HomeView: View {
         }
         .fileImporter(
             isPresented: $showKeyImporter,
-            allowedContentTypes: [UTType(filenameExtension: "bkwkey") ?? .json],
+            allowedContentTypes: [UTType(filenameExtension: "snkey") ?? .json],
             allowsMultipleSelection: false
         ) { result in
             handleKeyImport(result)
         }
-        .alert("保存密钥文件", isPresented: $vaultStore.needsKeyExport) {
+        .alert("保存密钥", isPresented: $vaultStore.needsKeyExport) {
             Button("立即保存") { exportKeyFile() }
             Button("稍后", role: .cancel) { vaultStore.needsKeyExport = false }
         } message: {
-            Text("密钥已经创建并加载。\n请导出并妥善保存密钥文件。丢失密钥后，加密笔记将无法恢复。")
+            Text("密钥已经创建并加载。\n请导出并妥善保存密钥。丢失密钥后，加密笔记将无法恢复。")
         }
         .alert("删除笔记", isPresented: $showDeleteConfirmation) {
             Button("取消", role: .cancel) { noteToDelete = nil }
@@ -332,7 +332,7 @@ struct HomeView: View {
             return "没有包含 \(tag) 的可读笔记。"
         }
         if vaultStore.lockedNoteCount > 0 && !vaultStore.isKeyLoaded {
-            return "导入密钥文件后，加密笔记会在本机解密显示。"
+            return "导入密钥后，加密笔记会在本机解密显示。"
         }
         return "点击下方按钮创建第一条笔记。"
     }
@@ -362,7 +362,7 @@ struct HomeView: View {
             }
             .buttonStyle(.plain)
             .foregroundColor(DS.primaryDeep)
-            .accessibilityLabel("导入密钥文件")
+            .accessibilityLabel("导入密钥")
         }
         .padding(DS.s3)
         .dsCardSurface(cornerRadius: DS.rMd, shadow: false)

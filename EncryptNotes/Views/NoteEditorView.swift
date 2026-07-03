@@ -194,14 +194,14 @@ struct NoteEditorView: View {
                         }
                     }
                 }
-                Button("导入密钥文件") { showKeyImporter = true }
+                Button("导入密钥") { showKeyImporter = true }
                 Button("继续写明文笔记", role: .cancel) {}
             } message: {
-                Text("创建密钥后，可以保存加密笔记。\n密钥文件只会在本机读取，不会上传。")
+                Text("创建密钥后，可以保存加密笔记。\n密钥只会在本机读取，不会上传。")
             }
             .fileImporter(
                 isPresented: $showKeyImporter,
-                allowedContentTypes: [UTType(filenameExtension: "bkwkey") ?? .json],
+                allowedContentTypes: [UTType(filenameExtension: "snkey") ?? .json],
                 allowsMultipleSelection: false
             ) { result in
                 handleKeyImport(result)

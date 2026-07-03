@@ -11,7 +11,7 @@ nonisolated struct MarkdownNoteFile: Sendable {
         body.hasPrefix(MarkdownNoteFile.encryptedPrefix)
     }
 
-    static let encryptedPrefix = "bkwenc:v1:"
+    static let encryptedPrefix = "snenc:v1:"
 
     init(noteId: String, createdAt: Date, updatedAt: Date, title: String? = nil, body: String) {
         self.noteId = noteId

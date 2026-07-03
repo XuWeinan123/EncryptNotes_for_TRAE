@@ -118,7 +118,7 @@ struct TrashView: View {
     }
 
     private func firstLine(of body: String) -> String {
-        NoteTitleFormatter.displayTitle(from: body, emptyTitle: "(空笔记)")
+        NoteTitleFormatter.displayTitle(from: body, emptyTitle: NoteTitleFormatter.emptyTitle)
     }
 
     private func timeString(from date: Date) -> String {

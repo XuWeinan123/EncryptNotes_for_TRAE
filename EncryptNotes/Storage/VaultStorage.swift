@@ -114,9 +114,13 @@ extension VaultStorage {
         let timestamp = Int(Date().timeIntervalSince1970)
         let filename = url.deletingPathExtension().lastPathComponent
         let conflictFilename = "\(filename)-conflict-\(timestamp).md"
-        let conflictURL = container.appendingPathComponent(conflictFilename)
+        let conflictDir = container.appendingPathComponent("conflicts")
+        let conflictURL = conflictDir.appendingPathComponent(conflictFilename)
 
         let fm = FileManager.default
+        if !fm.fileExists(atPath: conflictDir.path) {
+            try fm.createDirectory(at: conflictDir, withIntermediateDirectories: true)
+        }
         try fm.copyItem(at: url, to: conflictURL)
         return conflictURL
     }

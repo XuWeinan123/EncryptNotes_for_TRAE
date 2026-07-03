@@ -253,11 +253,8 @@ struct StickyNoteEditorView: View {
             )
         }
         .alert("需要密钥", isPresented: $viewModel.showingKeyIssueAlert) {
-            Button("重新定位密钥") {
-                viewModel.relocateKeyFile()
-            }
-            Button("打开设置") {
-                MacMenuBarController.shared.openSettingsWindow()
+            Button("打开密钥设置") {
+                MacMenuBarController.shared.openSettingsWindow(selectedTab: .key)
             }
             Button("取消", role: .cancel) {}
         } message: {
@@ -755,7 +752,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
     @Published var ciphertextPreview = ""
     @Published var isEncryptionToggling = false
     @Published var showingKeyIssueAlert = false
-    @Published var keyIssueMessage = "请重新选择 .bkwkey 密钥文件。"
+    @Published var keyIssueMessage = "请前往密钥设置处理。"
 
     private let vaultStore = VaultStore.shared
     private let windowStore = MacNoteWindowStore.shared
@@ -814,7 +811,6 @@ final class StickyNoteEditorViewModel: ObservableObject {
     }
 
     func onDisappear() {
-        saveTask?.cancel()
         guard !forceClose else { return }
         handleWindowWillClose()
     }
@@ -858,7 +854,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
 
     func deleteNote() {
         if isContentEmpty {
-            discardEmptyNoteAndClose()
+            discardEmptyNoteAndClose(body: text)
             return
         }
         showingDeleteConfirmation = true
@@ -1076,48 +1072,8 @@ final class StickyNoteEditorViewModel: ObservableObject {
         }
     }
 
-    func relocateKeyFile() {
-        let panel = NSOpenPanel()
-        panel.title = "重新定位密钥文件"
-        panel.message = "请选择用于解锁当前加密笔记的 .bkwkey 文件。"
-        panel.allowedContentTypes = [.init(filenameExtension: "bkwkey")!]
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                _ = try await self.vaultStore.importKeyFile(from: url)
-                self.syncStore.setSaved()
-                if self.note.isEncrypted, self.isContentLocked {
-                    self.unlockEncryptedContent()
-                }
-            } catch {
-                self.presentKeyRelocationFailure(error)
-            }
-        }
-    }
-
     private func presentKeyIssue(_ error: Error) {
         keyIssueMessage = keyIssueMessage(for: error)
-        showingKeyIssueAlert = true
-        syncStore.setFailed(message: keyIssueMessage)
-    }
-
-    private func presentKeyRelocationFailure(_ error: Error) {
-        if let keyError = error as? VaultKeyFileError {
-            switch keyError {
-            case .keyMismatch:
-                keyIssueMessage = "所选密钥无法解锁当前加密笔记，请确认选择的是原始密钥文件。"
-            default:
-                keyIssueMessage = "无法使用所选密钥文件：\(keyError.localizedDescription)"
-            }
-        } else {
-            keyIssueMessage = "无法使用所选密钥文件：\(error.localizedDescription)"
-        }
         showingKeyIssueAlert = true
         syncStore.setFailed(message: keyIssueMessage)
     }
@@ -1137,44 +1093,51 @@ final class StickyNoteEditorViewModel: ObservableObject {
         if let keyError = error as? VaultKeyFileError {
             switch keyError {
             case .fileMissing:
-                return "找不到密钥文件。它可能已被删除或所在磁盘不可用，请重新定位 .bkwkey 文件。"
+                return "找不到密钥。请前往密钥设置处理。"
             case .fileMoved:
-                return "密钥文件已不在原位置，请重新定位 .bkwkey 文件。"
+                return "密钥已不在原位置。请前往密钥设置处理。"
             case .permissionDenied:
-                return "无法读取密钥文件，请重新选择 .bkwkey 文件。"
+                return "无法读取密钥。请前往密钥设置处理。"
             case .invalidFile:
-                return "密钥文件格式无效，请选择有效的 .bkwkey 文件。"
+                return "密钥格式无效。请前往密钥设置处理。"
+            case .unsupportedFileExtension:
+                return "请选择有效的 Seal Note 密钥。"
+            case .keyReplaced:
+                return "密钥已被替换或内容被修改。请前往密钥设置处理。"
             case .keyMismatch:
-                return "密钥不匹配，无法解锁当前加密笔记。"
+                return "密钥不匹配，无法解锁当前加密笔记。请前往密钥设置处理。"
             case .keyAlreadyConfigured:
-                return "已经配置了密钥文件。"
+                return "已经配置了密钥引用。"
+            case .encryptedNotesExist:
+                return "仍有加密笔记，请先在密钥设置中处理。"
             }
         }
 
-        return "请先选择用于解锁加密笔记的 .bkwkey 密钥文件。"
+        return "请先前往密钥设置处理。"
     }
 
     private func handleWindowWillClose() {
+        saveTask?.cancel()
         guard !isContentLocked else {
             syncStore.setSaved()
             return
         }
+        let snapshot = text
         guard !isPreview else {
-            note.body = text
+            note.body = snapshot
             syncStore.setSaved()
             return
         }
 
-        guard settings.autoDeleteEmptyNotes && isContentEmpty else {
-            saveAndGenerateTitleOnClose()
+        guard settings.autoDeleteEmptyNotes && snapshot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            saveAndGenerateTitleOnClose(snapshot: snapshot, canGenerateTitle: !vaultStore.hasStableTitle(for: note))
             return
         }
 
-        discardEmptyNote()
+        discardEmptyNote(body: snapshot)
     }
 
-    private func saveAndGenerateTitleOnClose() {
-        let snapshot = text
+    private func saveAndGenerateTitleOnClose(snapshot: String, canGenerateTitle: Bool) {
         let noteToUpdate = note
         syncStore.setSyncing()
 
@@ -1191,7 +1154,9 @@ final class StickyNoteEditorViewModel: ObservableObject {
                   let savedNote = vaultStore.readableNotes.first(where: { $0.id == noteToUpdate.id }) else {
                 return
             }
-            await generateAITitleIfNeeded(for: savedNote, body: snapshot)
+            if canGenerateTitle {
+                await generateAITitleIfNeeded(for: savedNote, body: snapshot)
+            }
         }
     }
 
@@ -1221,7 +1186,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
         }
     }
 
-    private func discardEmptyNoteAndClose() {
+    private func discardEmptyNoteAndClose(body: String) {
         guard !isPreview else {
             text = ""
             note.body = ""
@@ -1231,7 +1196,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
         saveTask?.cancel()
         Task {
             do {
-                try await vaultStore.discardEmptyNote(note)
+                try await vaultStore.discardEmptyNote(note, body: body)
                 syncStore.setSaved()
                 forceClose = true
             } catch {
@@ -1240,10 +1205,10 @@ final class StickyNoteEditorViewModel: ObservableObject {
         }
     }
 
-    private func discardEmptyNote() {
+    private func discardEmptyNote(body: String) {
         Task {
             do {
-                try await vaultStore.discardEmptyNote(note)
+                try await vaultStore.discardEmptyNote(note, body: body)
                 syncStore.setSaved()
             } catch {
                 syncStore.setFailed(message: error.localizedDescription)
@@ -1629,21 +1594,11 @@ extension MacTextView {
             parent.onChange(newText)
             lastText = newText
             let scrollView = textView.enclosingScrollView as? ToolbarInsetScrollView
-            if let scrollView {
-                scrollView.preservingVisibleOrigin {
-                    MacMarkdownHighlighter.applyMarkdownHighlighting(to: textView, lineHeightMultiple: parent.lineHeightMultiple)
-                }
-            } else {
-                MacMarkdownHighlighter.applyMarkdownHighlighting(to: textView, lineHeightMultiple: parent.lineHeightMultiple)
-            }
+            MacMarkdownHighlighter.applyMarkdownHighlighting(to: textView, lineHeightMultiple: parent.lineHeightMultiple)
             markStyleRendered(fontSize: parent.fontSize, lineHeightMultiple: parent.lineHeightMultiple)
             textView.typingAttributes = Self.typingAttributes(fontSize: parent.fontSize, lineHeightMultiple: parent.lineHeightMultiple)
             parent.updatePlaceholderVisibility(textView)
-            if let scrollView {
-                scrollView.preservingVisibleOrigin {
-                    scrollView.syncDocumentSize(textView)
-                }
-            }
+            scrollView?.syncDocumentSize(textView)
             textView.isUpdating = false
         }
 
@@ -1654,13 +1609,13 @@ extension MacTextView {
 
 // MARK: - AutoFocusTextView
 
-final class AutoFocusTextView: NSTextView {
-    var isAutoFocusEnabled = true
-    var isUpdating = false
-    var didInitialFocus = false
-    weak var coordinator: MacTextView.Coordinator?
+    final class AutoFocusTextView: NSTextView {
+        var isAutoFocusEnabled = true
+        var isUpdating = false
+        var didInitialFocus = false
+        weak var coordinator: MacTextView.Coordinator?
 
-    let placeholderLabel = PlaceholderLabel()
+        let placeholderLabel = PlaceholderLabel()
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -1672,9 +1627,9 @@ final class AutoFocusTextView: NSTextView {
         }
     }
 
-    override func viewDidMoveToSuperview() {
-        super.viewDidMoveToSuperview()
-        if placeholderLabel.superview == nil {
+        override func viewDidMoveToSuperview() {
+            super.viewDidMoveToSuperview()
+            if placeholderLabel.superview == nil {
             placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
             addSubview(placeholderLabel)
             let containerInset = textContainerInset
@@ -1683,13 +1638,13 @@ final class AutoFocusTextView: NSTextView {
                 placeholderLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: containerInset.width + linePadding),
                 placeholderLabel.topAnchor.constraint(equalTo: topAnchor, constant: containerInset.height)
             ])
+            }
         }
-    }
 
-    override func becomeFirstResponder() -> Bool {
-        super.becomeFirstResponder()
-        return true
-    }
+        override func becomeFirstResponder() -> Bool {
+            super.becomeFirstResponder()
+            return true
+        }
 
     override func performFindPanelAction(_ sender: Any?) {
         if !isEditable, findActionTag(from: sender) != NSTextFinder.Action.hideFindInterface.rawValue {
@@ -1702,7 +1657,7 @@ final class AutoFocusTextView: NSTextView {
         }
     }
 
-    override func keyDown(with event: NSEvent) {
+        override func keyDown(with event: NSEvent) {
         guard let chars = event.charactersIgnoringModifiers, !chars.isEmpty else {
             super.keyDown(with: event)
             return
@@ -1798,17 +1753,7 @@ final class AutoFocusTextView: NSTextView {
         return nil
     }
 
-    private func continueMarkdownList() -> Bool {
-        guard isEditable else { return false }
-        guard !hasMarkedText() else { return false }
-        guard let result = MacMarkdownFormatter.continueListIfNeeded(in: string, selection: selectedRange()) else {
-            return false
-        }
-        applyTextResult(result.text, selection: result.selection)
-        return true
-    }
-
-    private func completeMarkdownCodeFence() -> Bool {
+        private func completeMarkdownCodeFence() -> Bool {
         guard isEditable else { return false }
         guard !hasMarkedText() else { return false }
         guard let result = MacMarkdownFormatter.completeCodeFenceIfNeeded(in: string, selection: selectedRange()) else {
@@ -1818,7 +1763,17 @@ final class AutoFocusTextView: NSTextView {
         return true
     }
 
-    private func applyFormat(_ command: MacMarkdownFormatCommand) {
+        private func continueMarkdownList() -> Bool {
+        guard isEditable else { return false }
+        guard !hasMarkedText() else { return false }
+        guard let result = MacMarkdownFormatter.continueListIfNeeded(in: string, selection: selectedRange()) else {
+            return false
+        }
+        applyTextResult(result.text, selection: result.selection)
+        return true
+    }
+
+        private func applyFormat(_ command: MacMarkdownFormatCommand) {
         guard isEditable else { return }
         guard !hasMarkedText() else { return }
 

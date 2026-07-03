@@ -53,6 +53,7 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
         let directories = [
             container,
             container.appendingPathComponent("trash"),
+            container.appendingPathComponent("conflicts"),
             container.appendingPathComponent(".meta")
         ]
 
@@ -80,6 +81,7 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
         let folderMappings = [
             ("notes", ""),
             ("trash", "trash"),
+            ("conflicts", "conflicts"),
             ("meta", ".meta"),
             (".meta", ".meta")
         ]
@@ -223,7 +225,11 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
         let timestamp = Int(Date().timeIntervalSince1970)
         let filename = url.deletingPathExtension().lastPathComponent
         let conflictFilename = "\(filename)-conflict-\(timestamp).md"
-        let conflictURL = container.appendingPathComponent(conflictFilename)
+        let conflictDir = container.appendingPathComponent("conflicts")
+        if !FileManager.default.fileExists(atPath: conflictDir.path) {
+            try FileManager.default.createDirectory(at: conflictDir, withIntermediateDirectories: true)
+        }
+        let conflictURL = conflictDir.appendingPathComponent(conflictFilename)
         try FileManager.default.copyItem(at: url, to: conflictURL)
         MaintenanceLogStore.shared.record("conflict_copy_created", fields: [
             "source": url.lastPathComponent,

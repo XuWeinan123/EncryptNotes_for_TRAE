@@ -34,7 +34,7 @@ struct SidebarView: View {
         .background(DS.surfaceRaised.ignoresSafeArea())
         .fileImporter(
             isPresented: $showKeyImporter,
-            allowedContentTypes: [UTType(filenameExtension: "bkwkey") ?? .json],
+            allowedContentTypes: [UTType(filenameExtension: "snkey") ?? .json],
             allowsMultipleSelection: false
         ) { result in
             handleKeyImport(result)
@@ -44,11 +44,11 @@ struct SidebarView: View {
                 ShareSheet(items: [url])
             }
         }
-        .alert("保存密钥文件", isPresented: $vaultStore.needsKeyExport) {
+        .alert("保存密钥", isPresented: $vaultStore.needsKeyExport) {
             Button("立即保存") { exportKeyFile() }
             Button("稍后", role: .cancel) { vaultStore.needsKeyExport = false }
         } message: {
-            Text("请保存你的密钥文件（.bkwkey）。没有密钥文件，换设备或重装应用后将无法解密笔记。")
+            Text("请保存你的密钥。没有密钥，换设备或重装应用后将无法解密笔记。")
         }
         .alert("卸载本机密钥", isPresented: $showUnloadConfirmation) {
             Button("取消", role: .cancel) {}
@@ -62,13 +62,13 @@ struct SidebarView: View {
                 }
             }
         } message: {
-            Text("卸载后，这台设备将无法查看加密笔记内容。\n你可以稍后重新导入密钥恢复查看。\n建议先导出并保存密钥文件。")
+            Text("卸载后，这台设备将无法查看加密笔记内容。\n你可以稍后重新导入密钥恢复查看。\n建议先导出并保存密钥。")
         }
         .alert("重置密钥", isPresented: $showResetFirstConfirmation) {
             Button("取消", role: .cancel) {}
             Button("继续", role: .destructive) { showResetSecondConfirmation = true }
         } message: {
-            Text("重置密钥将删除所有加密笔记，包括回收站中的加密笔记。\n明文笔记会保留。\n如果你还需要旧加密笔记，请先确认自己保存了旧密钥文件。")
+            Text("重置密钥将删除所有加密笔记，包括回收站中的加密笔记。\n明文笔记会保留。\n如果你还需要旧加密笔记，请先确认自己保存了旧密钥。")
         }
         .alert("最终确认", isPresented: $showResetSecondConfirmation) {
             Button("取消", role: .cancel) {}
@@ -185,7 +185,7 @@ struct SidebarView: View {
                 .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
 
                 VStack(spacing: 0) {
-                    sidebarActionRow(icon: "square.and.arrow.down", title: "导入密钥文件") {
+                    sidebarActionRow(icon: "square.and.arrow.down", title: "导入密钥") {
                         showKeyImporter = true
                     }
                     Divider().padding(.leading, 32)
@@ -194,7 +194,7 @@ struct SidebarView: View {
                     }
                 }
 
-                Text("密钥文件只会在本机读取，不会上传。")
+                Text("密钥只会在本机读取，不会上传。")
                     .font(DS.caption())
                     .foregroundColor(DS.textSubtle)
             }

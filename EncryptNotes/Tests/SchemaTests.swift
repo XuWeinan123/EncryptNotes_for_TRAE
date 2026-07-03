@@ -114,7 +114,7 @@ final class SchemaTests: XCTestCase {
             createdAt: now,
             updatedAt: now,
             title: "明文标题 \"A\"",
-            body: "bkwenc:v1:ABCDEFGHIJKLMNOP"
+            body: "snenc:v1:ABCDEFGHIJKLMNOP"
         )
 
         let data = try original.render()
@@ -123,7 +123,7 @@ final class SchemaTests: XCTestCase {
 
         XCTAssertTrue(rendered?.contains("title: \"明文标题 \\\"A\\\"\"") == true)
         XCTAssertEqual(parsed.title, "明文标题 \"A\"")
-        XCTAssertEqual(parsed.body, "bkwenc:v1:ABCDEFGHIJKLMNOP")
+        XCTAssertEqual(parsed.body, "snenc:v1:ABCDEFGHIJKLMNOP")
         XCTAssertTrue(parsed.isEncrypted)
     }
 
@@ -144,7 +144,7 @@ final class SchemaTests: XCTestCase {
     }
 
     func testMarkdownNoteFileEncryptedDetection() {
-        let encryptedBody = "bkwenc:v1:ABCDEFGHIJKLMNOP"
+        let encryptedBody = "snenc:v1:ABCDEFGHIJKLMNOP"
         let file = MarkdownNoteFile(
             noteId: "enc-id",
             createdAt: Date(),
@@ -157,7 +157,7 @@ final class SchemaTests: XCTestCase {
             noteId: "plain-id",
             createdAt: Date(),
             updatedAt: Date(),
-            body: "普通正文 bkwenc:v1: 开头才是加密"
+            body: "普通正文 snenc:v1: 开头才是加密"
         )
         XCTAssertFalse(plainFile.isEncrypted)
     }
@@ -181,8 +181,8 @@ final class SchemaTests: XCTestCase {
             URL(fileURLWithPath: "/tmp/note2.md"),
             URL(fileURLWithPath: "/tmp/notes.json"),
             URL(fileURLWithPath: "/tmp/.DS_Store"),
-            URL(fileURLWithPath: "/tmp/old.bkwenc.json"),
-            URL(fileURLWithPath: "/tmp/old.bkwplain.json")
+            URL(fileURLWithPath: "/tmp/old.snenc.json"),
+            URL(fileURLWithPath: "/tmp/old.snplain.json")
         ]
 
         let filtered = urls.filter { $0.lastPathComponent.hasSuffix(".md") }
@@ -202,11 +202,25 @@ final class SchemaTests: XCTestCase {
     func testNoteTitleFormatterFileNameUsesNormalizedHeadingTitle() {
         XCTAssertEqual(
             NoteTitleFormatter.fileName(for: "note-id", body: "# Hello"),
-            "Hello-note-id.md"
+            "Hello.md"
         )
         XCTAssertEqual(
             NoteTitleFormatter.fileName(for: "note-id", body: "Hello"),
-            "Hello-note-id.md"
+            "Hello.md"
+        )
+    }
+
+    func testNoteTitleFormatterLimitsGeneratedTitleToTwentyCharacters() {
+        XCTAssertEqual(
+            NoteTitleFormatter.fileName(for: "note-id", body: "1234567890123456789012345"),
+            "12345678901234567890.md"
+        )
+    }
+
+    func testNoteTitleFormatterDoesNotLimitMarkdownHeadingTitle() {
+        XCTAssertEqual(
+            NoteTitleFormatter.fileName(for: "note-id", body: "# 1234567890123456789012345"),
+            "1234567890123456789012345.md"
         )
     }
 
@@ -217,7 +231,7 @@ final class SchemaTests: XCTestCase {
         )
         XCTAssertEqual(
             NoteTitleFormatter.fileName(for: "note-id", title: "`# 私密/标题?`"),
-            "私密-标题-note-id.md"
+            "私密-标题.md"
         )
     }
 
@@ -229,12 +243,12 @@ final class SchemaTests: XCTestCase {
 
     func testNoteTitleFormatterReadsTitleFromFileName() {
         XCTAssertEqual(
-            NoteTitleFormatter.displayTitle(fromFileName: "AI 标题-note-id.md", noteId: "note-id"),
+            NoteTitleFormatter.displayTitle(fromFileName: "AI 标题（2）.md"),
             "AI 标题"
         )
         XCTAssertEqual(
-            NoteTitleFormatter.displayTitle(fromFileName: "unexpected.md", noteId: "note-id", emptyTitle: "(空笔记)"),
-            "(空笔记)"
+            NoteTitleFormatter.displayTitle(fromFileName: "（空笔记）.md"),
+            "（空笔记）"
         )
     }
 
@@ -245,7 +259,7 @@ final class SchemaTests: XCTestCase {
 
         let encrypted = try crypto.encryptMarkdownBody(secretBody, using: key)
 
-        XCTAssertTrue(encrypted.hasPrefix("bkwenc:v1:"))
+        XCTAssertTrue(encrypted.hasPrefix("snenc:v1:"))
         XCTAssertFalse(encrypted.contains("隐私"))
         XCTAssertFalse(encrypted.contains("敏感"))
         XCTAssertFalse(encrypted.contains("#"))

@@ -59,6 +59,15 @@ enum IOSAppIconChoice: String, CaseIterable, Identifiable {
 struct VaultKeyFileReference: Codable, Equatable {
     let bookmarkData: Data
     let displayPath: String
+    let keyId: String?
+    let keyFingerprint: String?
+
+    init(bookmarkData: Data, displayPath: String, keyId: String? = nil, keyFingerprint: String? = nil) {
+        self.bookmarkData = bookmarkData
+        self.displayPath = displayPath
+        self.keyId = keyId
+        self.keyFingerprint = keyFingerprint
+    }
 }
 
 enum MacAITitleProvider: String, CaseIterable, Identifiable, Codable {
@@ -96,7 +105,7 @@ final class SettingsStore: ObservableObject {
     static let defaultMacEditorLineHeightMultiple: Double = 1.25
     static let macEditorLineHeightRange: ClosedRange<Double> = 1.2...2.0
     static let defaultMacTheme: MacTheme = .pink
-    static let macThemeDefaultsKey = "BKMacTheme"
+    static let macThemeDefaultsKey = "SNMacTheme"
     static let macRecentNotesLimitRange: ClosedRange<Int> = 3...12
     static let defaultMacRecentNotesLimit = 5
     #if os(macOS)
@@ -352,7 +361,7 @@ final class SettingsStore: ObservableObject {
         macAITitlePrompt = Self.defaultMacAITitlePrompt
     }
 
-    func saveVaultKeyFileReference(for url: URL) throws {
+    func saveVaultKeyFileReference(for url: URL, keyId: String? = nil, keyFingerprint: String? = nil) throws {
         let bookmarkData = try url.bookmarkData(
             options: [.withSecurityScope],
             includingResourceValuesForKeys: nil,
@@ -360,7 +369,9 @@ final class SettingsStore: ObservableObject {
         )
         vaultKeyFileReference = VaultKeyFileReference(
             bookmarkData: bookmarkData,
-            displayPath: url.path
+            displayPath: url.path,
+            keyId: keyId,
+            keyFingerprint: keyFingerprint
         )
     }
 
@@ -415,29 +426,29 @@ final class SettingsStore: ObservableObject {
     }
 
     private enum Keys {
-        static let preferredNoteMode = "BKPreferredNoteMode"
-        static let hideContentOnBackground = "BKHideContentOnBackground"
-        static let autoUnloadKeyOnForeground = "BKAutoUnloadKeyOnForeground"
-        static let hasSeenFirstKeyPrompt = "BKHasSeenFirstKeyPrompt"
-        static let hasSeededDefaultNotes = "BKHasSeededDefaultNotes"
-        static let macEditorFontSize = "BKMacEditorFontSize"
-        static let macEditorLineHeightMultiple = "BKMacEditorLineHeightMultiple"
-        static let copyAddsParagraphSpacing = "BKCopyAddsParagraphSpacing"
-        static let autoDeleteEmptyNotes = "BKAutoDeleteEmptyNotes"
-        static let maintenanceLoggingEnabled = "BKMaintenanceLoggingEnabled"
-        static let macRecentNotesLimit = "BKMacRecentNotesLimit"
-        static let iOSAppIconName = "BKIOSAppIconName"
+        static let preferredNoteMode = "SNPreferredNoteMode"
+        static let hideContentOnBackground = "SNHideContentOnBackground"
+        static let autoUnloadKeyOnForeground = "SNAutoUnloadKeyOnForeground"
+        static let hasSeenFirstKeyPrompt = "SNHasSeenFirstKeyPrompt"
+        static let hasSeededDefaultNotes = "SNHasSeededDefaultNotes"
+        static let macEditorFontSize = "SNMacEditorFontSize"
+        static let macEditorLineHeightMultiple = "SNMacEditorLineHeightMultiple"
+        static let copyAddsParagraphSpacing = "SNCopyAddsParagraphSpacing"
+        static let autoDeleteEmptyNotes = "SNAutoDeleteEmptyNotes"
+        static let maintenanceLoggingEnabled = "SNMaintenanceLoggingEnabled"
+        static let macRecentNotesLimit = "SNMacRecentNotesLimit"
+        static let iOSAppIconName = "SNIOSAppIconName"
         #if os(macOS)
-        static let launchAtLogin = "BKLaunchAtLogin"
-        static let pinNewNotesByDefault = "BKPinNewNotesByDefault"
-        static let lockEncryptedNotesOnSleep = "BKLockEncryptedNotesOnSleep"
-        static let lockUnpinnedEncryptedNotesOnBackground = "BKLockUnpinnedEncryptedNotesOnBackground"
-        static let vaultKeyFileReference = "BKVaultKeyFileReference"
-        static let macAITitleEnabled = "BKMacAITitleEnabled"
-        static let macAITitleProvider = "BKMacAITitleProvider"
-        static let macAITitlePrompt = "BKMacAITitlePrompt"
-        static let macAITitleSkipsMarkdownHeading = "BKMacAITitleSkipsMarkdownHeading"
-        static let hideMacIntroOnLaunch = "BKHideMacIntroOnLaunch"
+        static let launchAtLogin = "SNLaunchAtLogin"
+        static let pinNewNotesByDefault = "SNPinNewNotesByDefault"
+        static let lockEncryptedNotesOnSleep = "SNLockEncryptedNotesOnSleep"
+        static let lockUnpinnedEncryptedNotesOnBackground = "SNLockUnpinnedEncryptedNotesOnBackground"
+        static let vaultKeyFileReference = "SNVaultKeyFileReference"
+        static let macAITitleEnabled = "SNMacAITitleEnabled"
+        static let macAITitleProvider = "SNMacAITitleProvider"
+        static let macAITitlePrompt = "SNMacAITitlePrompt"
+        static let macAITitleSkipsMarkdownHeading = "SNMacAITitleSkipsMarkdownHeading"
+        static let hideMacIntroOnLaunch = "SNHideMacIntroOnLaunch"
         #endif
     }
 }

@@ -48,6 +48,21 @@ final class VaultKeyManager {
         return SymmetricKey(data: data)
     }
 
+    func keyMaterialFingerprint(_ keyMaterial: String) throws -> String {
+        guard let data = Data(base64Encoded: keyMaterial) else {
+            throw CryptoError.invalidKeyMaterial
+        }
+        guard data.count == 32 else {
+            throw CryptoError.invalidKeyLength
+        }
+        let digest = SHA256.hash(data: data)
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    func keyFingerprint(_ vaultKey: VaultKey) throws -> String {
+        try keyMaterialFingerprint(vaultKey.keyMaterial)
+    }
+
     func generateVaultKey(key: SymmetricKey) -> VaultKey {
         VaultKey(
             version: 2,

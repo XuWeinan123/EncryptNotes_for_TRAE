@@ -3,7 +3,7 @@ import Foundation
 final class MaintenanceLogStore: @unchecked Sendable {
     nonisolated static let shared = MaintenanceLogStore()
 
-    private let defaultsKey = "BKMaintenanceLoggingEnabled"
+    private let defaultsKey = "SNMaintenanceLoggingEnabled"
     private let lock = NSLock()
 
     private init() {}

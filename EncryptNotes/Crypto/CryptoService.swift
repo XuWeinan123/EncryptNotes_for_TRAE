@@ -24,7 +24,7 @@ nonisolated enum CryptoServiceError: Error, LocalizedError {
 nonisolated final class CryptoService {
     static let shared = CryptoService()
 
-    static let encryptedPrefix = "bkwenc:v1:"
+    static let encryptedPrefix = "snenc:v1:"
 
     private init() {}
 

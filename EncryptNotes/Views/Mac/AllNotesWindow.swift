@@ -7,6 +7,10 @@ struct AllNotesView: View {
     @State private var selectedTag: String?
     @State private var showingClearEmptyConfirmation = false
     @State private var isClearingEmptyNotes = false
+    @State private var renamingNote: Note?
+    @State private var renameTitle = ""
+    @State private var renameErrorMessage: String?
+    @State private var isRenamingNote = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -91,6 +95,9 @@ struct AllNotesView: View {
                             }
                             .contextMenu {
                                 Button("打开") { openNote(item) }
+                                if case .readable(let note) = item {
+                                    Button("重命名...") { beginRenaming(note) }
+                                }
                                 Divider()
                                 Button("移到回收站", role: .destructive) {
                                     deleteNote(item)
@@ -104,6 +111,17 @@ struct AllNotesView: View {
             .background(DS.bg)
         }
         .background(DS.bg)
+        .sheet(isPresented: renameSheetBinding) {
+            if let note = renamingNote {
+                AllNotesRenameSheet(
+                    title: $renameTitle,
+                    errorMessage: renameErrorMessage,
+                    isSaving: isRenamingNote,
+                    onCancel: { finishRenaming() },
+                    onSave: { renameNote(note) }
+                )
+            }
+        }
         .alert(isPresented: $showingClearEmptyConfirmation) {
             Alert(
                 title: Text("清空空笔记？"),
@@ -170,7 +188,7 @@ struct AllNotesView: View {
         switch item {
         case .readable(let note):
             SWNoteListRow(
-                title: firstLine(of: note.body),
+                title: vaultStore.displayTitle(for: note, emptyTitle: NoteTitleFormatter.emptyTitle),
                 subtitle: note.isEncrypted ? "加密笔记" : "明文笔记",
                 systemImage: note.isEncrypted ? "lock.fill" : "doc.text",
                 tint: note.isEncrypted ? DS.primaryDeep : DS.textSubtle
@@ -206,8 +224,15 @@ struct AllNotesView: View {
         }
     }
 
-    private func firstLine(of body: String) -> String {
-        NoteTitleFormatter.displayTitle(from: body, emptyTitle: "(空笔记)")
+    private var renameSheetBinding: Binding<Bool> {
+        Binding(
+            get: { renamingNote != nil },
+            set: { isPresented in
+                if !isPresented {
+                    finishRenaming()
+                }
+            }
+        )
     }
 
     private func isEmptyNote(_ note: Note) -> Bool {
@@ -240,6 +265,39 @@ struct AllNotesView: View {
         }
     }
 
+    private func beginRenaming(_ note: Note) {
+        renamingNote = note
+        renameTitle = vaultStore.displayTitle(for: note, emptyTitle: "")
+        renameErrorMessage = nil
+        isRenamingNote = false
+    }
+
+    private func finishRenaming() {
+        renamingNote = nil
+        renameTitle = ""
+        renameErrorMessage = nil
+        isRenamingNote = false
+    }
+
+    private func renameNote(_ note: Note) {
+        guard let cleanedTitle = NoteTitleFormatter.sanitizedGeneratedTitle(renameTitle) else {
+            renameErrorMessage = "请输入有效标题。"
+            return
+        }
+
+        isRenamingNote = true
+        renameErrorMessage = nil
+        Task {
+            do {
+                try await vaultStore.renameNote(note, title: cleanedTitle)
+                finishRenaming()
+            } catch {
+                renameErrorMessage = "重命名失败：\(error.localizedDescription)"
+                isRenamingNote = false
+            }
+        }
+    }
+
     private func clearEmptyNotes() {
         let notesToDelete = emptyNotes
         guard !notesToDelete.isEmpty else { return }
@@ -252,5 +310,47 @@ struct AllNotesView: View {
             }
             isClearingEmptyNotes = false
         }
+    }
+}
+
+private struct AllNotesRenameSheet: View {
+    @Binding var title: String
+    let errorMessage: String?
+    let isSaving: Bool
+    let onCancel: () -> Void
+    let onSave: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.s3) {
+            SWPageHeader(
+                title: "重命名笔记",
+                subtitle: "标题只影响列表、菜单和文件名，不会改写正文。",
+                systemImage: "pencil",
+                tint: DS.primaryDeep
+            )
+
+            TextField("标题", text: $title)
+                .textFieldStyle(.roundedBorder)
+                .font(DS.body())
+                .onSubmit(onSave)
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(DS.caption())
+                    .foregroundColor(DS.destructive)
+            }
+
+            HStack {
+                Spacer()
+                Button("取消", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button(isSaving ? "保存中..." : "保存", action: onSave)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(isSaving)
+            }
+        }
+        .padding(DS.s4)
+        .frame(width: 420)
+        .background(DS.bg)
     }
 }

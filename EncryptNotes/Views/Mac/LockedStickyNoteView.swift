@@ -26,12 +26,12 @@ struct LockedStickyNoteView: View {
                     .foregroundColor(DS.textSecondary)
                     .multilineTextAlignment(.center)
 
-                Text("加载密钥文件后，笔记将在本机解密显示。")
+                Text("前往密钥设置后，笔记将在本机解密显示。")
                     .font(DS.caption())
                     .foregroundColor(DS.textSubtle)
                     .multilineTextAlignment(.center)
 
-                Button("加载密钥文件…") {
+                Button("打开密钥设置…") {
                     loadKeyFile()
                 }
                 .buttonStyle(.borderedProminent)

@@ -4,12 +4,16 @@ import CryptoKit
 
 final class VaultStoreTests: XCTestCase {
     private func savedNoteURL(in tmpDir: URL, noteId: String) throws -> URL {
-        let files = try FileManager.default.contentsOfDirectory(at: tmpDir, includingPropertiesForKeys: nil)
-        guard let url = files.first(where: { $0.pathExtension == "md" && $0.lastPathComponent.contains(noteId) }) else {
-            XCTFail("应能找到包含 noteId 的 Markdown 文件")
+        let indexURL = tmpDir.appendingPathComponent("notes.json")
+        let data = try Data(contentsOf: indexURL)
+        let index = try JSONDecoder.default.decode(NoteIndex.self, from: data)
+        guard let entry = index.entry(for: noteId) else {
+            XCTFail("notes.json 中应能找到笔记记录")
             throw CocoaError(.fileNoSuchFile)
         }
-        return url
+        return entry.location == .notes
+            ? tmpDir.appendingPathComponent(entry.fileName)
+            : tmpDir.appendingPathComponent(entry.location.rawValue).appendingPathComponent(entry.fileName)
     }
 
     @MainActor
@@ -27,7 +31,7 @@ final class VaultStoreTests: XCTestCase {
 
         let noteId = store.plainNotes.first!.id
         let mdURL = try savedNoteURL(in: tmpDir, noteId: noteId)
-        XCTAssertTrue(mdURL.lastPathComponent.hasPrefix("未导入密钥时添加的笔记-"))
+        XCTAssertEqual(mdURL.lastPathComponent, "未导入密钥时添加的笔记.md")
         let mdData = try Data(contentsOf: mdURL)
         let mdContent = String(data: mdData, encoding: .utf8) ?? ""
         XCTAssertTrue(mdContent.contains("未导入密钥时添加的笔记"), "Markdown 文件应包含正文")
@@ -46,7 +50,7 @@ final class VaultStoreTests: XCTestCase {
         let note = try await store.createNote(body: "# Hello\nBody", isEncrypted: false)
 
         let mdURL = try savedNoteURL(in: tmpDir, noteId: note.id)
-        XCTAssertTrue(mdURL.lastPathComponent.hasPrefix("Hello-"))
+        XCTAssertEqual(mdURL.lastPathComponent, "Hello.md")
         XCTAssertFalse(mdURL.lastPathComponent.hasPrefix("#"))
 
         try? FileManager.default.removeItem(at: tmpDir)
@@ -68,13 +72,58 @@ final class VaultStoreTests: XCTestCase {
 
         let newURL = try savedNoteURL(in: tmpDir, noteId: note.id)
         XCTAssertNotEqual(oldURL.lastPathComponent, newURL.lastPathComponent)
-        XCTAssertTrue(newURL.lastPathComponent.hasPrefix("AI 总结-标题-"))
+        XCTAssertEqual(newURL.lastPathComponent, "AI 总结-标题.md")
         XCTAssertFalse(FileManager.default.fileExists(atPath: oldURL.path))
 
         let newFile = try storage.loadMarkdownFile(at: newURL)
         XCTAssertEqual(newFile.body, oldFile.body)
         XCTAssertEqual(newFile.body, originalBody)
         XCTAssertEqual(store.displayTitle(for: note), "AI 总结-标题")
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
+    func testEditingTitledNotePreservesFileNameAndFrontmatterTitle() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_title_freeze_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "test-vault-title-freeze")
+
+        let note = try await store.createNote(body: "第一版正文", isEncrypted: false)
+        try await store.renameNote(note, title: "固定标题")
+        let titledURL = try savedNoteURL(in: tmpDir, noteId: note.id)
+        XCTAssertEqual(titledURL.lastPathComponent, "固定标题.md")
+
+        try await store.updateNote(note, body: "第二版正文\n\n更多内容")
+
+        let updatedURL = try savedNoteURL(in: tmpDir, noteId: note.id)
+        XCTAssertEqual(updatedURL.lastPathComponent, "固定标题.md")
+        XCTAssertEqual(titledURL, updatedURL)
+
+        let updatedFile = try storage.loadMarkdownFile(at: updatedURL)
+        XCTAssertEqual(updatedFile.title, "固定标题")
+        XCTAssertEqual(updatedFile.body, "第二版正文\n\n更多内容")
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
+    func testDiscardEmptyNoteUsesCurrentBodySnapshot() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_empty_snapshot_discard_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "test-vault-empty-snapshot")
+
+        let note = try await store.createNote(body: "稍后会清空", isEncrypted: false)
+        let noteURL = try savedNoteURL(in: tmpDir, noteId: note.id)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: noteURL.path))
+
+        try await store.discardEmptyNote(note, body: "\n \t")
+
+        XCTAssertNil(try storage.loadIndex()?.entry(for: note.id))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: noteURL.path))
+        XCTAssertFalse(store.plainNotes.contains { $0.id == note.id })
 
         try? FileManager.default.removeItem(at: tmpDir)
     }
@@ -113,11 +162,26 @@ final class VaultStoreTests: XCTestCase {
 
         let noteId = store.decryptedNotes.first!.id
         let mdURL = try savedNoteURL(in: tmpDir, noteId: noteId)
-        XCTAssertTrue(mdURL.lastPathComponent.hasPrefix("加密笔记内容-"))
+        XCTAssertEqual(mdURL.lastPathComponent, "加密笔记内容.md")
         let mdFile = try storage.loadMarkdownFile(at: mdURL)
-        XCTAssertTrue(mdFile.body.contains("bkwenc:v1:"), "加密笔记文件 body 应为密文")
+        XCTAssertTrue(mdFile.body.contains("snenc:v1:"), "加密笔记文件 body 应为密文")
         XCTAssertFalse(mdFile.body.contains("加密笔记内容"), "加密笔记文件 body 不应包含明文正文")
 
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
+    func testExportKeyFileUsesSNKeyExtension() throws {
+        let key = SymmetricKey(size: .bits256)
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_export_key_\(UUID().uuidString)")
+        let store = VaultStore(storage: try TemporaryStorage(baseURL: tmpDir))
+        store.configureForTesting(vaultId: "test-vault-export-key", key: key)
+
+        let exportedURL = try store.exportKeyFile()
+
+        XCTAssertEqual(exportedURL.pathExtension, "snkey")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: exportedURL.path))
+        try? FileManager.default.removeItem(at: exportedURL)
         try? FileManager.default.removeItem(at: tmpDir)
     }
 
@@ -143,7 +207,7 @@ final class VaultStoreTests: XCTestCase {
         let mdURL = try savedNoteURL(in: tmpDir, noteId: note.id)
         let mdFile = try storage.loadMarkdownFile(at: mdURL)
         XCTAssertEqual(result.ciphertext, mdFile.body)
-        XCTAssertTrue(mdFile.body.hasPrefix("bkwenc:v1:"))
+        XCTAssertTrue(mdFile.body.hasPrefix("snenc:v1:"))
 
         let encryptedFile = try storage.loadMarkdownFile(at: mdURL)
         XCTAssertFalse(encryptedFile.body.contains("需要加密的内容"))
@@ -172,7 +236,7 @@ final class VaultStoreTests: XCTestCase {
 
         var mdURL = try savedNoteURL(in: tmpDir, noteId: plain.id)
         var mdContent = String(data: try Data(contentsOf: mdURL), encoding: .utf8) ?? ""
-        XCTAssertTrue(mdContent.contains("bkwenc:v1:"))
+        XCTAssertTrue(mdContent.contains("snenc:v1:"))
         XCTAssertFalse(mdContent.contains("转换模式\n"))
 
         let restored = try await store.updateNoteMode(encrypted, body: "转换模式", mode: .plain)
@@ -185,7 +249,7 @@ final class VaultStoreTests: XCTestCase {
         mdURL = try savedNoteURL(in: tmpDir, noteId: plain.id)
         mdContent = String(data: try Data(contentsOf: mdURL), encoding: .utf8) ?? ""
         XCTAssertTrue(mdContent.contains("转换模式"))
-        XCTAssertFalse(mdContent.contains("bkwenc:v1:"))
+        XCTAssertFalse(mdContent.contains("snenc:v1:"))
 
         try? FileManager.default.removeItem(at: tmpDir)
     }
@@ -627,11 +691,80 @@ final class VaultStoreTests: XCTestCase {
         store.configureForTesting(vaultId: "mac-requires-key-file")
 
         do {
-            _ = try await store.createNote(body: "需要密钥文件", isEncrypted: true)
-            XCTFail("没有密钥文件引用时不应创建加密笔记")
+            _ = try await store.createNote(body: "需要密钥", isEncrypted: true)
+            XCTFail("没有密钥引用时不应创建加密笔记")
         } catch {
             XCTAssertNotNil(error)
         }
+
+        try? FileManager.default.removeItem(at: tmpDir)
+        SettingsStore.shared.resetForTesting()
+    }
+
+    @MainActor
+    func testMacCreateKeyFileStoresIdentityMetadata() async throws {
+        SettingsStore.shared.resetForTesting()
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_mac_key_identity_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "mac-key-identity")
+
+        let keyURL = tmpDir.appendingPathComponent("vault.snkey")
+        try await store.createKeyFile(at: keyURL)
+
+        let reference = try XCTUnwrap(SettingsStore.shared.vaultKeyFileReference)
+        XCTAssertEqual(reference.displayPath, keyURL.path)
+        XCTAssertFalse(try XCTUnwrap(reference.keyId).isEmpty)
+        XCTAssertEqual(try XCTUnwrap(reference.keyFingerprint).count, 64)
+        XCTAssertEqual(keyURL.pathExtension, "snkey")
+
+        try? FileManager.default.removeItem(at: tmpDir)
+        SettingsStore.shared.resetForTesting()
+    }
+
+    @MainActor
+    func testMacImportRejectsLegacyKeyExtension() async throws {
+        SettingsStore.shared.resetForTesting()
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_mac_legacy_key_extension_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "mac-legacy-key-extension")
+
+        let vaultKey = VaultKeyManager.shared.generateVaultKey(key: SymmetricKey(size: .bits256))
+        let legacyExtension = "bk" + "wkey"
+        let legacyURL = tmpDir.appendingPathComponent("legacy.\(legacyExtension)")
+        try JSONEncoder.default.encode(vaultKey).write(to: legacyURL, options: .atomic)
+
+        do {
+            _ = try await store.importKeyFile(from: legacyURL)
+            XCTFail("旧密钥扩展名不应被加载")
+        } catch {
+            XCTAssertEqual(error as? VaultKeyFileError, .unsupportedFileExtension)
+        }
+        XCTAssertNil(SettingsStore.shared.vaultKeyFileReference)
+
+        try? FileManager.default.removeItem(at: tmpDir)
+        SettingsStore.shared.resetForTesting()
+    }
+
+    @MainActor
+    func testMacReplacedKeyAtSamePathInvalidatesReference() async throws {
+        SettingsStore.shared.resetForTesting()
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_mac_replaced_key_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "mac-replaced-key")
+
+        let keyURL = tmpDir.appendingPathComponent("vault.snkey")
+        try await store.createKeyFile(at: keyURL)
+        let originalReference = try XCTUnwrap(SettingsStore.shared.vaultKeyFileReference)
+
+        let replacementKey = VaultKeyManager.shared.generateVaultKey(key: SymmetricKey(size: .bits256))
+        try JSONEncoder.default.encode(replacementKey).write(to: keyURL, options: .atomic)
+
+        XCTAssertEqual(store.macKeyStatus, .invalid(.keyReplaced))
+        XCTAssertFalse(store.isKeyLoaded)
+        XCTAssertEqual(SettingsStore.shared.vaultKeyFileReference?.keyFingerprint, originalReference.keyFingerprint)
 
         try? FileManager.default.removeItem(at: tmpDir)
         SettingsStore.shared.resetForTesting()
@@ -645,12 +778,12 @@ final class VaultStoreTests: XCTestCase {
         let store = VaultStore(storage: storage)
         store.configureForTesting(vaultId: "mac-wrong-key")
 
-        let correctKeyURL = tmpDir.appendingPathComponent("correct.bkwkey")
+        let correctKeyURL = tmpDir.appendingPathComponent("correct.snkey")
         try await store.createKeyFile(at: correctKeyURL)
         let note = try await store.createNote(body: "加密内容", isEncrypted: true)
 
         let wrongKey = VaultKeyManager.shared.generateVaultKey(key: SymmetricKey(size: .bits256))
-        let wrongKeyURL = tmpDir.appendingPathComponent("wrong.bkwkey")
+        let wrongKeyURL = tmpDir.appendingPathComponent("wrong.snkey")
         try JSONEncoder.default.encode(wrongKey).write(to: wrongKeyURL, options: .atomic)
         try SettingsStore.shared.saveVaultKeyFileReference(for: wrongKeyURL)
         await store.refreshFromStorage()
@@ -668,6 +801,94 @@ final class VaultStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testMacImportMismatchedKeyDoesNotOverwriteSavedReference() async throws {
+        SettingsStore.shared.resetForTesting()
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_mac_import_mismatch_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "mac-import-mismatch")
+
+        let correctKeyURL = tmpDir.appendingPathComponent("correct.snkey")
+        try await store.createKeyFile(at: correctKeyURL)
+        _ = try await store.createNote(body: "现有加密内容", isEncrypted: true)
+        let originalReference = try XCTUnwrap(SettingsStore.shared.vaultKeyFileReference)
+
+        let wrongKey = VaultKeyManager.shared.generateVaultKey(key: SymmetricKey(size: .bits256))
+        let wrongKeyURL = tmpDir.appendingPathComponent("wrong.snkey")
+        try JSONEncoder.default.encode(wrongKey).write(to: wrongKeyURL, options: .atomic)
+
+        do {
+            _ = try await store.importKeyFile(from: wrongKeyURL)
+            XCTFail("不匹配密钥不应覆盖已有密钥引用")
+        } catch {
+            XCTAssertEqual(error as? VaultKeyFileError, .keyMismatch)
+        }
+
+        let currentReference = try XCTUnwrap(SettingsStore.shared.vaultKeyFileReference)
+        XCTAssertEqual(currentReference.displayPath, originalReference.displayPath)
+        XCTAssertEqual(currentReference.keyFingerprint, originalReference.keyFingerprint)
+
+        try? FileManager.default.removeItem(at: tmpDir)
+        SettingsStore.shared.resetForTesting()
+    }
+
+    @MainActor
+    func testMacUnloadKeyWithEncryptedNotesRequiresCleanupPath() async throws {
+        SettingsStore.shared.resetForTesting()
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_mac_unload_requires_cleanup_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "mac-unload-requires-cleanup")
+
+        let keyURL = tmpDir.appendingPathComponent("vault.snkey")
+        try await store.createKeyFile(at: keyURL)
+        let plain = try await store.createNote(body: "保留明文", isEncrypted: false)
+        _ = try await store.createNote(body: "删除密文", isEncrypted: true)
+
+        do {
+            try await store.unloadKey()
+            XCTFail("有加密笔记时不应直接移除密钥引用")
+        } catch {
+            XCTAssertEqual(error as? VaultKeyFileError, .encryptedNotesExist)
+        }
+        XCTAssertNotNil(SettingsStore.shared.vaultKeyFileReference)
+
+        let removedCount = try await store.permanentlyDeleteAllEncryptedNotes()
+        XCTAssertEqual(removedCount, 1)
+        XCTAssertNil(SettingsStore.shared.vaultKeyFileReference)
+        XCTAssertTrue(store.plainNotes.contains { $0.id == plain.id })
+        XCTAssertEqual(store.encryptedEntryCount, 0)
+
+        try? FileManager.default.removeItem(at: tmpDir)
+        SettingsStore.shared.resetForTesting()
+    }
+
+    @MainActor
+    func testMacDecryptAllEncryptedNotesAndRemoveKeyKeepsPlainNotes() async throws {
+        SettingsStore.shared.resetForTesting()
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_mac_decrypt_all_remove_key_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "mac-decrypt-all-remove-key")
+
+        let keyURL = tmpDir.appendingPathComponent("vault.snkey")
+        try await store.createKeyFile(at: keyURL)
+        let plain = try await store.createNote(body: "原明文", isEncrypted: false)
+        let encrypted = try await store.createNote(body: "转明文", isEncrypted: true)
+
+        let decryptedCount = try await store.decryptAllEncryptedNotesAndRemoveKey()
+
+        XCTAssertEqual(decryptedCount, 1)
+        XCTAssertNil(SettingsStore.shared.vaultKeyFileReference)
+        XCTAssertTrue(store.plainNotes.contains { $0.id == plain.id })
+        XCTAssertTrue(store.plainNotes.contains { $0.id == encrypted.id })
+        XCTAssertEqual(store.encryptedEntryCount, 0)
+
+        try? FileManager.default.removeItem(at: tmpDir)
+        SettingsStore.shared.resetForTesting()
+    }
+
+    @MainActor
     func testMacPermanentDecryptConvertsEncryptedNoteToPlain() async throws {
         SettingsStore.shared.resetForTesting()
         let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_mac_permanent_decrypt_\(UUID().uuidString)")
@@ -675,7 +896,7 @@ final class VaultStoreTests: XCTestCase {
         let store = VaultStore(storage: storage)
         store.configureForTesting(vaultId: "mac-permanent-decrypt")
 
-        let keyURL = tmpDir.appendingPathComponent("vault.bkwkey")
+        let keyURL = tmpDir.appendingPathComponent("vault.snkey")
         try await store.createKeyFile(at: keyURL)
         let encrypted = try await store.createNote(body: "转为明文", isEncrypted: true)
 
@@ -690,7 +911,7 @@ final class VaultStoreTests: XCTestCase {
         let mdURL = try savedNoteURL(in: tmpDir, noteId: encrypted.id)
         let mdContent = String(data: try Data(contentsOf: mdURL), encoding: .utf8) ?? ""
         XCTAssertTrue(mdContent.contains("转为明文"))
-        XCTAssertFalse(mdContent.contains("bkwenc:v1:"))
+        XCTAssertFalse(mdContent.contains("snenc:v1:"))
 
         try? FileManager.default.removeItem(at: tmpDir)
         SettingsStore.shared.resetForTesting()
@@ -710,6 +931,7 @@ private final class TemporaryStorage: VaultStorage, @unchecked Sendable {
         let directories = [
             baseURL,
             baseURL.appendingPathComponent("trash"),
+            baseURL.appendingPathComponent("conflicts"),
             baseURL.appendingPathComponent(".meta")
         ]
         for directory in directories {
@@ -723,6 +945,7 @@ private final class TemporaryStorage: VaultStorage, @unchecked Sendable {
         let directories = [
             _containerURL,
             _containerURL.appendingPathComponent("trash"),
+            _containerURL.appendingPathComponent("conflicts"),
             _containerURL.appendingPathComponent(".meta")
         ]
         for directory in directories {

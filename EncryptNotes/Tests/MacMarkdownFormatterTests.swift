@@ -84,6 +84,39 @@ final class MacMarkdownFormatterTests: XCTestCase {
         XCTAssertEqual(result.selection, NSRange(location: 13, length: 0))
     }
 
+    // MARK: - Code fence completion
+
+    func testCodeFenceCompletionRequiresInfoString() {
+        let text = "```markdown"
+        let result = MacMarkdownFormatter.completeCodeFenceIfNeeded(
+            in: text,
+            selection: NSRange(location: (text as NSString).length, length: 0)
+        )
+
+        XCTAssertEqual(result?.text, "```markdown\n\n```")
+        XCTAssertEqual(result?.selection, NSRange(location: (text as NSString).length + 1, length: 0))
+    }
+
+    func testCodeFenceCompletionIgnoresPlainFenceLine() {
+        let text = "```"
+        let result = MacMarkdownFormatter.completeCodeFenceIfNeeded(
+            in: text,
+            selection: NSRange(location: (text as NSString).length, length: 0)
+        )
+
+        XCTAssertNil(result)
+    }
+
+    func testCodeFenceCompletionIgnoresClosingFenceLine() {
+        let text = "```markdown\nbody\n```"
+        let result = MacMarkdownFormatter.completeCodeFenceIfNeeded(
+            in: text,
+            selection: NSRange(location: (text as NSString).length, length: 0)
+        )
+
+        XCTAssertNil(result)
+    }
+
     func testInlineMathWrapsSelection() {
         let result = MacMarkdownFormatter.apply(
             command: .inlineMath,
@@ -270,37 +303,6 @@ final class MacMarkdownFormatterTests: XCTestCase {
     func testListContinuationSkipsFencedCodeBlocks() {
         let text = "```\n1. code"
         let result = MacMarkdownFormatter.continueListIfNeeded(
-            in: text,
-            selection: NSRange(location: (text as NSString).length, length: 0)
-        )
-        XCTAssertNil(result)
-    }
-
-    // MARK: - Code fence completion
-
-    func testCodeFenceCompletionInsertsClosingFenceAndPlacesCursorInside() {
-        let text = "```swift"
-        let result = MacMarkdownFormatter.completeCodeFenceIfNeeded(
-            in: text,
-            selection: NSRange(location: (text as NSString).length, length: 0)
-        )
-        XCTAssertEqual(result?.text, "```swift\n\n```")
-        XCTAssertEqual(result?.selection, NSRange(location: 9, length: 0))
-    }
-
-    func testCodeFenceCompletionHandlesPlainFence() {
-        let text = "```"
-        let result = MacMarkdownFormatter.completeCodeFenceIfNeeded(
-            in: text,
-            selection: NSRange(location: (text as NSString).length, length: 0)
-        )
-        XCTAssertEqual(result?.text, "```\n\n```")
-        XCTAssertEqual(result?.selection, NSRange(location: 4, length: 0))
-    }
-
-    func testCodeFenceCompletionIgnoresFenceWithInlineContent() {
-        let text = "```内容"
-        let result = MacMarkdownFormatter.completeCodeFenceIfNeeded(
             in: text,
             selection: NSRange(location: (text as NSString).length, length: 0)
         )

@@ -23,9 +23,10 @@ nonisolated struct Note: Identifiable, Equatable, Sendable {
 }
 
 nonisolated enum NoteTitleFormatter {
-    static let maxTitleLength = 72
+    static let emptyTitle = "（空笔记）"
+    static let generatedTitleMaxLength = 20
 
-    static func displayTitle(from body: String, emptyTitle: String = "空笔记") -> String {
+    static func displayTitle(from body: String, emptyTitle: String = Self.emptyTitle) -> String {
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return emptyTitle }
 
@@ -36,26 +37,40 @@ nonisolated enum NoteTitleFormatter {
     }
 
     static func fileName(for noteId: String, body: String) -> String {
+        fileName(for: body)
+    }
+
+    static func fileName(for body: String) -> String {
         let title = displayTitle(from: body)
-        return fileName(for: noteId, title: title)
+        let shouldLimit = !firstNonEmptyLineIsMarkdownHeading(in: body)
+        return fileName(forTitle: title, limitsLength: shouldLimit)
     }
 
     static func fileName(for noteId: String, title: String) -> String {
-        let cleaned = sanitizedTitle(title, emptyTitle: "空笔记")
-        return "\(cleaned)-\(noteId).md"
+        fileName(forTitle: title)
     }
 
-    static func displayTitle(fromFileName fileName: String, noteId: String, emptyTitle: String = "空笔记") -> String {
-        let suffix = "-\(noteId).md"
-        guard fileName.hasSuffix(suffix) else { return emptyTitle }
+    static func fileName(forTitle title: String, limitsLength: Bool = true) -> String {
+        "\(fileBaseName(forTitle: title, limitsLength: limitsLength)).md"
+    }
 
-        let rawTitle = String(fileName.dropLast(suffix.count))
-        let cleaned = sanitizedTitle(rawTitle, emptyTitle: emptyTitle)
+    static func fileBaseName(forTitle title: String, limitsLength: Bool = true) -> String {
+        sanitizedTitle(title, emptyTitle: Self.emptyTitle, limitsLength: limitsLength)
+    }
+
+    static func displayTitle(fromFileName fileName: String, emptyTitle: String = Self.emptyTitle) -> String {
+        let stem = fileName.hasSuffix(".md") ? String(fileName.dropLast(3)) : fileName
+        let cleaned = sanitizedTitle(removingNumericSuffix(from: stem), emptyTitle: emptyTitle)
+        return cleaned.isEmpty ? emptyTitle : cleaned
+    }
+
+    static func displayTitle(fromFileName fileName: String, noteId: String, emptyTitle: String = Self.emptyTitle) -> String {
+        let cleaned = displayTitle(fromFileName: fileName, emptyTitle: emptyTitle)
         return cleaned.isEmpty ? emptyTitle : cleaned
     }
 
     static func sanitizedGeneratedTitle(_ title: String) -> String? {
-        let cleaned = sanitizedTitle(title, emptyTitle: "")
+        let cleaned = sanitizedTitle(title, emptyTitle: "", limitsLength: true)
         return cleaned.isEmpty ? nil : cleaned
     }
 
@@ -77,7 +92,7 @@ nonisolated enum NoteTitleFormatter {
             && !firstLine[firstNonHash...].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private static func sanitizedTitle(_ title: String, emptyTitle: String) -> String {
+    private static func sanitizedTitle(_ title: String, emptyTitle: String, limitsLength: Bool = false) -> String {
         let firstLine = title.components(separatedBy: .newlines)
             .first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? ""
         var normalized = stripLeadingHeadingMarker(from: firstLine.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -99,11 +114,19 @@ nonisolated enum NoteTitleFormatter {
             cleaned = emptyTitle
         }
 
-        if cleaned.count > maxTitleLength {
-            cleaned = String(cleaned.prefix(maxTitleLength)).trimmingCharacters(in: CharacterSet(charactersIn: " .-"))
+        if limitsLength && cleaned.count > generatedTitleMaxLength {
+            cleaned = String(cleaned.prefix(generatedTitleMaxLength)).trimmingCharacters(in: CharacterSet(charactersIn: " .-"))
         }
 
         return cleaned
+    }
+
+    private static func removingNumericSuffix(from title: String) -> String {
+        title.replacingOccurrences(
+            of: #"（\d+）$"#,
+            with: "",
+            options: .regularExpression
+        )
     }
 
     private static func stripLeadingHeadingMarker(from line: String) -> String {
