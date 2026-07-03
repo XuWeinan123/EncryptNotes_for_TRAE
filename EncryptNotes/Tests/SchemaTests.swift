@@ -77,7 +77,7 @@ final class SchemaTests: XCTestCase {
     func testVaultKeyValidationRejectsLegacyAppName() {
         let legacyKey = VaultKey(
             version: 2,
-            app: "BieKanWo",
+            app: "LegacyApp",
             type: "vault_key",
             keyId: "test-key-id",
             algorithm: "AES-GCM-256",

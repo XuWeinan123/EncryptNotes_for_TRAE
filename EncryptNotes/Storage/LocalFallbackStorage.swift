@@ -4,8 +4,6 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
     static let shared = LocalFallbackStorage()
 
     private let _containerURL: URL?
-    private let legacyContainerURL: URL?
-
     nonisolated var containerURL: URL? {
         _containerURL
     }
@@ -17,12 +15,9 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
     private init() {
         let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         _containerURL = documentsURL.appendingPathComponent("Seal Note")
-        legacyContainerURL = documentsURL.appendingPathComponent("BieKanWo")
     }
 
     func initializeVault() async throws {
-        try migrateLegacyContainerIfNeeded()
-
         guard let container = containerURL else {
             throw StorageError.directoryCreationFailed
         }
@@ -42,28 +37,6 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
                 ])
             }
         }
-    }
-
-    private func migrateLegacyContainerIfNeeded() throws {
-        guard let legacyContainerURL,
-              let containerURL,
-              legacyContainerURL.standardizedFileURL != containerURL.standardizedFileURL else {
-            return
-        }
-
-        let fileManager = FileManager.default
-        var isDirectory: ObjCBool = false
-        guard fileManager.fileExists(atPath: legacyContainerURL.path, isDirectory: &isDirectory),
-              isDirectory.boolValue,
-              !fileManager.fileExists(atPath: containerURL.path) else {
-            return
-        }
-
-        try fileManager.moveItem(at: legacyContainerURL, to: containerURL)
-        MaintenanceLogStore.shared.record("local_storage_legacy_container_migrated", fields: [
-            "from": legacyContainerURL.path,
-            "to": containerURL.path
-        ])
     }
 
     func loadIndex() throws -> NoteIndex? {

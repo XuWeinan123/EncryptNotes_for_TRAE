@@ -7,8 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		000000000000000630000000 /* MarkdownView in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000610000000 /* MarkdownView */; };
 		000000000000000620000000 /* MarkdownView in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000610000000 /* MarkdownView */; };
+		000000000000000630000000 /* MarkdownView in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000610000000 /* MarkdownView */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -35,6 +35,7 @@
 				App/Mac/MacAppDelegate.swift,
 				App/Mac/MacAppIconController.swift,
 				App/Mac/MacMainMenuController.swift,
+				Info-iOS.plist,
 				Stores/Mac/MacNoteWindowStore.swift,
 				Stores/Mac/ShortcutStore.swift,
 				Tests/CryptoServiceTests.swift,
@@ -46,8 +47,8 @@
 				Tests/VaultStoreTests.swift,
 				Views/Mac/AllNotesWindow.swift,
 				Views/Mac/LockedStickyNoteView.swift,
-				Views/Mac/MacMenuBarController.swift,
 				Views/Mac/MacIntroView.swift,
+				Views/Mac/MacMenuBarController.swift,
 				Views/Mac/MacSettingsView.swift,
 				Views/Mac/StickyNoteEditorView.swift,
 				Views/Mac/StickyNoteWindow.swift,
@@ -60,6 +61,7 @@
 			membershipExceptions = (
 				App/EncryptNotesApp.swift,
 				ContentView.swift,
+				"Info-iOS.plist",
 				"Info-Mac.plist",
 				Tests/CryptoServiceTests.swift,
 				Tests/MacAITitleServiceTests.swift,
@@ -213,6 +215,11 @@
 				TargetAttributes = {
 					000000000000000100000000 = {
 						CreatedOnToolsVersion = 26.3;
+						SystemCapabilities = {
+							com.apple.iCloud = {
+								enabled = 1;
+							};
+						};
 					};
 					000000000000000200000000 = {
 						CreatedOnToolsVersion = 26.3;
@@ -220,6 +227,11 @@
 					};
 					000000000000000500000000 = {
 						CreatedOnToolsVersion = 26.3;
+						SystemCapabilities = {
+							com.apple.iCloud = {
+								enabled = 1;
+							};
+						};
 					};
 				};
 			};
@@ -436,7 +448,8 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "EncryptNotes/Info-iOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Seal Note";
 				INFOPLIST_KEY_CFBundleIconName = Icon;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -456,7 +469,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.biekanwo.EncryptNotes;
+				PRODUCT_BUNDLE_IDENTIFIER = com.xuweinan.sealnote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -485,7 +498,8 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "EncryptNotes/Info-iOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Seal Note";
 				INFOPLIST_KEY_CFBundleIconName = Icon;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -505,7 +519,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.biekanwo.EncryptNotes;
+				PRODUCT_BUNDLE_IDENTIFIER = com.xuweinan.sealnote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -531,7 +545,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.biekanwo.EncryptNotesTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.xuweinan.sealnoteTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
@@ -552,7 +566,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.biekanwo.EncryptNotesTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.xuweinan.sealnoteTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
@@ -581,7 +595,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.biekanwo.EncryptNotesMac;
+				PRODUCT_BUNDLE_IDENTIFIER = com.xuweinan.sealnote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;
@@ -612,7 +626,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.biekanwo.EncryptNotesMac;
+				PRODUCT_BUNDLE_IDENTIFIER = com.xuweinan.sealnote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;

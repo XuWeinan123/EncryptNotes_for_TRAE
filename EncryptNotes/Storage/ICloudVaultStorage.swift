@@ -3,7 +3,7 @@ import Foundation
 final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
     static let shared = ICloudVaultStorage()
 
-    private let containerIdentifier = "iCloud.com.biekanwo.EncryptNotes"
+    private let containerIdentifier = "iCloud.com.xuweinan.sealnote"
 
     private let ubiquityContainerURL: URL?
     private let _containerURL: URL?
@@ -18,51 +18,21 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
 
     private init() {
         let ubiquityURL = FileManager.default.url(forUbiquityContainerIdentifier: containerIdentifier)
-            ?? Self.developmentContainerURL()
         ubiquityContainerURL = ubiquityURL
-        _containerURL = Self.publicICloudDriveFolderURL()
-            ?? ubiquityURL?.appendingPathComponent("Documents")
+        _containerURL = ubiquityURL?.appendingPathComponent("Documents", isDirectory: true)
         MaintenanceLogStore.shared.record("icloud_storage_init", fields: [
             "container": _containerURL?.path,
             "ubiquity_container": ubiquityURL?.path
         ])
     }
 
-    nonisolated private static func developmentContainerURL() -> URL? {
+    nonisolated private static func sandboxedPublicICloudDriveFolderURL() -> URL? {
         #if os(macOS)
-        let url = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Mobile Documents/iCloud~com~biekanwo~EncryptNotes")
-        return FileManager.default.fileExists(atPath: url.path) ? url : nil
-        #else
-        return nil
-        #endif
-    }
-
-    nonisolated private static func publicICloudDriveFolderURL() -> URL? {
-        #if os(macOS)
-        let cloudDocsURL = FileManager.default.homeDirectoryForCurrentUser
+        let homeURL = FileManager.default.homeDirectoryForCurrentUser
+        guard homeURL.path.contains("/Library/Containers/") else { return nil }
+        return homeURL
             .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs")
-        let preferred = cloudDocsURL.appendingPathComponent("Seal Note")
-        let legacy = cloudDocsURL.appendingPathComponent("别看我")
-        let fileManager = FileManager.default
-
-        if fileManager.fileExists(atPath: preferred.appendingPathComponent("notes.json").path)
-            || fileManager.fileExists(atPath: preferred.path) {
-            return preferred
-        }
-
-        var isDirectory: ObjCBool = false
-        if fileManager.fileExists(atPath: legacy.path, isDirectory: &isDirectory),
-           isDirectory.boolValue {
-            do {
-                try fileManager.moveItem(at: legacy, to: preferred)
-                return preferred
-            } catch {
-                return legacy
-            }
-        }
-
-        return preferred
+            .appendingPathComponent("Seal Note", isDirectory: true)
         #else
         return nil
         #endif
@@ -76,6 +46,9 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
 
         try migrateVaultIfNeeded(from: ubiquityContainer, to: container)
         try migrateVaultIfNeeded(from: ubiquityContainer.appendingPathComponent("Documents"), to: container)
+        if let sandboxedPublicFolder = Self.sandboxedPublicICloudDriveFolderURL() {
+            try migrateVaultIfNeeded(from: sandboxedPublicFolder, to: container)
+        }
 
         let directories = [
             container,

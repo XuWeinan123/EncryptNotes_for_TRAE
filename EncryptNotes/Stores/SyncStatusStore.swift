@@ -26,7 +26,7 @@ final class SyncStatusStore: ObservableObject {
     @Published private(set) var isNetworkAvailable: Bool = true
 
     private let pathMonitor = NWPathMonitor()
-    private let monitorQueue = DispatchQueue(label: "com.biekanwo.network-monitor")
+    private let monitorQueue = DispatchQueue(label: "com.xuweinan.sealnote.network-monitor")
 
     private init() {
         pathMonitor.pathUpdateHandler = { [weak self] path in

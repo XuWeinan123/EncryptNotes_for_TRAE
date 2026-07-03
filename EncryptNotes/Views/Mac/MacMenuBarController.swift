@@ -124,14 +124,14 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
             }
         }
 
-        let allNotesItem = NSMenuItem(title: "全部笔记…", action: #selector(showAllNotes), keyEquivalent: "")
+        let allNotesItem = NSMenuItem(title: "全部笔记(\(vaultStore.totalNoteCount))...", action: #selector(showAllNotes), keyEquivalent: "")
         allNotesItem.target = self
         menu.addItem(allNotesItem)
 
         menu.addItem(.separator())
 
         let trashItem = NSMenuItem(
-            title: "回收站…\(vaultStore.trashCount > 0 ? " (\(vaultStore.trashCount))" : "")",
+            title: "回收站\(vaultStore.trashCount > 0 ? "(\(vaultStore.trashCount))…" : "")",
             action: #selector(showTrash),
             keyEquivalent: ""
         )

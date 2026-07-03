@@ -9,8 +9,13 @@ const apply = args.has("--apply");
 const verbose = args.has("--verbose");
 const recoverAllUnique = args.has("--recover-all-unique");
 const base = process.env.SEAL_NOTE_VAULT_DIR
-  || process.env.BKW_VAULT_DIR
-  || path.join(process.env.HOME, "Library/Mobile Documents/com~apple~CloudDocs/Seal Note");
+  || path.join(
+    process.env.HOME,
+    "Library",
+    "Mobile Documents",
+    "iCloud~com~xuweinan~sealnote",
+    "Documents"
+  );
 const rootNotesDir = base;
 const legacyNotesDir = path.join(base, "notes");
 const notesDir = fs.existsSync(legacyNotesDir) ? legacyNotesDir : rootNotesDir;

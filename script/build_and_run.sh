@@ -63,7 +63,7 @@ case "$MODE" in
     ;;
   --telemetry|telemetry)
     open_app
-    /usr/bin/log stream --info --style compact --predicate "subsystem == \"com.biekanwo.EncryptNotesMac\""
+    /usr/bin/log stream --info --style compact --predicate "subsystem == \"com.xuweinan.sealnote\""
     ;;
   --verify|verify)
     open_app

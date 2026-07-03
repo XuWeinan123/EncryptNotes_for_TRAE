@@ -35,7 +35,7 @@
 
 ### 1.2 数据与安全约束
 
-- 继续使用同一个 iCloud container：`iCloud.com.biekanwo.EncryptNotes`。
+- 继续使用同一个 iCloud container：`iCloud.com.xuweinan.sealnote`。
 - 继续使用同一目录结构：
 
 ```text
@@ -145,11 +145,11 @@ Tests/
 新增 macOS App Target：
 
 - Product Name：`EncryptNotesMac`
-- Bundle ID：建议 `com.biekanwo.EncryptNotes.mac`
+- Bundle ID：建议 `com.xuweinan.sealnote`
 - Deployment Target：macOS 14.0
 - App Sandbox：开启
 - iCloud Documents：开启
-- Ubiquity Containers：`iCloud.com.biekanwo.EncryptNotes`
+- Ubiquity Containers：`iCloud.com.xuweinan.sealnote`
 - 默认不显示 Dock 图标：通过 `LSUIElement = YES` 或运行时 activation policy 处理。
 
 ### 3.2 macOS entitlements
@@ -164,7 +164,7 @@ EncryptNotes/EncryptNotesMac.entitlements
 
 - App Sandbox
 - iCloud Documents
-- iCloud container：`iCloud.com.biekanwo.EncryptNotes`
+- iCloud container：`iCloud.com.xuweinan.sealnote`
 - User Selected File Read/Write，用于加载/导出 `.bkwkey`
 
 ### 3.3 共享文件 target membership

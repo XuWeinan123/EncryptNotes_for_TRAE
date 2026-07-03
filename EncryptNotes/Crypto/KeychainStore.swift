@@ -22,7 +22,7 @@ enum KeychainError: Error, LocalizedError {
 final class KeychainStore {
     static let shared = KeychainStore()
 
-    private let service = "com.biekanwo.encryptnotes"
+    private let service = "com.xuweinan.sealnote"
 
     private init() {}
 
