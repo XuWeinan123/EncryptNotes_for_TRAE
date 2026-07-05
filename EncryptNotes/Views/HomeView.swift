@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct HomeView: View {
     @StateObject private var vaultStore = VaultStore.shared
@@ -24,7 +23,8 @@ struct HomeView: View {
 
     @State private var exportedFileURL: URL?
     @State private var showShareSheet = false
-    @State private var showKeyImporter = false
+    @State private var settingsInitialRoute: SettingsRoute?
+    @State private var showKeyIssueAlert = false
 
     private var filteredItems: [NoteListItem] {
         vaultStore.filteredNotes
@@ -67,8 +67,10 @@ struct HomeView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
-        .fullScreenCover(isPresented: $showSettings) {
-            SettingsView(isPresented: $showSettings, showTrash: $showTrash)
+        .fullScreenCover(isPresented: $showSettings, onDismiss: {
+            settingsInitialRoute = nil
+        }) {
+            SettingsView(isPresented: $showSettings, showTrash: $showTrash, initialRoute: settingsInitialRoute)
         }
         .sheet(isPresented: $showTrash) {
             TrashView()
@@ -79,13 +81,6 @@ struct HomeView: View {
             if let url = exportedFileURL {
                 ShareSheet(items: [url])
             }
-        }
-        .fileImporter(
-            isPresented: $showKeyImporter,
-            allowedContentTypes: [UTType(filenameExtension: "snkey") ?? .json],
-            allowsMultipleSelection: false
-        ) { result in
-            handleKeyImport(result)
         }
         .alert("保存密钥", isPresented: $vaultStore.needsKeyExport) {
             Button("立即保存") { exportKeyFile() }
@@ -122,6 +117,12 @@ struct HomeView: View {
             Button("确定") { batchResultMessage = nil }
         } message: {
             Text(batchResultMessage ?? "")
+        }
+        .alert(keyIssueTitle, isPresented: $showKeyIssueAlert) {
+            Button("打开密钥设置") { openKeySettings() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text(keyIssueMessage)
         }
         .alert("错误", isPresented: Binding(
             get: { vaultStore.lastError != nil },
@@ -191,7 +192,7 @@ struct HomeView: View {
                 }
                 .disabled(filteredItems.isEmpty)
             } else {
-                Button { showSettings = true } label: {
+                Button { openSettings() } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 17, weight: .semibold))
                 }
@@ -332,7 +333,7 @@ struct HomeView: View {
             return "没有包含 \(tag) 的可读笔记。"
         }
         if vaultStore.lockedNoteCount > 0 && !vaultStore.isKeyLoaded {
-            return "导入密钥后，加密笔记会在本机解密显示。"
+            return "前往密钥设置加载原密钥后，加密笔记会在本机解密显示。"
         }
         return "点击下方按钮创建第一条笔记。"
     }
@@ -355,14 +356,14 @@ struct HomeView: View {
             Spacer()
 
             Button {
-                showKeyImporter = true
+                openKeySettings()
             } label: {
-                Image(systemName: "square.and.arrow.down")
+                Image(systemName: "key")
                     .font(.system(size: 17, weight: .semibold))
             }
             .buttonStyle(.plain)
             .foregroundColor(DS.primaryDeep)
-            .accessibilityLabel("导入密钥")
+            .accessibilityLabel("打开密钥设置")
         }
         .padding(DS.s3)
         .dsCardSurface(cornerRadius: DS.rMd, shadow: false)
@@ -393,7 +394,7 @@ struct HomeView: View {
             }
             .padding(.horizontal, DS.s3)
             .padding(.top, DS.s3)
-            .padding(.bottom, DS.s4)
+            .padding(.bottom, isSelecting || isSystemBottomSearchAvailable ? DS.s4 : 88)
             .frame(maxWidth: DS.contentMax)
             .frame(maxWidth: .infinity)
         }
@@ -409,21 +410,45 @@ struct HomeView: View {
     }
 
     private var tagChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: DS.s2) {
-                tagChip(title: "全部", count: vaultStore.totalNoteCount, isSelected: vaultStore.selectedTag == nil) {
-                    vaultStore.selectedTag = nil
-                }
+        VStack(alignment: .leading, spacing: DS.s1) {
+            HStack {
+                Text("标签")
+                    .font(DS.caption())
+                    .foregroundColor(DS.textSubtle)
 
-                ForEach(vaultStore.allTags) { tagCount in
-                    tagChip(title: tagCount.tag, count: tagCount.count, isSelected: vaultStore.selectedTag == tagCount.tag) {
-                        vaultStore.selectedTag = vaultStore.selectedTag == tagCount.tag ? nil : tagCount.tag
+                Spacer()
+
+                if let selectedTag = vaultStore.selectedTag {
+                    Button {
+                        vaultStore.selectedTag = nil
+                    } label: {
+                        Text("清除 \(selectedTag)")
+                            .font(DS.caption())
+                            .foregroundColor(DS.primaryDeep)
+                            .lineLimit(1)
                     }
+                    .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, DS.s3)
+            .padding(.horizontal, DS.s1)
+            .frame(height: 16)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: DS.s2) {
+                    tagChip(title: "全部", count: vaultStore.totalNoteCount, isSelected: vaultStore.selectedTag == nil) {
+                        vaultStore.selectedTag = nil
+                    }
+
+                    ForEach(vaultStore.allTags) { tagCount in
+                        tagChip(title: tagCount.tag, count: tagCount.count, isSelected: vaultStore.selectedTag == tagCount.tag) {
+                            vaultStore.selectedTag = vaultStore.selectedTag == tagCount.tag ? nil : tagCount.tag
+                        }
+                    }
+                }
+                .padding(.horizontal, DS.s3)
+            }
+            .padding(.horizontal, -DS.s3)
         }
-        .padding(.horizontal, -DS.s3)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -552,8 +577,12 @@ struct HomeView: View {
         case .locked(let info):
             EncryptedCardView(
                 info: info,
+                isKeyLoaded: vaultStore.isKeyLoaded,
                 isSelected: isItemSelected,
                 isSelecting: isSelecting,
+                onOpen: {
+                    openLockedNote(info)
+                },
                 onDelete: {
                     noteToDelete = item
                     showDeleteConfirmation = true
@@ -563,6 +592,51 @@ struct HomeView: View {
                 }
             )
         }
+    }
+
+    private func openLockedNote(_ info: EncryptedNoteInfo) {
+        guard vaultStore.isKeyLoaded else {
+            showKeyIssueAlert = true
+            return
+        }
+
+        Task { @MainActor in
+            do {
+                let note = try await vaultStore.openEncryptedNote(info)
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    selectedNote = note
+                }
+            } catch {
+                vaultStore.lastError = "解锁失败：\(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func openSettings(route: SettingsRoute? = nil) {
+        settingsInitialRoute = route
+        showSettings = true
+    }
+
+    private func openKeySettings() {
+        openSettings(route: .key)
+    }
+
+    private var keyIssueTitle: String {
+        #if os(iOS)
+        if case .invalid = vaultStore.iosKeyStatus {
+            return "密钥失效"
+        }
+        #endif
+        return "需要密钥"
+    }
+
+    private var keyIssueMessage: String {
+        #if os(iOS)
+        if case .invalid = vaultStore.iosKeyStatus {
+            return "当前本机密钥不可用，需要前往设置页重新导入密钥或处理加密笔记。"
+        }
+        #endif
+        return "需要先前往设置页创建或加载密钥。"
     }
 
     private func toggleSelection(for id: String) {
@@ -647,21 +721,6 @@ struct HomeView: View {
         }
     }
 
-    private func handleKeyImport(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            guard let url = urls.first else { return }
-            Task {
-                do {
-                    _ = try await vaultStore.importKeyFile(from: url)
-                } catch {
-                    vaultStore.lastError = "导入密钥失败：\(error.localizedDescription)"
-                }
-            }
-        case .failure:
-            break
-        }
-    }
 }
 
 struct PrivacyScreenView: View {

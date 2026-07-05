@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 import MarkdownView
 
 #if os(iOS)
@@ -31,7 +30,8 @@ struct NoteEditorView: View {
     @State private var editorSelection = NSRange(location: 0, length: 0)
 
     @State private var showFirstKeyPrompt = false
-    @State private var showKeyImporter = false
+    @State private var showKeySettings = false
+    @State private var showTrashFromKeySettings = false
 
     var isEditing: Bool {
         if case .edit = mode { return true }
@@ -182,29 +182,18 @@ struct NoteEditorView: View {
             } message: {
                 Text(errorMessage)
             }
-            .alert("创建密钥", isPresented: $showFirstKeyPrompt) {
-                Button("创建密钥") {
-                    Task {
-                        do {
-                            try await vaultStore.createKey()
-                            isEncrypted = true
-                        } catch {
-                            errorMessage = error.localizedDescription
-                            showError = true
-                        }
-                    }
-                }
-                Button("导入密钥") { showKeyImporter = true }
-                Button("继续写明文笔记", role: .cancel) {}
+            .alert(keyPromptTitle, isPresented: $showFirstKeyPrompt) {
+                Button("打开密钥设置") { showKeySettings = true }
+                Button("取消", role: .cancel) {}
             } message: {
-                Text("创建密钥后，可以保存加密笔记。\n密钥只会在本机读取，不会上传。")
+                Text(keyPromptMessage)
             }
-            .fileImporter(
-                isPresented: $showKeyImporter,
-                allowedContentTypes: [UTType(filenameExtension: "snkey") ?? .json],
-                allowsMultipleSelection: false
-            ) { result in
-                handleKeyImport(result)
+            .fullScreenCover(isPresented: $showKeySettings) {
+                SettingsView(
+                    isPresented: $showKeySettings,
+                    showTrash: $showTrashFromKeySettings,
+                    initialRoute: .key
+                )
             }
         }
     }
@@ -217,8 +206,8 @@ struct NoteEditorView: View {
                     markdownPreview
                 } else {
                     #if os(iOS)
-                    NoteTextView(text: $noteBody, selectedRange: $editorSelection, placeholder: "随便写点什么吧")
-                        .frame(minHeight: 360)
+                    NoteTextView(text: $noteBody, selectedRange: $editorSelection, placeholder: "写下想法，支持 Markdown 和 #标签")
+                        .frame(minHeight: 400)
                     #else
                     ZStack(alignment: .topLeading) {
                         if noteBody.isEmpty {
@@ -247,7 +236,7 @@ struct NoteEditorView: View {
     private var markdownPreview: some View {
         VStack(alignment: .leading, spacing: 0) {
             if noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("随便写点什么吧")
+                Text("写下想法，支持 Markdown 和 #标签")
                     .font(DS.bodyLg())
                     .foregroundColor(DS.textSubtle)
                     .padding(DS.cardPadding)
@@ -281,7 +270,12 @@ struct NoteEditorView: View {
             .padding(.horizontal, DS.cardPadding)
             .padding(.vertical, DS.s2)
         }
-        .background(.regularMaterial)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(DS.line)
+                .frame(height: 0.5)
+        }
     }
 
     private func formatButton(_ systemImage: String, title: String, command: MacMarkdownFormatCommand) -> some View {
@@ -290,11 +284,17 @@ struct NoteEditorView: View {
         } label: {
             Image(systemName: systemImage)
                 .font(.system(size: 15, weight: .semibold))
-                .frame(width: 34, height: 34)
+                .foregroundColor(DS.primaryDeep)
+                .frame(width: 36, height: 36)
+                .background(DS.surfaceCard.opacity(0.72))
+                .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(DS.line, lineWidth: 0.5)
+                )
         }
         .accessibilityLabel(title)
-        .buttonStyle(.bordered)
-        .controlSize(.small)
+        .buttonStyle(.plain)
     }
     #endif
 
@@ -384,29 +384,25 @@ struct NoteEditorView: View {
                 isEncrypted = false
             }
 
-            if !settings.hasSeenFirstKeyPrompt && !vaultStore.isKeyLoaded {
-                showFirstKeyPrompt = true
-                settings.hasSeenFirstKeyPrompt = true
-            }
         }
     }
 
-    private func handleKeyImport(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            guard let url = urls.first else { return }
-            Task {
-                do {
-                    _ = try await vaultStore.importKeyFile(from: url)
-                    isEncrypted = true
-                } catch {
-                    errorMessage = "导入密钥失败：\(error.localizedDescription)"
-                    showError = true
-                }
-            }
-        case .failure:
-            break
+    private var keyPromptTitle: String {
+        #if os(iOS)
+        if case .invalid = vaultStore.iosKeyStatus {
+            return "密钥失效"
         }
+        #endif
+        return "需要密钥"
+    }
+
+    private var keyPromptMessage: String {
+        #if os(iOS)
+        if case .invalid = vaultStore.iosKeyStatus {
+            return "当前本机密钥不可用，需要前往设置页重新导入密钥或处理加密笔记。"
+        }
+        #endif
+        return "需要先前往设置页创建或加载密钥。"
     }
 
     private func saveNote() {

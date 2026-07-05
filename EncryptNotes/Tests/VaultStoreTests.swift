@@ -489,13 +489,14 @@ final class VaultStoreTests: XCTestCase {
 
         let key = SymmetricKey(size: .bits256)
         let store = VaultStore(storage: storage)
+        try? KeychainStore.shared.deleteKey(forVaultId: "clear-empty-vault")
         store.configureForTesting(vaultId: "clear-empty-vault", key: key)
 
         let emptyPlain = try await store.createNote(body: " \n\t ", isEncrypted: false)
         let nonEmptyPlain = try await store.createNote(body: "正文", isEncrypted: false)
         let emptyEncrypted = try await store.createNote(body: "\n\n", isEncrypted: true)
 
-        try await store.unloadKey()
+        await store.refreshFromStorage()
         let lockedEncrypted = try XCTUnwrap(store.lockedEncryptedNotes.first(where: { $0.id == emptyEncrypted.id }))
 
         let movedCount = try await store.clearEmptyReadableNotes()
@@ -542,24 +543,36 @@ final class VaultStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testUnloadKeyClearsDecryptedNotes() async throws {
+    func testUnloadKeyWithEncryptedNotesRequiresCleanupPath() async throws {
         let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_unload_\(UUID().uuidString)")
         let storage = try TemporaryStorage(baseURL: tmpDir)
         try await storage.initializeVault()
 
         let key = SymmetricKey(size: .bits256)
         let store = VaultStore(storage: storage)
-        store.configureForTesting(vaultId: "unload-vault", key: key)
+        let vaultId = "unload-vault"
+        try? KeychainStore.shared.deleteKey(forVaultId: vaultId)
+        store.configureForTesting(vaultId: vaultId, key: key)
 
         try await store.createNote(body: "加密笔记", isEncrypted: true)
         XCTAssertEqual(store.decryptedNotes.count, 1)
 
-        try await store.unloadKey()
+        do {
+            try await store.unloadKey()
+            XCTFail("有加密笔记时不应直接移除密钥引用")
+        } catch {
+            XCTAssertEqual(error as? VaultKeyFileError, .encryptedNotesExist)
+        }
 
-        XCTAssertFalse(store.isKeyLoaded)
+        XCTAssertEqual(store.decryptedNotes.count, 1)
+
+        let removedCount = try await store.permanentlyDeleteAllEncryptedNotes()
+        XCTAssertEqual(removedCount, 1)
+        XCTAssertEqual(store.encryptedEntryCount, 0)
         XCTAssertTrue(store.decryptedNotes.isEmpty)
 
         try? FileManager.default.removeItem(at: tmpDir)
+        try? KeychainStore.shared.deleteKey(forVaultId: vaultId)
     }
 
     @MainActor
@@ -723,21 +736,20 @@ final class VaultStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testMacImportRejectsLegacyKeyExtension() async throws {
+    func testMacImportRejectsUnsupportedKeyExtension() async throws {
         SettingsStore.shared.resetForTesting()
-        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_mac_legacy_key_extension_\(UUID().uuidString)")
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_mac_unsupported_key_extension_\(UUID().uuidString)")
         let storage = try TemporaryStorage(baseURL: tmpDir)
         let store = VaultStore(storage: storage)
-        store.configureForTesting(vaultId: "mac-legacy-key-extension")
+        store.configureForTesting(vaultId: "mac-unsupported-key-extension")
 
         let vaultKey = VaultKeyManager.shared.generateVaultKey(key: SymmetricKey(size: .bits256))
-        let legacyExtension = "bk" + "wkey"
-        let legacyURL = tmpDir.appendingPathComponent("legacy.\(legacyExtension)")
-        try JSONEncoder.default.encode(vaultKey).write(to: legacyURL, options: .atomic)
+        let unsupportedURL = tmpDir.appendingPathComponent("unsupported.key")
+        try JSONEncoder.default.encode(vaultKey).write(to: unsupportedURL, options: .atomic)
 
         do {
-            _ = try await store.importKeyFile(from: legacyURL)
-            XCTFail("旧密钥扩展名不应被加载")
+            _ = try await store.importKeyFile(from: unsupportedURL)
+            XCTFail("非 .snkey 扩展名不应被加载")
         } catch {
             XCTAssertEqual(error as? VaultKeyFileError, .unsupportedFileExtension)
         }

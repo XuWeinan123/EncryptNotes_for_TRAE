@@ -4,6 +4,9 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
     static let shared = ICloudVaultStorage()
 
     private let containerIdentifier = "iCloud.com.xuweinan.sealnote"
+    private static let indexDownloadTimeout: TimeInterval = 8
+    private static let noteDownloadTimeout: TimeInterval = 0.8
+    private static let downloadPollInterval: TimeInterval = 0.2
 
     private let ubiquityContainerURL: URL?
     private let _containerURL: URL?
@@ -145,7 +148,7 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
             return nil
         }
 
-        let data = try Data(contentsOf: url)
+        let data = try readUbiquitousData(at: url, timeout: Self.indexDownloadTimeout)
         return try JSONDecoder.default.decode(NoteIndex.self, from: data)
     }
 
@@ -175,7 +178,7 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw StorageError.fileNotFound
         }
-        let data = try Data(contentsOf: url)
+        let data = try readUbiquitousData(at: url, timeout: Self.noteDownloadTimeout)
         return try MarkdownNoteFile.parse(from: data)
     }
 
@@ -246,5 +249,59 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
             try FileManager.default.removeItem(at: url)
         }
         try FileManager.default.moveItem(at: tempURL, to: url)
+    }
+
+    private func readUbiquitousData(at url: URL, timeout: TimeInterval) throws -> Data {
+        try ensureUbiquitousItemIsReadable(at: url, timeout: timeout)
+        return try Data(contentsOf: url)
+    }
+
+    private func ensureUbiquitousItemIsReadable(at url: URL, timeout: TimeInterval) throws {
+        let fm = FileManager.default
+        let resourceKeys: Set<URLResourceKey> = [
+            .isUbiquitousItemKey,
+            .ubiquitousItemDownloadingStatusKey
+        ]
+
+        func isReadableNow() -> Bool {
+            guard let values = try? url.resourceValues(forKeys: resourceKeys),
+                  values.isUbiquitousItem == true else {
+                return true
+            }
+
+            let status = values.ubiquitousItemDownloadingStatus
+            return status == .current || status == .downloaded
+        }
+
+        guard !isReadableNow() else { return }
+
+        do {
+            try fm.startDownloadingUbiquitousItem(at: url)
+            MaintenanceLogStore.shared.record("icloud_download_requested", fields: [
+                "file": url.lastPathComponent
+            ])
+        } catch {
+            MaintenanceLogStore.shared.record("icloud_download_request_failed", fields: [
+                "file": url.lastPathComponent,
+                "error": error.localizedDescription
+            ])
+        }
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            Thread.sleep(forTimeInterval: Self.downloadPollInterval)
+            if isReadableNow() {
+                MaintenanceLogStore.shared.record("icloud_download_ready", fields: [
+                    "file": url.lastPathComponent
+                ])
+                return
+            }
+        }
+
+        MaintenanceLogStore.shared.record("icloud_download_pending", fields: [
+            "file": url.lastPathComponent,
+            "timeout": timeout
+        ])
+        throw StorageError.iCloudDownloadPending
     }
 }

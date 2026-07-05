@@ -254,14 +254,15 @@ struct SWSettingsRow<Trailing: View>: View {
             Image(systemName: systemImage)
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(tint)
-                .frame(width: 24, height: 24)
-                .background(tint.opacity(0.12))
+                .frame(width: 28, height: 28)
+                .background(tint.opacity(0.14))
                 .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(DS.bodyLg())
                     .foregroundColor(DS.textStrong)
+                    .lineLimit(1)
                 if let subtitle {
                     Text(subtitle)
                         .font(DS.caption())
@@ -276,7 +277,7 @@ struct SWSettingsRow<Trailing: View>: View {
                 .foregroundColor(DS.textSecondary)
         }
         .padding(.horizontal, DS.s3)
-        .padding(.vertical, DS.s2)
+        .padding(.vertical, 10)
         .contentShape(Rectangle())
     }
 }
@@ -286,7 +287,7 @@ struct SWRowDivider: View {
         Rectangle()
             .fill(DS.line)
             .frame(height: 0.5)
-            .padding(.leading, DS.s3 + 24 + DS.s3)
+            .padding(.leading, DS.s3 + 28 + DS.s3)
     }
 }
 
@@ -370,6 +371,11 @@ struct SWFilterChip: View {
     }
 }
 
+enum SWNoteListRowStyle {
+    case card
+    case compact
+}
+
 struct SWNoteListRow<Trailing: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
@@ -378,6 +384,7 @@ struct SWNoteListRow<Trailing: View>: View {
     let subtitle: String
     let systemImage: String
     let tint: Color
+    let style: SWNoteListRowStyle
     @ViewBuilder let trailing: () -> Trailing
 
     init(
@@ -385,27 +392,29 @@ struct SWNoteListRow<Trailing: View>: View {
         subtitle: String,
         systemImage: String,
         tint: Color = DS.textSubtle,
+        style: SWNoteListRowStyle = .card,
         @ViewBuilder trailing: @escaping () -> Trailing
     ) {
         self.title = title
         self.subtitle = subtitle
         self.systemImage = systemImage
         self.tint = tint
+        self.style = style
         self.trailing = trailing
     }
 
     var body: some View {
-        HStack(spacing: DS.s3) {
+        HStack(spacing: rowSpacing) {
             Image(systemName: systemImage)
                 .foregroundColor(tint)
-                .font(.system(size: 13, weight: .semibold))
-                .frame(width: 28, height: 28)
-                .background(tint.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+                .font(.system(size: iconSize, weight: .semibold))
+                .frame(width: iconFrame, height: iconFrame)
+                .background(iconBackground)
+                .clipShape(RoundedRectangle(cornerRadius: iconRadius, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(DS.body())
+                    .font(titleFont)
                     .foregroundColor(DS.textStrong)
                     .lineLimit(1)
                 Text(subtitle)
@@ -418,13 +427,13 @@ struct SWNoteListRow<Trailing: View>: View {
 
             trailing()
         }
-        .padding(.horizontal, DS.s3)
-        .padding(.vertical, DS.s2)
-        .background(isHovering ? DS.primaryContainer.opacity(0.52) : DS.surfaceCard)
-        .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+        .padding(.horizontal, horizontalPadding)
+        .padding(.vertical, verticalPadding)
+        .background(rowBackground)
+        .clipShape(RoundedRectangle(cornerRadius: rowRadius, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
-                .stroke(isHovering ? tint.opacity(0.36) : DS.line, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: rowRadius, style: .continuous)
+                .stroke(rowStroke, lineWidth: 0.5)
         )
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: isHovering)
         #if os(macOS)
@@ -432,6 +441,55 @@ struct SWNoteListRow<Trailing: View>: View {
             isHovering = hovering
         }
         #endif
+    }
+
+    private var rowSpacing: CGFloat {
+        style == .compact ? DS.s2 : DS.s3
+    }
+
+    private var iconSize: CGFloat {
+        style == .compact ? 12 : 13
+    }
+
+    private var iconFrame: CGFloat {
+        style == .compact ? 24 : 28
+    }
+
+    private var iconRadius: CGFloat {
+        style == .compact ? DS.rSm : DS.rMd
+    }
+
+    private var iconBackground: Color {
+        style == .compact ? DS.surfaceSunken : tint.opacity(0.12)
+    }
+
+    private var titleFont: Font {
+        style == .compact ? .system(size: 14, weight: .semibold) : DS.body()
+    }
+
+    private var horizontalPadding: CGFloat {
+        style == .compact ? DS.s3 : DS.s3
+    }
+
+    private var verticalPadding: CGFloat {
+        style == .compact ? 10 : DS.s2
+    }
+
+    private var rowRadius: CGFloat {
+        style == .compact ? DS.rMd : DS.rMd
+    }
+
+    private var rowBackground: Color {
+        switch style {
+        case .card:
+            return isHovering ? DS.primaryContainer.opacity(0.52) : DS.surfaceCard
+        case .compact:
+            return isHovering ? DS.primaryContainer.opacity(0.42) : DS.surfaceCard.opacity(0.72)
+        }
+    }
+
+    private var rowStroke: Color {
+        isHovering ? tint.opacity(0.32) : DS.line
     }
 }
 

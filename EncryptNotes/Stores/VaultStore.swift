@@ -30,6 +30,14 @@ nonisolated enum MacVaultKeyStatus: Equatable {
 }
 #endif
 
+#if os(iOS)
+nonisolated enum IOSVaultKeyStatus: Equatable {
+    case noReference
+    case available
+    case invalid(VaultKeyFileError)
+}
+#endif
+
 nonisolated struct EncryptedNoteInfo: Identifiable, Equatable {
     let id: String
     let url: URL
@@ -71,11 +79,18 @@ final class VaultStore: ObservableObject {
         let lockedEncryptedNotes: [EncryptedNoteInfo]
         let trashNotes: [TrashNote]
         let noteIndex: NoteIndex
+        let pendingDownloadCount: Int
     }
 
     private struct PreparedIndexResult {
         let index: NoteIndex
         let removedMissingFiles: [String]
+        let pendingDownloadCount: Int
+    }
+
+    private struct ReconciledIndexResult {
+        let missingFiles: [String]
+        let pendingDownloadCount: Int
     }
 
     private enum KeyReloadMode {
@@ -114,7 +129,10 @@ final class VaultStore: ObservableObject {
         }
         return false
         #else
-        currentKey != nil
+        if case .available = iosKeyStatus {
+            return true
+        }
+        return false
         #endif
     }
 
@@ -144,6 +162,35 @@ final class VaultStore: ObservableObject {
             return true
         }
         return false
+    }
+    #endif
+
+    #if os(iOS)
+    var hasKeyReference: Bool {
+        guard let vId = vaultId else { return false }
+        return keychainStore.hasKey(forVaultId: vId)
+    }
+
+    var iosKeyStatus: IOSVaultKeyStatus {
+        do {
+            _ = try loadStoredIOSKey()
+            return .available
+        } catch KeychainError.notFound {
+            return .noReference
+        } catch let error as VaultKeyFileError {
+            return .invalid(error)
+        } catch CryptoError.invalidKeyLength, CryptoError.invalidKeyMaterial {
+            return .invalid(.invalidFile)
+        } catch let error as KeychainError {
+            switch error {
+            case .notFound:
+                return .noReference
+            default:
+                return .invalid(.permissionDenied)
+            }
+        } catch {
+            return .invalid(.invalidFile)
+        }
     }
     #endif
 
@@ -247,8 +294,16 @@ final class VaultStore: ObservableObject {
             noteIndex = prepared.index
             reportMissingIndexedFiles(prepared.removedMissingFiles)
 
-            await loadAllNotes()
-            seedDefaultNotesIfNeeded()
+            let loadedPendingDownloadCount = await loadAllNotes()
+            let pendingDownloadCount = prepared.pendingDownloadCount + loadedPendingDownloadCount
+            if case .error = state {
+                return
+            }
+            if pendingDownloadCount == 0 {
+                seedDefaultNotesIfNeeded()
+            } else {
+                reportPendingDownloads(pendingDownloadCount)
+            }
             state = .ready
         } catch {
             state = .error(message: error.localizedDescription)
@@ -264,21 +319,37 @@ final class VaultStore: ObservableObject {
             try await storage.initializeVault()
         }
 
-        var index = (try? storage.loadIndex()) ?? fallbackIndex
-        let removedMissingFiles = try reconcileIndexWithFiles(&index, storage: storage)
+        let loadedIndex = try storage.loadIndex()
+        var index = loadedIndex ?? fallbackIndex
+        let reconciled = try reconcileIndexWithFiles(&index, storage: storage)
         _ = purgeExpiredTrash(in: &index, storage: storage)
         try storage.saveIndex(index)
-        return PreparedIndexResult(index: index, removedMissingFiles: removedMissingFiles)
+        return PreparedIndexResult(
+            index: index,
+            removedMissingFiles: reconciled.missingFiles,
+            pendingDownloadCount: reconciled.pendingDownloadCount
+        )
     }
 
-    nonisolated private static func reconcileIndexWithFiles(_ index: inout NoteIndex, storage: VaultStorage) throws -> [String] {
+    nonisolated private static func reconcileIndexWithFiles(_ index: inout NoteIndex, storage: VaultStorage) throws -> ReconciledIndexResult {
         var missingFiles: [String] = []
+        var pendingDownloadCount = 0
         var survivingEntries: [NoteIndexEntry] = []
 
         for entry in index.entries {
             guard let url = urlForEntry(entry, storage: storage),
-                  FileManager.default.fileExists(atPath: url.path),
-                  (try? storage.loadMarkdownFile(at: url)) != nil else {
+                  FileManager.default.fileExists(atPath: url.path) else {
+                missingFiles.append(entry.fileName)
+                continue
+            }
+
+            do {
+                _ = try storage.loadMarkdownFile(at: url)
+            } catch StorageError.iCloudDownloadPending {
+                pendingDownloadCount += 1
+                survivingEntries.append(entry)
+                continue
+            } catch {
                 missingFiles.append(entry.fileName)
                 continue
             }
@@ -286,7 +357,10 @@ final class VaultStore: ObservableObject {
         }
 
         index.entries = survivingEntries
-        return missingFiles
+        return ReconciledIndexResult(
+            missingFiles: missingFiles,
+            pendingDownloadCount: pendingDownloadCount
+        )
     }
 
     private func reportMissingIndexedFiles(_ fileNames: [String]) {
@@ -300,7 +374,16 @@ final class VaultStore: ObservableObject {
         ])
     }
 
-    private func loadAllNotes() async {
+    private func reportPendingDownloads(_ count: Int) {
+        guard count > 0 else { return }
+        lastError = "有 \(count) 篇笔记仍在从 iCloud 下载。下载完成后请刷新笔记列表。"
+        MaintenanceLogStore.shared.record("icloud_note_downloads_pending", fields: [
+            "count": count
+        ])
+    }
+
+    @discardableResult
+    private func loadAllNotes() async -> Int {
         do {
             let loadedKey: CryptoKit.SymmetricKey?
             #if os(macOS)
@@ -339,20 +422,24 @@ final class VaultStore: ObservableObject {
             trashNotes = snapshot.trashNotes
             noteIndex = snapshot.noteIndex
             state = .ready
+            reportPendingDownloads(snapshot.pendingDownloadCount)
             MaintenanceLogStore.shared.record("vault_loaded", fields: [
                 "plain": plainNotes.count,
                 "decrypted": decryptedNotes.count,
                 "locked": lockedEncryptedNotes.count,
                 "trash": trashNotes.count,
+                "pending_downloads": snapshot.pendingDownloadCount,
                 "index_entries": noteIndex.entries.count,
                 "storage": isUsingICloudStorage ? "icloud" : "local",
                 "container": storage.containerURL?.path
             ])
+            return snapshot.pendingDownloadCount
         } catch {
             state = .error(message: error.localizedDescription)
             MaintenanceLogStore.shared.record("vault_load_failed", fields: [
                 "error": error.localizedDescription
             ])
+            return 0
         }
     }
 
@@ -368,6 +455,7 @@ final class VaultStore: ObservableObject {
         var lockedEncryptedNotes: [EncryptedNoteInfo] = []
         var trashNotes: [TrashNote] = []
         let updatedIndex = index
+        var pendingDownloadCount = 0
 
         for entry in index.entries {
             guard let url = urlForEntry(entry, storage: storage) else { continue }
@@ -426,6 +514,9 @@ final class VaultStore: ObservableObject {
                         ))
                     }
                 }
+            } catch StorageError.iCloudDownloadPending {
+                pendingDownloadCount += 1
+                continue
             } catch {
                 continue
             }
@@ -442,7 +533,8 @@ final class VaultStore: ObservableObject {
             decryptedNotes: decryptedNotes,
             lockedEncryptedNotes: lockedEncryptedNotes,
             trashNotes: trashNotes,
-            noteIndex: updatedIndex
+            noteIndex: updatedIndex,
+            pendingDownloadCount: pendingDownloadCount
         )
     }
 
@@ -628,8 +720,16 @@ final class VaultStore: ObservableObject {
         #if os(macOS)
         return try loadConfiguredKeyFile()
         #else
-        guard let currentKey else { throw VaultError.keyNotLoaded }
-        return currentKey
+        if let currentKey {
+            return currentKey
+        }
+        do {
+            let key = try loadStoredIOSKey()
+            currentKey = key
+            return key
+        } catch KeychainError.notFound {
+            throw VaultError.keyNotLoaded
+        }
         #endif
     }
 
@@ -719,10 +819,6 @@ final class VaultStore: ObservableObject {
         guard url.pathExtension.lowercased() == "snkey" else {
             throw VaultKeyFileError.unsupportedFileExtension
         }
-    }
-
-    private var hasEncryptedEntries: Bool {
-        noteIndex.entries.contains { $0.mode == .encrypted }
     }
 
     private func validateKeyAgainstExistingEncryptedNote(_ key: CryptoKit.SymmetricKey) throws {
@@ -973,13 +1069,20 @@ final class VaultStore: ObservableObject {
         #if os(macOS)
         throw CryptoError.keyNotFound
         #else
+        guard !hasEncryptedEntries else {
+            throw VaultKeyFileError.encryptedNotesExist
+        }
         let vId = vaultId ?? UUID().uuidString
         vaultId = vId
 
         let key = keyManager.generateKey()
-        let keyMaterial = keyManager.keyToBase64(key)
-
-        try keychainStore.saveKey(keyMaterial, forVaultId: vId)
+        let vaultKey = keyManager.generateVaultKey(key: key)
+        try keychainStore.saveKey(
+            vaultKey.keyMaterial,
+            forVaultId: vId,
+            keyId: vaultKey.keyId,
+            keyFingerprint: try keyManager.keyFingerprint(vaultKey)
+        )
         currentKey = key
 
         await reloadAllNotes(keyReloadMode: .explicit(key))
@@ -1004,6 +1107,9 @@ final class VaultStore: ObservableObject {
         return true
         #else
         let vId = vaultId ?? UUID().uuidString
+        guard url.pathExtension.lowercased() == "snkey" else {
+            throw VaultKeyFileError.unsupportedFileExtension
+        }
 
         let hasSecurityScopedAccess = url.startAccessingSecurityScopedResource()
         defer {
@@ -1012,25 +1118,38 @@ final class VaultStore: ObservableObject {
             }
         }
 
-        let data = try Data(contentsOf: url)
-        let vaultKey = try JSONDecoder.default.decode(VaultKey.self, from: data)
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            throw VaultKeyFileError.permissionDenied
+        }
+
+        let vaultKey: VaultKey
+        do {
+            vaultKey = try JSONDecoder.default.decode(VaultKey.self, from: data)
+        } catch {
+            throw VaultKeyFileError.invalidFile
+        }
 
         guard keyManager.validateVaultKey(vaultKey) else {
-            throw CryptoError.keyValidationFailed
+            throw VaultKeyFileError.invalidFile
         }
 
-        let key = try keyManager.extractKey(vaultKey)
-
-        let encURLs = noteIndex.entries
-            .filter { $0.location == .notes && $0.mode == .encrypted }
-            .compactMap { Self.urlForEntry($0, storage: storage) }
-
-        for encUrl in encURLs {
-            let mdFile = try storage.loadMarkdownFile(at: encUrl)
-            _ = try cryptoService.decryptMarkdownBody(mdFile.body, using: key)
+        let key: CryptoKit.SymmetricKey
+        do {
+            key = try keyManager.extractKey(vaultKey)
+        } catch {
+            throw VaultKeyFileError.invalidFile
         }
+        try validateIOSKeyAgainstExistingEncryptedNote(key)
 
-        try keychainStore.saveKey(vaultKey.keyMaterial, forVaultId: vId)
+        try keychainStore.saveKey(
+            vaultKey.keyMaterial,
+            forVaultId: vId,
+            keyId: vaultKey.keyId,
+            keyFingerprint: try keyManager.keyFingerprint(vaultKey)
+        )
         vaultId = vId
         currentKey = key
 
@@ -1055,6 +1174,9 @@ final class VaultStore: ObservableObject {
             selectedTag = nil
         }
         #else
+        guard !hasEncryptedEntries else {
+            throw VaultKeyFileError.encryptedNotesExist
+        }
         guard let vId = vaultId else { return }
         try keychainStore.deleteKey(forVaultId: vId)
         currentKey = nil
@@ -1068,6 +1190,51 @@ final class VaultStore: ObservableObject {
         }
         #endif
     }
+
+    private var hasEncryptedEntries: Bool {
+        noteIndex.entries.contains { $0.mode == .encrypted }
+    }
+
+    #if os(iOS)
+    private func loadStoredIOSKey() throws -> CryptoKit.SymmetricKey {
+        guard let vId = vaultId else { throw KeychainError.notFound }
+        let keyMaterial = try keychainStore.loadKey(forVaultId: vId)
+        let key = try keyManager.keyFromBase64(keyMaterial)
+        let fingerprint = try keyManager.keyMaterialFingerprint(keyMaterial)
+
+        if let storedFingerprint = keychainStore.loadKeyFingerprint(forVaultId: vId),
+           storedFingerprint != fingerprint {
+            throw VaultKeyFileError.keyReplaced
+        }
+
+        if keychainStore.loadKeyFingerprint(forVaultId: vId) == nil {
+            try? keychainStore.saveKeyMetadata(
+                keyId: keychainStore.loadKeyId(forVaultId: vId),
+                keyFingerprint: fingerprint,
+                forVaultId: vId
+            )
+        }
+
+        try validateIOSKeyAgainstExistingEncryptedNote(key)
+        return key
+    }
+
+    private func validateIOSKeyAgainstExistingEncryptedNote(_ key: CryptoKit.SymmetricKey) throws {
+        for entry in noteIndex.entries where entry.mode == .encrypted {
+            guard let url = Self.urlForEntry(entry, storage: storage),
+                  FileManager.default.fileExists(atPath: url.path) else {
+                continue
+            }
+            let mdFile = try storage.loadMarkdownFile(at: url)
+            do {
+                _ = try cryptoService.decryptMarkdownBody(mdFile.body, using: key)
+            } catch {
+                throw VaultKeyFileError.keyMismatch
+            }
+            return
+        }
+    }
+    #endif
 
     func resetKey() async throws {
         guard let vId = vaultId else { throw VaultError.notReady }
@@ -1084,8 +1251,13 @@ final class VaultStore: ObservableObject {
         try storage.saveIndex(noteIndex)
 
         let key = keyManager.generateKey()
-        let keyMaterial = keyManager.keyToBase64(key)
-        try keychainStore.saveKey(keyMaterial, forVaultId: vId)
+        let vaultKey = keyManager.generateVaultKey(key: key)
+        try keychainStore.saveKey(
+            vaultKey.keyMaterial,
+            forVaultId: vId,
+            keyId: vaultKey.keyId,
+            keyFingerprint: try keyManager.keyFingerprint(vaultKey)
+        )
         currentKey = key
 
         await reloadAllNotes(keyReloadMode: .explicit(key))
@@ -1101,21 +1273,16 @@ final class VaultStore: ObservableObject {
             }.value
             noteIndex = prepared.index
             reportMissingIndexedFiles(prepared.removedMissingFiles)
+            reportPendingDownloads(prepared.pendingDownloadCount)
 
             let loadedKey: CryptoKit.SymmetricKey?
             switch keyReloadMode {
             case .keychain:
-                #if os(macOS)
-                loadedKey = nil
-                #else
-                if let vId = vaultId,
-                   let keyMaterial = try? keychainStore.loadKey(forVaultId: vId),
-                   let key = try? keyManager.keyFromBase64(keyMaterial) {
-                    loadedKey = key
-                } else {
-                    loadedKey = nil
-                }
-                #endif
+            #if os(macOS)
+            loadedKey = nil
+            #else
+            loadedKey = try? loadStoredIOSKey()
+            #endif
             case .explicit(let key):
                 loadedKey = key
             }
@@ -1158,11 +1325,23 @@ final class VaultStore: ObservableObject {
     }
 
     func exportKeyFile() throws -> URL {
-        guard let key = currentKey else {
-            throw KeychainError.notFound
-        }
-
-        let vaultKey = keyManager.generateVaultKey(key: key)
+        let key = try currentEncryptionKey()
+        let keyMaterial = keyManager.keyToBase64(key)
+        let keyId: String
+        #if os(iOS)
+        keyId = vaultId.flatMap { keychainStore.loadKeyId(forVaultId: $0) } ?? UUID().uuidString
+        #else
+        keyId = settings.vaultKeyFileReference?.keyId ?? UUID().uuidString
+        #endif
+        let vaultKey = VaultKey(
+            version: 2,
+            app: VaultKey.appName,
+            type: "vault_key",
+            keyId: keyId,
+            algorithm: VaultKey.algorithmAES256,
+            createdAt: Date(),
+            keyMaterial: keyMaterial
+        )
         let data = try JSONEncoder.default.encode(vaultKey)
 
         let dateFormatter = DateFormatter()

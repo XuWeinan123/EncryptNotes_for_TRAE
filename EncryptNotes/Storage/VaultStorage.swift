@@ -10,6 +10,7 @@ nonisolated enum StorageError: Error, LocalizedError {
     case fileMoveFailed
     case atomicWriteFailed
     case invalidData
+    case iCloudDownloadPending
 
     var errorDescription: String? {
         switch self {
@@ -22,6 +23,7 @@ nonisolated enum StorageError: Error, LocalizedError {
         case .fileMoveFailed: return "Failed to move file"
         case .atomicWriteFailed: return "Atomic write failed"
         case .invalidData: return "Invalid data"
+        case .iCloudDownloadPending: return "iCloud file is still downloading"
         }
     }
 }

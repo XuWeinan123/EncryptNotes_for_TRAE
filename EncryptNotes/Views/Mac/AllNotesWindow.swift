@@ -14,21 +14,17 @@ struct AllNotesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: DS.s3) {
-                SWPageHeader(
-                    title: "全部笔记",
-                    subtitle: selectedTag.map { "正在筛选 #\($0)" } ?? "浏览、搜索和打开所有可读笔记",
-                    systemImage: "tray.full",
-                    tint: DS.primaryDeep
-                )
-
+            VStack(spacing: DS.s2) {
                 HStack(spacing: DS.s2) {
                     SWSearchField(placeholder: "搜索笔记…", text: $searchText)
+                        .frame(minWidth: 260)
 
-                    SWStatusBadge(noteCountText, systemImage: "doc.text", style: isLoading ? .neutral : .success)
+                    SWStatusBadge(noteCountText, systemImage: "doc.text", style: .neutral)
                     if !emptyNotes.isEmpty {
                         SWStatusBadge("\(emptyNotes.count) 条空笔记", systemImage: "exclamationmark.triangle", style: .warning)
                     }
+
+                    Spacer(minLength: 0)
 
                     Button {
                         showingClearEmptyConfirmation = true
@@ -42,30 +38,47 @@ struct AllNotesView: View {
                     .disabled(emptyNotes.isEmpty || isClearingEmptyNotes)
                     .help(emptyNotes.isEmpty ? "没有空笔记" : "将空笔记移到回收站")
                 }
+
+                if !vaultStore.allTags.isEmpty || selectedTag != nil {
+                    HStack(spacing: DS.s1) {
+                        SWFilterChip(title: "全部", isSelected: selectedTag == nil) {
+                            selectedTag = nil
+                        }
+                        ForEach(visibleTagCounts) { tagCount in
+                            SWFilterChip(title: tagCount.tag, isSelected: selectedTag == tagCount.tag) {
+                                selectedTag = tagCount.tag
+                            }
+                        }
+                        if let selectedTag, !visibleTagCounts.contains(where: { $0.tag == selectedTag }) {
+                            SWFilterChip(title: selectedTag, isSelected: true) {}
+                        }
+                        if !overflowTagCounts.isEmpty {
+                            Menu {
+                                ForEach(overflowTagCounts) { tagCount in
+                                    Button(tagCount.tag) {
+                                        selectedTag = tagCount.tag
+                                    }
+                                }
+                            } label: {
+                                Label("更多", systemImage: "ellipsis")
+                                    .font(DS.caption())
+                            }
+                            .menuStyle(.button)
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
-            .padding(DS.s3)
+            .padding(.horizontal, DS.s3)
+            .padding(.vertical, DS.s2)
             .background(DS.surfaceRaised)
             .overlay(alignment: .bottom) {
                 Rectangle()
                     .fill(DS.line)
                     .frame(height: 0.5)
             }
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: DS.s1) {
-                    SWFilterChip(title: "全部", isSelected: selectedTag == nil) {
-                        selectedTag = nil
-                    }
-                    ForEach(vaultStore.allTags) { tagCount in
-                        SWFilterChip(title: tagCount.tag, isSelected: selectedTag == tagCount.tag) {
-                            selectedTag = tagCount.tag
-                        }
-                    }
-                }
-                .padding(.horizontal, DS.s3)
-                .padding(.top, DS.s2)
-            }
-            .padding(.bottom, DS.s2)
 
             List {
                 if isLoading {
@@ -173,6 +186,14 @@ struct AllNotesView: View {
         vaultStore.readableNotes.filter { isEmptyNote($0) }
     }
 
+    private var visibleTagCounts: [TagCount] {
+        Array(vaultStore.allTags.prefix(8))
+    }
+
+    private var overflowTagCounts: [TagCount] {
+        Array(vaultStore.allTags.dropFirst(8))
+    }
+
     private var emptyStateMessage: String {
         if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "换个关键词试试，或清空搜索内容。"
@@ -191,10 +212,13 @@ struct AllNotesView: View {
                 title: vaultStore.displayTitle(for: note, emptyTitle: NoteTitleFormatter.emptyTitle),
                 subtitle: note.isEncrypted ? "加密笔记" : "明文笔记",
                 systemImage: note.isEncrypted ? "lock.fill" : "doc.text",
-                tint: note.isEncrypted ? DS.primaryDeep : DS.textSubtle
+                tint: note.isEncrypted ? DS.primaryDeep : DS.textSubtle,
+                style: .compact
             ) {
                 HStack(spacing: DS.s2) {
-                    SWStatusBadge(note.isEncrypted ? "加密" : "明文", systemImage: note.isEncrypted ? "lock.fill" : "doc.text", style: note.isEncrypted ? .success : .neutral)
+                    if note.isEncrypted {
+                        SWStatusBadge("加密", systemImage: "lock.fill", style: .neutral)
+                    }
                     Text(timeString(from: note.updatedAt))
                         .font(DS.caption())
                         .foregroundColor(DS.textSubtle)
@@ -209,7 +233,8 @@ struct AllNotesView: View {
                 title: info.title,
                 subtitle: "加密笔记",
                 systemImage: "lock.fill",
-                tint: DS.textSubtle
+                tint: DS.textSubtle,
+                style: .compact
             ) {
                 HStack(spacing: DS.s2) {
                     SWStatusBadge("锁定", systemImage: "lock.fill", style: .neutral)

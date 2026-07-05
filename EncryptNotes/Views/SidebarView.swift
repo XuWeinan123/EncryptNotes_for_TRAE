@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct SidebarView: View {
     @Binding var isPresented: Bool
@@ -8,13 +7,6 @@ struct SidebarView: View {
 
     @StateObject private var vaultStore = VaultStore.shared
     @StateObject private var syncStore = SyncStatusStore.shared
-
-    @State private var showKeyImporter = false
-    @State private var exportedKeyURL: URL?
-    @State private var showShareSheet = false
-    @State private var showUnloadConfirmation = false
-    @State private var showResetFirstConfirmation = false
-    @State private var showResetSecondConfirmation = false
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -32,57 +24,11 @@ struct SidebarView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(DS.surfaceRaised.ignoresSafeArea())
-        .fileImporter(
-            isPresented: $showKeyImporter,
-            allowedContentTypes: [UTType(filenameExtension: "snkey") ?? .json],
-            allowsMultipleSelection: false
-        ) { result in
-            handleKeyImport(result)
-        }
-        .sheet(isPresented: $showShareSheet) {
-            if let url = exportedKeyURL {
-                ShareSheet(items: [url])
-            }
-        }
         .alert("保存密钥", isPresented: $vaultStore.needsKeyExport) {
-            Button("立即保存") { exportKeyFile() }
+            Button("打开密钥设置") { openSettings() }
             Button("稍后", role: .cancel) { vaultStore.needsKeyExport = false }
         } message: {
-            Text("请保存你的密钥。没有密钥，换设备或重装应用后将无法解密笔记。")
-        }
-        .alert("卸载本机密钥", isPresented: $showUnloadConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("继续卸载", role: .destructive) {
-                Task {
-                    do {
-                        try await vaultStore.unloadKey()
-                    } catch {
-                        vaultStore.lastError = "卸载密钥失败：\(error.localizedDescription)"
-                    }
-                }
-            }
-        } message: {
-            Text("卸载后，这台设备将无法查看加密笔记内容。\n你可以稍后重新导入密钥恢复查看。\n建议先导出并保存密钥。")
-        }
-        .alert("重置密钥", isPresented: $showResetFirstConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("继续", role: .destructive) { showResetSecondConfirmation = true }
-        } message: {
-            Text("重置密钥将删除所有加密笔记，包括回收站中的加密笔记。\n明文笔记会保留。\n如果你还需要旧加密笔记，请先确认自己保存了旧密钥。")
-        }
-        .alert("最终确认", isPresented: $showResetSecondConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("重置密钥", role: .destructive) {
-                Task {
-                    do {
-                        try await vaultStore.resetKey()
-                    } catch {
-                        vaultStore.lastError = "重置密钥失败：\(error.localizedDescription)"
-                    }
-                }
-            }
-        } message: {
-            Text("确定要删除所有加密笔记并生成新密钥吗？此操作不可撤销。")
+            Text("请前往密钥设置导出并妥善保存密钥。没有密钥，换设备或重装应用后将无法解密笔记。")
         }
     }
 
@@ -97,8 +43,7 @@ struct SidebarView: View {
             syncStatusIcon
 
             Button {
-                isPresented = false
-                showSettings = true
+                openSettings()
             } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 16, weight: .regular))
@@ -149,58 +94,36 @@ struct SidebarView: View {
                 Spacer()
             }
 
-            if vaultStore.isKeyLoaded {
-                VStack(spacing: 0) {
-                    sidebarActionRow(icon: "square.and.arrow.up", title: "导出密钥") {
-                        exportKeyFile()
-                    }
-                    Divider().padding(.leading, 32)
-                    sidebarActionRow(icon: "lock.slash", title: "卸载本机密钥") {
-                        showUnloadConfirmation = true
-                    }
-                    Divider().padding(.leading, 32)
-                    sidebarActionRow(icon: "trash", title: "重置密钥", destructive: true) {
-                        showResetFirstConfirmation = true
-                    }
-                }
-            } else {
-                Button {
-                    Task {
-                        do {
-                            try await vaultStore.createKey()
-                        } catch {
-                            vaultStore.lastError = "创建密钥失败：\(error.localizedDescription)"
-                        }
-                    }
-                } label: {
-                    Label("创建密钥", systemImage: "key.fill")
-                        .font(DS.body())
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(DS.onPrimary)
-                .padding(.horizontal, DS.s3)
-                .frame(height: 36)
-                .background(DS.primary)
-                .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
-
-                VStack(spacing: 0) {
-                    sidebarActionRow(icon: "square.and.arrow.down", title: "导入密钥") {
-                        showKeyImporter = true
-                    }
-                    Divider().padding(.leading, 32)
-                    sidebarActionRow(icon: "trash", title: "重置密钥", destructive: true) {
-                        showResetFirstConfirmation = true
-                    }
-                }
-
-                Text("密钥只会在本机读取，不会上传。")
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSubtle)
+            Button {
+                openSettings()
+            } label: {
+                Label("打开密钥设置", systemImage: "key.fill")
+                    .font(DS.body())
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .buttonStyle(.plain)
+            .foregroundColor(DS.onPrimary)
+            .padding(.horizontal, DS.s3)
+            .frame(height: 36)
+            .background(DS.primary)
+            .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+
+            Text(keyCardSubtitle)
+                .font(DS.caption())
+                .foregroundColor(DS.textSubtle)
         }
         .padding(DS.s3)
         .dsCardSurface(cornerRadius: DS.rMd, shadow: false)
+    }
+
+    private var keyCardSubtitle: String {
+        if vaultStore.isKeyLoaded {
+            return "导出、移除或处理加密笔记请前往设置。"
+        }
+        if vaultStore.encryptedEntryCount > 0 {
+            return "已有加密笔记，请前往设置加载原密钥。"
+        }
+        return "密钥只会在本机读取，不会上传。"
     }
 
     private var navSection: some View {
@@ -320,29 +243,8 @@ struct SidebarView: View {
         .buttonStyle(.plain)
     }
 
-    private func handleKeyImport(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            guard let url = urls.first else { return }
-            Task {
-                do {
-                    _ = try await vaultStore.importKeyFile(from: url)
-                } catch {
-                    vaultStore.lastError = "导入密钥失败：\(error.localizedDescription)"
-                }
-            }
-        case .failure:
-            break
-        }
-    }
-
-    private func exportKeyFile() {
-        do {
-            exportedKeyURL = try vaultStore.exportKeyFile()
-            vaultStore.needsKeyExport = false
-            showShareSheet = true
-        } catch {
-            vaultStore.lastError = "导出密钥失败：\(error.localizedDescription)"
-        }
+    private func openSettings() {
+        isPresented = false
+        showSettings = true
     }
 }

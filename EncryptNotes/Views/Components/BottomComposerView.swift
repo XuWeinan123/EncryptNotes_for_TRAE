@@ -50,7 +50,7 @@ struct BottomComposerView: View {
             }
 
             if !canEncrypt {
-                Text("导入密钥后，可将新笔记保存为加密笔记。")
+                Text("在密钥设置中创建或加载密钥后，可将新笔记保存为加密笔记。")
                     .font(DS.caption())
                     .foregroundColor(DS.textSubtle)
             }

@@ -2,8 +2,10 @@ import SwiftUI
 
 struct EncryptedCardView: View {
     let info: EncryptedNoteInfo
+    var isKeyLoaded: Bool = false
     var isSelected: Bool = false
     var isSelecting: Bool = false
+    var onOpen: (() -> Void)?
     var onDelete: (() -> Void)?
     var onToggleSelect: (() -> Void)?
 
@@ -27,6 +29,14 @@ struct EncryptedCardView: View {
 
                     if !isSelecting {
                         Menu {
+                            if let onOpen {
+                                Button { onOpen() } label: {
+                                    Label(openActionTitle, systemImage: openActionIcon)
+                                }
+                            }
+                            if onOpen != nil && onDelete != nil {
+                                Divider()
+                            }
                             if let onDelete {
                                 Button(role: .destructive) { onDelete() } label: {
                                     Label("删除", systemImage: "trash")
@@ -42,6 +52,11 @@ struct EncryptedCardView: View {
                     }
                 }
 
+                Text(info.title)
+                    .font(DS.body())
+                    .foregroundColor(DS.textBody)
+                    .lineLimit(1)
+
                 Text(info.ciphertextPreview)
                     .font(DS.mono())
                     .foregroundColor(DS.textSubtle)
@@ -49,7 +64,7 @@ struct EncryptedCardView: View {
                     .opacity(0.7)
 
                 HStack(spacing: DS.s1) {
-                    Text("导入密钥后查看")
+                    Text(isKeyLoaded ? "点击解锁查看" : "前往密钥设置")
                         .font(DS.caption())
                         .foregroundColor(DS.textSubtle)
 
@@ -74,6 +89,8 @@ struct EncryptedCardView: View {
         .onTapGesture {
             if isSelecting {
                 onToggleSelect?()
+            } else {
+                onOpen?()
             }
         }
         .pressEvents {
@@ -89,6 +106,14 @@ struct EncryptedCardView: View {
         let timestamp = DateFormatters.formatDisplayDateTime(info.updatedAt)
             .replacingOccurrences(of: ".", with: "-")
         return "\(timestamp) · 加密"
+    }
+
+    private var openActionTitle: String {
+        isKeyLoaded ? "解锁查看" : "打开密钥设置"
+    }
+
+    private var openActionIcon: String {
+        isKeyLoaded ? "lock.open" : "key"
     }
 
     private var selectionCircle: some View {

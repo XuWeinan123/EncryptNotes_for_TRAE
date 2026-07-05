@@ -7,16 +7,11 @@ struct TrashView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SWPageHeader(
-                title: "回收站",
-                subtitle: vaultStore.trashNotes.isEmpty ? "这里暂时没有已删除笔记" : "删除的笔记会在这里保留 30 天",
-                systemImage: "trash",
-                tint: vaultStore.trashNotes.isEmpty ? DS.textSubtle : DS.destructive
-            )
-            .padding(DS.s3)
-
             HStack(spacing: DS.s2) {
-                SWStatusBadge("\(vaultStore.trashNotes.count) 条", systemImage: "doc.text", style: vaultStore.trashNotes.isEmpty ? .neutral : .error)
+                SWStatusBadge("\(vaultStore.trashNotes.count) 条", systemImage: "doc.text", style: .neutral)
+                Text(vaultStore.trashNotes.isEmpty ? "没有已删除笔记" : "删除的笔记会保留 30 天")
+                    .font(DS.caption())
+                    .foregroundColor(DS.textSubtle)
                 Spacer()
                 Button(role: .destructive) {
                     showingEmptyTrashConfirmation = true
@@ -26,9 +21,10 @@ struct TrashView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(vaultStore.trashNotes.isEmpty)
+                .help(vaultStore.trashNotes.isEmpty ? "回收站为空" : "永久删除回收站中的所有笔记")
             }
             .padding(.horizontal, DS.s3)
-            .padding(.bottom, DS.s3)
+            .padding(.vertical, DS.s2)
             .background(DS.surfaceRaised)
             .overlay(alignment: .bottom) {
                 Rectangle()
@@ -45,6 +41,18 @@ struct TrashView: View {
                 } else {
                     ForEach(vaultStore.trashNotes) { trashNote in
                         trashRow(for: trashNote)
+                            .contextMenu {
+                                Button("恢复") {
+                                    Task {
+                                        try? await vaultStore.restoreTrashNote(trashNote)
+                                    }
+                                }
+                                Button("永久删除", role: .destructive) {
+                                    Task {
+                                        try? await vaultStore.permanentlyDeleteTrashNote(trashNote)
+                                    }
+                                }
+                            }
                             .listRowInsets(EdgeInsets(top: DS.s1, leading: DS.s3, bottom: DS.s1, trailing: DS.s3))
                             .listRowSeparator(.hidden)
                             .listRowBackground(DS.bg)
@@ -82,27 +90,44 @@ struct TrashView: View {
             title: trashTitle(for: trashNote),
             subtitle: "删除于 \(timeString(from: trashNote.deletedAt))",
             systemImage: trashNote.isEncrypted ? "lock.fill" : "doc.text",
-            tint: trashNote.isEncrypted ? DS.primaryDeep : DS.textSubtle
+            tint: trashNote.isEncrypted ? DS.primaryDeep : DS.textSubtle,
+            style: .compact
         ) {
-            HStack(spacing: DS.s1) {
-                SWStatusBadge(trashNote.isEncrypted ? "加密" : "明文", systemImage: trashNote.isEncrypted ? "lock.fill" : "doc.text", style: trashNote.isEncrypted ? .success : .neutral)
+            HStack(spacing: DS.s2) {
+                if trashNote.isEncrypted {
+                    SWStatusBadge("加密", systemImage: "lock.fill", style: .neutral)
+                }
                 SWStatusBadge("剩 \(trashNote.remainingDays) 天", systemImage: "clock", style: .warning)
 
-                Button("恢复") {
+                Button {
                     Task {
                         try? await vaultStore.restoreTrashNote(trashNote)
                     }
+                } label: {
+                    Label("恢复", systemImage: "arrow.uturn.backward")
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .help("恢复")
 
-                Button("永久删除", role: .destructive) {
-                    Task {
-                        try? await vaultStore.permanentlyDeleteTrashNote(trashNote)
+                Menu {
+                    Button("恢复") {
+                        Task {
+                            try? await vaultStore.restoreTrashNote(trashNote)
+                        }
                     }
+                    Divider()
+                    Button("永久删除", role: .destructive) {
+                        Task {
+                            try? await vaultStore.permanentlyDeleteTrashNote(trashNote)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
-                .buttonStyle(.bordered)
+                .menuStyle(.borderlessButton)
                 .controlSize(.small)
+                .help("更多操作")
             }
         }
     }

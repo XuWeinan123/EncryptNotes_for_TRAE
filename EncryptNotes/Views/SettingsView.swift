@@ -5,45 +5,66 @@ import UniformTypeIdentifiers
 import UIKit
 #endif
 
+enum SettingsRoute: Hashable {
+    case notes
+    case key
+    case privacy
+    case data
+    case appearance
+    case about
+}
+
 struct SettingsView: View {
     @Binding var isPresented: Bool
     @Binding var showTrash: Bool
     @StateObject private var vaultStore = VaultStore.shared
-    @StateObject private var syncStore = SyncStatusStore.shared
+    @State private var path: [SettingsRoute]
+
+    init(
+        isPresented: Binding<Bool>,
+        showTrash: Binding<Bool>,
+        initialRoute: SettingsRoute? = nil
+    ) {
+        _isPresented = isPresented
+        _showTrash = showTrash
+        _path = State(initialValue: initialRoute.map { [$0] } ?? [])
+    }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             SWPanelStack {
-                statusHeader
-
                 SWSectionPanel {
-                    settingsLink("笔记与编辑器", subtitle: "默认模式、Markdown 与编辑行为", systemImage: "textformat") {
-                        NotesSettingsView()
-                    }
+                    settingsLink(.notes, "笔记与编辑器", subtitle: "默认模式、Markdown 与编辑行为", systemImage: "textformat", tint: DS.ai)
                     SWRowDivider()
-                    settingsLink("密钥与加密", subtitle: "导入、导出、卸载或处理加密笔记", systemImage: "lock") {
-                        KeyManagementView()
-                    }
+                    settingsLink(.key, "密钥与加密", subtitle: "创建、导入、移除或处理加密笔记", systemImage: "lock", tint: DS.primaryDeep)
                     SWRowDivider()
-                    settingsLink("隐私保护", subtitle: "后台隐藏与自动卸载密钥", systemImage: "hand.raised") {
-                        PrivacySettingsView()
-                    }
+                    settingsLink(.privacy, "隐私保护", subtitle: "后台隐藏与本机密钥保护", systemImage: "hand.raised", tint: DS.pro)
                     SWRowDivider()
-                    settingsLink("数据", subtitle: "回收站、同步、导出与维护", systemImage: "externaldrive") {
-                        DataSettingsView(showTrash: $showTrash, isPresented: $isPresented)
-                    }
+                    settingsLink(.data, "数据", subtitle: "回收站、同步、导出与维护", systemImage: "externaldrive", tint: DS.link)
                     SWRowDivider()
-                    settingsLink("外观", subtitle: "主题色与应用图标", systemImage: "paintpalette") {
-                        AppearanceSettingsView()
-                    }
+                    settingsLink(.appearance, "外观", subtitle: "主题色与应用图标", systemImage: "paintpalette", tint: DS.primaryDeep)
                     SWRowDivider()
-                    settingsLink("关于", subtitle: "版本、同步与安全说明", systemImage: "info.circle", tint: DS.link) {
-                        AboutView()
-                    }
+                    settingsLink(.about, "关于", subtitle: "版本、同步与安全说明", systemImage: "info.circle", tint: DS.link)
                 }
             }
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: SettingsRoute.self) { route in
+                switch route {
+                case .notes:
+                    NotesSettingsView()
+                case .key:
+                    KeyManagementView()
+                case .privacy:
+                    PrivacySettingsView()
+                case .data:
+                    DataSettingsView(showTrash: $showTrash, isPresented: $isPresented)
+                case .appearance:
+                    AppearanceSettingsView()
+                case .about:
+                    AboutView()
+                }
+            }
             .dsLiquidGlassToolbar()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -58,67 +79,14 @@ struct SettingsView: View {
         }
     }
 
-    private var statusHeader: some View {
-        SWSectionPanel {
-            SWSettingsRow(
-                vaultStore.isUsingICloudStorage ? "iCloud 同步空间" : "本地存储空间",
-                subtitle: storageSubtitle,
-                systemImage: vaultStore.isUsingICloudStorage ? "icloud" : "folder",
-                tint: syncTint
-            ) {
-                syncTrailing
-            }
-        }
-    }
-
-    private var storageSubtitle: String {
-        switch syncStore.status {
-        case .syncing:
-            return "正在读取和写入笔记文件"
-        case .saved:
-            return syncStore.isNetworkAvailable ? "笔记会通过 iCloud Drive 同步" : "当前网络不可用，稍后会继续同步"
-        case .failed(let message):
-            return message
-        }
-    }
-
-    private var syncTint: Color {
-        switch syncStore.status {
-        case .failed:
-            return DS.destructive
-        case .syncing:
-            return DS.pro
-        case .saved:
-            return vaultStore.isUsingICloudStorage ? DS.primaryDeep : DS.pro
-        }
-    }
-
-    @ViewBuilder
-    private var syncTrailing: some View {
-        switch syncStore.status {
-        case .syncing:
-            ProgressView()
-                .controlSize(.small)
-        case .saved:
-            SWStatusBadge(syncStore.isNetworkAvailable ? "可用" : "离线", style: syncStore.isNetworkAvailable ? .success : .warning)
-        case .failed:
-            Button("重试") {
-                Task { await vaultStore.refreshFromStorage() }
-            }
-            .font(DS.caption())
-        }
-    }
-
-    private func settingsLink<Destination: View>(
+    private func settingsLink(
+        _ route: SettingsRoute,
         _ title: String,
         subtitle: String,
         systemImage: String,
-        tint: Color = DS.primaryDeep,
-        @ViewBuilder destination: @escaping () -> Destination
+        tint: Color = DS.primaryDeep
     ) -> some View {
-        NavigationLink {
-            destination()
-        } label: {
+        NavigationLink(value: route) {
             SWSettingsRow(title, subtitle: subtitle, systemImage: systemImage, tint: tint) {
                 HStack(spacing: DS.s2) {
                     if title == "数据", vaultStore.trashCount > 0 {
@@ -141,7 +109,7 @@ private struct NotesSettingsView: View {
     var body: some View {
         SWPanelStack {
             SWSectionPanel("新建笔记", footer: "当前没有密钥时，新建笔记会保持为明文。") {
-                SWSettingsRow("默认创建加密笔记", subtitle: vaultStore.isKeyLoaded ? "新建笔记会默认打开加密" : "需要先创建或导入密钥", systemImage: "lock") {
+                SWSettingsRow("默认创建加密笔记", subtitle: vaultStore.isKeyLoaded ? "新建笔记会默认打开加密" : "需要先在密钥设置中创建或加载密钥", systemImage: "lock") {
                     Toggle("", isOn: defaultEncryptedBinding)
                         .labelsHidden()
                         .tint(DS.primary)
@@ -172,49 +140,52 @@ private struct NotesSettingsView: View {
 }
 
 private struct KeyManagementView: View {
+    private enum LocalKeyStatus: Equatable {
+        case noReference
+        case available
+        case invalid(VaultKeyFileError)
+    }
+
+    private enum KeyAlert: Equatable {
+        case removeNoEncrypted
+        case removeUsableEncrypted
+        case removeInvalidEncrypted
+        case createDeletesEncrypted
+        case mismatchedImport
+        case deleteEncrypted
+        case decryptAll
+        case exportPlaintext
+    }
+
     @StateObject private var vaultStore = VaultStore.shared
     @State private var showKeyImporter = false
     @State private var exportedKeyURL: URL?
     @State private var showShareSheet = false
-    @State private var showUnloadConfirmation = false
-    @State private var showResetFirstConfirmation = false
-    @State private var showResetSecondConfirmation = false
-    @State private var showDeleteEncryptedConfirmation = false
-    @State private var showDecryptAllConfirmation = false
-    @State private var showExportPlaintextConfirmation = false
     @State private var exportedPlaintextURL: URL?
     @State private var operationMessage: String?
     @State private var showOperationResult = false
+    @State private var activeAlert: KeyAlert?
+    @State private var pendingImportURL: URL?
 
     var body: some View {
         SWPanelStack {
             SWSectionPanel {
                 SWSettingsRow(
-                    "密钥状态",
-                    subtitle: vaultStore.isKeyLoaded ? "这台设备可以查看加密笔记" : "加密笔记会保持锁定状态",
-                    systemImage: vaultStore.isKeyLoaded ? "lock.open.fill" : "lock.fill",
-                    tint: vaultStore.isKeyLoaded ? DS.primaryDeep : DS.textSubtle
+                    keyStatusTitle,
+                    subtitle: keyStatusSubtitle,
+                    systemImage: keyStatusIcon,
+                    tint: keyStatusTint
                 ) {
-                    SWStatusBadge(vaultStore.isKeyLoaded ? "已加载" : "未加载", style: vaultStore.isKeyLoaded ? .success : .neutral)
+                    keyManagementActions
                 }
             }
 
             if vaultStore.isKeyLoaded {
                 loadedKeyActions
-                advancedKeyActions
-            } else {
-                unloadedKeyActions
             }
 
-            SWSectionPanel("危险操作", footer: "重置密钥将删除所有加密笔记，明文笔记会保留。") {
-                Button(role: .destructive) {
-                    showResetFirstConfirmation = true
-                } label: {
-                    SWSettingsRow("重置密钥", subtitle: "删除所有加密笔记并生成新密钥", systemImage: "trash", tint: DS.destructive) {
-                        EmptyView()
-                    }
-                }
-                .buttonStyle(.plain)
+            if vaultStore.encryptedEntryCount > 0 {
+                encryptedNotesActions
             }
         }
         .navigationTitle("密钥与加密")
@@ -236,51 +207,106 @@ private struct KeyManagementView: View {
         } message: {
             Text(operationMessage ?? "")
         }
-        .alert("卸载本机密钥", isPresented: $showUnloadConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("继续卸载", role: .destructive) {
-                Task { await unloadKey() }
-            }
+        .alert(activeAlertTitle, isPresented: activeAlertBinding) {
+            activeAlertActions
         } message: {
-            Text("卸载后，这台设备将无法查看加密笔记内容。\n你可以稍后重新导入密钥恢复查看。\n建议先导出并保存密钥。")
+            Text(activeAlertMessage)
         }
-        .alert("全部转为明文？", isPresented: $showDecryptAllConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("转为明文", role: .destructive) {
-                Task { await decryptAllEncryptedNotes() }
-            }
-        } message: {
-            Text("所有加密笔记会写回为明文文件，并移除本机密钥。敏感内容将不再加密。")
+    }
+
+    private var keyStatus: LocalKeyStatus {
+        #if os(iOS)
+        switch vaultStore.iosKeyStatus {
+        case .noReference:
+            return .noReference
+        case .available:
+            return .available
+        case .invalid(let error):
+            return .invalid(error)
         }
-        .alert("导出解密内容并移除本地加密笔记？", isPresented: $showExportPlaintextConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("导出并移除", role: .destructive) {
-                Task { await exportPlaintextAndRemoveEncryptedNotes() }
-            }
-        } message: {
-            Text("导出的 zip 包包含明文内容。导出成功后，本地加密笔记会被永久移除。")
+        #else
+        return vaultStore.isKeyLoaded ? .available : .noReference
+        #endif
+    }
+
+    private var keyStatusTitle: String {
+        switch keyStatus {
+        case .noReference:
+            return "未加载本机密钥"
+        case .available:
+            return "本机密钥已加载"
+        case .invalid(.keyReplaced):
+            return "本机密钥已被替换"
+        case .invalid:
+            return "本机密钥失效"
         }
-        .alert("永久删除所有加密笔记？", isPresented: $showDeleteEncryptedConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("永久删除", role: .destructive) {
-                Task { await permanentlyDeleteEncryptedNotes() }
-            }
-        } message: {
-            Text("这个操作不会移到回收站，删除后无法恢复。明文笔记会保留。")
+    }
+
+    private var keyStatusSubtitle: String {
+        let encryptedCount = vaultStore.encryptedEntryCount
+        switch keyStatus {
+        case .noReference where encryptedCount > 0:
+            return "发现 \(encryptedCount) 条加密笔记，请优先加载原密钥。"
+        case .noReference:
+            return "当前未加载密钥。密钥只会保存到本机 Keychain。"
+        case .available:
+            return encryptedCount > 0
+                ? "这台设备可以查看加密笔记，请确认已导出并保存密钥。"
+                : "这台设备可以创建和查看加密笔记，请导出并妥善保存密钥。"
+        case .invalid(let error) where encryptedCount > 0:
+            return "\(error.localizedDescription)\n\(encryptedCount) 条加密笔记需要原密钥解锁。"
+        case .invalid(let error):
+            return error.localizedDescription
         }
-        .alert("重置密钥", isPresented: $showResetFirstConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("继续", role: .destructive) { showResetSecondConfirmation = true }
-        } message: {
-            Text("重置密钥将删除所有加密笔记，包括回收站中的加密笔记。\n明文笔记会保留。\n如果你还需要旧加密笔记，请先确认自己保存了旧密钥。")
+    }
+
+    private var keyStatusIcon: String {
+        switch keyStatus {
+        case .noReference:
+            return "lock.shield"
+        case .available:
+            return "checkmark.shield.fill"
+        case .invalid:
+            return "exclamationmark.triangle"
         }
-        .alert("最终确认", isPresented: $showResetSecondConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("重置密钥", role: .destructive) {
-                Task { await resetKey() }
+    }
+
+    private var keyStatusTint: Color {
+        switch keyStatus {
+        case .noReference:
+            return DS.textSubtle
+        case .available:
+            return DS.primaryDeep
+        case .invalid:
+            return DS.destructive
+        }
+    }
+
+    @ViewBuilder
+    private var keyManagementActions: some View {
+        switch keyStatus {
+        case .noReference:
+            if vaultStore.encryptedEntryCount > 0 {
+                HStack(spacing: DS.s2) {
+                    smallActionButton("加载", prominent: true) { showKeyImporter = true }
+                    smallActionButton("创建") { createKey() }
+                }
+            } else {
+                HStack(spacing: DS.s2) {
+                    smallActionButton("创建", prominent: true) { createKey() }
+                    smallActionButton("加载") { showKeyImporter = true }
+                }
             }
-        } message: {
-            Text("确定要删除所有加密笔记并生成新密钥吗？此操作不可撤销。")
+        case .available:
+            HStack(spacing: DS.s2) {
+                smallActionButton("导出") { exportKeyFile() }
+                smallActionButton("移除", destructive: true) { removeKeyReference() }
+            }
+        case .invalid:
+            HStack(spacing: DS.s2) {
+                smallActionButton("重新导入", prominent: true) { showKeyImporter = true }
+                smallActionButton("移除", destructive: true) { removeKeyReference() }
+            }
         }
     }
 
@@ -296,9 +322,9 @@ private struct KeyManagementView: View {
             .buttonStyle(.plain)
             SWRowDivider()
             Button(role: .destructive) {
-                showUnloadConfirmation = true
+                removeKeyReference()
             } label: {
-                SWSettingsRow("卸载本机密钥", subtitle: "不删除笔记，只让加密内容回到锁定状态", systemImage: "lock.slash", tint: DS.destructive) {
+                SWSettingsRow("移除本机密钥", subtitle: "移除前需要先处理所有加密笔记", systemImage: "lock.slash", tint: DS.destructive) {
                     EmptyView()
                 }
             }
@@ -306,28 +332,30 @@ private struct KeyManagementView: View {
         }
     }
 
-    private var advancedKeyActions: some View {
-        SWSectionPanel("加密笔记处理", footer: "这些操作会改变现有加密笔记，请先确认密钥已妥善保存。") {
-            Button {
-                showDecryptAllConfirmation = true
-            } label: {
-                SWSettingsRow("全部转为明文", subtitle: "解密所有加密笔记并移除本机密钥", systemImage: "lock.open") {
-                    EmptyView()
+    private var encryptedNotesActions: some View {
+        SWSectionPanel("加密笔记处理", footer: affectedEncryptedNotesMessage(prefix: "这些操作会改变现有加密笔记，请先确认密钥已妥善保存。")) {
+            if keyStatus == .available {
+                Button {
+                    activeAlert = .decryptAll
+                } label: {
+                    SWSettingsRow("全部转为明文", subtitle: "解密所有加密笔记并移除本机密钥", systemImage: "lock.open") {
+                        EmptyView()
+                    }
                 }
-            }
-            .buttonStyle(.plain)
-            SWRowDivider()
-            Button {
-                showExportPlaintextConfirmation = true
-            } label: {
-                SWSettingsRow("解密导出并移除本地", subtitle: "导出明文 zip 后永久移除本地加密笔记", systemImage: "archivebox") {
-                    EmptyView()
+                .buttonStyle(.plain)
+                SWRowDivider()
+                Button {
+                    activeAlert = .exportPlaintext
+                } label: {
+                    SWSettingsRow("解密导出并移除本地", subtitle: "导出明文 zip 后永久移除本地加密笔记", systemImage: "archivebox") {
+                        EmptyView()
+                    }
                 }
+                .buttonStyle(.plain)
+                SWRowDivider()
             }
-            .buttonStyle(.plain)
-            SWRowDivider()
             Button(role: .destructive) {
-                showDeleteEncryptedConfirmation = true
+                activeAlert = .deleteEncrypted
             } label: {
                 SWSettingsRow("永久删除所有加密笔记", subtitle: "不进入回收站，无法恢复", systemImage: "trash", tint: DS.destructive) {
                     EmptyView()
@@ -337,41 +365,65 @@ private struct KeyManagementView: View {
         }
     }
 
-    private var unloadedKeyActions: some View {
-        SWSectionPanel("密钥操作", footer: "密钥只会在本机读取，不会上传。") {
-            Button {
-                Task { await createKey() }
-            } label: {
-                SWSettingsRow("创建密钥", subtitle: "为这台设备生成新的加密密钥", systemImage: "key.fill") {
-                    EmptyView()
-                }
-            }
-            .buttonStyle(.plain)
-            SWRowDivider()
-            Button {
-                showKeyImporter = true
-            } label: {
-                SWSettingsRow("导入密钥", subtitle: "加载已有密钥", systemImage: "square.and.arrow.down") {
-                    EmptyView()
-                }
-            }
-            .buttonStyle(.plain)
+    @ViewBuilder
+    private func smallActionButton(
+        _ title: String,
+        prominent: Bool = false,
+        destructive: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        if prominent {
+            Button(title, action: action)
+                .font(DS.caption())
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .tint(destructive ? DS.destructive : DS.primary)
+        } else {
+            Button(title, action: action)
+                .font(DS.caption())
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(destructive ? DS.destructive : DS.primary)
         }
     }
 
-    private func createKey() async {
+    private func createKey() {
+        if vaultStore.encryptedEntryCount > 0 {
+            activeAlert = .createDeletesEncrypted
+            return
+        }
+        Task { await createKeyDirectly() }
+    }
+
+    private func createKeyDirectly() async {
         do { try await vaultStore.createKey() }
         catch { vaultStore.lastError = "创建密钥失败：\(error.localizedDescription)" }
     }
 
-    private func unloadKey() async {
-        do { try await vaultStore.unloadKey() }
-        catch { vaultStore.lastError = "卸载密钥失败：\(error.localizedDescription)" }
+    private func removeKeyReference() {
+        if vaultStore.encryptedEntryCount == 0 {
+            activeAlert = .removeNoEncrypted
+            return
+        }
+
+        switch keyStatus {
+        case .available:
+            activeAlert = .removeUsableEncrypted
+        case .invalid:
+            activeAlert = .removeInvalidEncrypted
+        case .noReference:
+            activeAlert = .deleteEncrypted
+        }
     }
 
-    private func resetKey() async {
-        do { try await vaultStore.resetKey() }
-        catch { vaultStore.lastError = "重置密钥失败：\(error.localizedDescription)" }
+    private func unloadKey() async {
+        do {
+            try await vaultStore.unloadKey()
+            operationMessage = "已移除本机密钥。"
+            showOperationResult = true
+        } catch {
+            vaultStore.lastError = "移除密钥失败：\(error.localizedDescription)"
+        }
     }
 
     private func decryptAllEncryptedNotes() async {
@@ -405,6 +457,29 @@ private struct KeyManagementView: View {
         }
     }
 
+    private func deleteEncryptedNotesAndCreateKey() async {
+        do {
+            _ = try await vaultStore.permanentlyDeleteAllEncryptedNotes()
+            try await vaultStore.createKey()
+            operationMessage = "已删除全部加密笔记，并创建新密钥。"
+            showOperationResult = true
+        } catch {
+            vaultStore.lastError = "创建密钥失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func deleteEncryptedNotesAndImportPendingKey(from url: URL) async {
+        do {
+            _ = try await vaultStore.permanentlyDeleteAllEncryptedNotes()
+            _ = try await vaultStore.importKeyFile(from: url)
+            self.pendingImportURL = nil
+            operationMessage = "已删除原加密笔记，并加载所选密钥。"
+            showOperationResult = true
+        } catch {
+            vaultStore.lastError = "导入密钥失败：\(error.localizedDescription)"
+        }
+    }
+
     private func exportKeyFile() {
         do {
             exportedKeyURL = try vaultStore.exportKeyFile()
@@ -420,37 +495,202 @@ private struct KeyManagementView: View {
         switch result {
         case .success(let urls):
             guard let url = urls.first else { return }
-            Task {
-                do { _ = try await vaultStore.importKeyFile(from: url) }
-                catch { vaultStore.lastError = "导入密钥失败：\(error.localizedDescription)" }
+            Task { @MainActor in
+                do {
+                    _ = try await vaultStore.importKeyFile(from: url)
+                } catch {
+                    if let keyError = error as? VaultKeyFileError, keyError == .keyMismatch {
+                        pendingImportURL = url
+                        activeAlert = .mismatchedImport
+                    } else {
+                        vaultStore.lastError = "导入密钥失败：\(error.localizedDescription)"
+                    }
+                }
             }
         case .failure:
+            pendingImportURL = nil
             break
         }
+    }
+
+    private var activeAlertBinding: Binding<Bool> {
+        Binding(
+            get: { activeAlert != nil },
+            set: { isPresented in
+                if !isPresented {
+                    if activeAlert == .mismatchedImport {
+                        pendingImportURL = nil
+                    }
+                    activeAlert = nil
+                }
+            }
+        )
+    }
+
+    private var activeAlertTitle: String {
+        switch activeAlert {
+        case .removeNoEncrypted:
+            return "移除本机密钥？"
+        case .removeUsableEncrypted:
+            return "移除本机密钥前如何处理加密笔记？"
+        case .removeInvalidEncrypted:
+            return "密钥失效时移除本机密钥？"
+        case .createDeletesEncrypted:
+            return "创建新密钥会影响已有加密笔记"
+        case .mismatchedImport:
+            return "所选密钥无法解锁现有加密笔记"
+        case .deleteEncrypted:
+            return "永久删除所有加密笔记？"
+        case .decryptAll:
+            return "全部转为明文？"
+        case .exportPlaintext:
+            return "导出解密内容并移除本地加密笔记？"
+        case nil:
+            return ""
+        }
+    }
+
+    private var activeAlertMessage: String {
+        switch activeAlert {
+        case .removeNoEncrypted:
+            return "只会让 Seal Note 忘记这台设备上的密钥，不会删除你已经导出的 .snkey 文件。"
+        case .removeUsableEncrypted:
+            return affectedEncryptedNotesMessage(prefix: "移除本机密钥前，需要先删除这些加密笔记，或全部解密为明文。")
+        case .removeInvalidEncrypted:
+            return affectedEncryptedNotesMessage(prefix: "当前密钥不可用，无法在此时解密加密笔记。若仍保留原密钥，请取消并先重新导入密钥。")
+        case .createDeletesEncrypted:
+            return affectedEncryptedNotesMessage(prefix: "新密钥无法解锁现有加密笔记。继续前必须删除这些加密笔记。")
+        case .mismatchedImport:
+            return affectedEncryptedNotesMessage(prefix: "默认不会保存这次选择的密钥。")
+        case .deleteEncrypted:
+            return affectedEncryptedNotesMessage(prefix: "这个操作不会移到回收站，删除后无法恢复。明文笔记会保留。")
+        case .decryptAll:
+            return "所有加密笔记会写回为明文文件，并移除本机密钥。敏感内容将不再加密。"
+        case .exportPlaintext:
+            return "导出的 zip 包包含明文内容。导出成功后，本地加密笔记会被永久移除，并移除本机密钥。"
+        case nil:
+            return ""
+        }
+    }
+
+    @ViewBuilder
+    private var activeAlertActions: some View {
+        switch activeAlert {
+        case .removeNoEncrypted:
+            Button("取消", role: .cancel) {}
+            Button("移除本机密钥", role: .destructive) {
+                Task { await unloadKey() }
+            }
+        case .removeUsableEncrypted:
+            Button("删除全部加密笔记", role: .destructive) {
+                Task { await permanentlyDeleteEncryptedNotes() }
+            }
+            Button("先全部解密成明文") {
+                Task { await decryptAllEncryptedNotes() }
+            }
+            Button("取消", role: .cancel) {}
+        case .removeInvalidEncrypted:
+            Button("删除全部加密笔记", role: .destructive) {
+                Task { await permanentlyDeleteEncryptedNotes() }
+            }
+            Button("取消", role: .cancel) {}
+        case .createDeletesEncrypted:
+            Button("删除这些加密笔记并创建新密钥", role: .destructive) {
+                Task { await deleteEncryptedNotesAndCreateKey() }
+            }
+            Button("取消", role: .cancel) {}
+        case .mismatchedImport:
+            Button("重新选择密钥") {
+                pendingImportURL = nil
+                showKeyImporter = true
+            }
+            Button("删除这些加密笔记并使用此密钥", role: .destructive) {
+                if let url = pendingImportURL {
+                    Task { await deleteEncryptedNotesAndImportPendingKey(from: url) }
+                }
+            }
+            Button("取消", role: .cancel) {
+                pendingImportURL = nil
+            }
+        case .deleteEncrypted:
+            Button("取消", role: .cancel) {}
+            Button("永久删除", role: .destructive) {
+                Task { await permanentlyDeleteEncryptedNotes() }
+            }
+        case .decryptAll:
+            Button("取消", role: .cancel) {}
+            Button("转为明文", role: .destructive) {
+                Task { await decryptAllEncryptedNotes() }
+            }
+        case .exportPlaintext:
+            Button("取消", role: .cancel) {}
+            Button("导出并移除", role: .destructive) {
+                Task { await exportPlaintextAndRemoveEncryptedNotes() }
+            }
+        case nil:
+            EmptyView()
+        }
+    }
+
+    private func affectedEncryptedNotesMessage(prefix: String) -> String {
+        "\(prefix)\n\n受影响范围包括当前列表和回收站中的 \(vaultStore.encryptedEntryCount) 条加密笔记。"
     }
 }
 
 private struct PrivacySettingsView: View {
     @StateObject private var settings = SettingsStore.shared
+    @StateObject private var vaultStore = VaultStore.shared
 
     var body: some View {
         SWPanelStack {
-            SWSectionPanel("隐私保护", footer: "自动卸载密钥不会删除笔记，只会让加密笔记回到乱码状态。") {
+            SWSectionPanel("隐私保护", footer: privacyFooter) {
                 SWSettingsRow("进入后台时隐藏内容", subtitle: "切换到其他应用时遮住笔记内容", systemImage: "eye.slash") {
                     Toggle("", isOn: $settings.hideContentOnBackground)
                         .labelsHidden()
                         .tint(DS.primary)
                 }
                 SWRowDivider()
-                SWSettingsRow("重新打开 App 时自动卸载密钥", subtitle: "再次进入 App 后需要重新导入密钥", systemImage: "lock.rotation") {
-                    Toggle("", isOn: $settings.autoUnloadKeyOnForeground)
+                SWSettingsRow("重新打开 App 时自动移除本机密钥", subtitle: autoUnloadKeySubtitle, systemImage: "lock.rotation") {
+                    Toggle("", isOn: autoUnloadKeyBinding)
                         .labelsHidden()
                         .tint(DS.primary)
+                        .disabled(vaultStore.encryptedEntryCount > 0)
                 }
             }
         }
         .navigationTitle("隐私保护")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { disableAutoUnloadIfNeeded() }
+        .onChange(of: vaultStore.encryptedEntryCount) { _, _ in
+            disableAutoUnloadIfNeeded()
+        }
+    }
+
+    private var autoUnloadKeyBinding: Binding<Bool> {
+        Binding(
+            get: { settings.autoUnloadKeyOnForeground && vaultStore.encryptedEntryCount == 0 },
+            set: { settings.autoUnloadKeyOnForeground = $0 && vaultStore.encryptedEntryCount == 0 }
+        )
+    }
+
+    private var autoUnloadKeySubtitle: String {
+        if vaultStore.encryptedEntryCount > 0 {
+            return "存在加密笔记时不可自动移除"
+        }
+        return "再次进入 App 后会移除本机 Keychain 中的密钥"
+    }
+
+    private var privacyFooter: String {
+        if vaultStore.encryptedEntryCount > 0 {
+            return "移除本机密钥前，需要先在“密钥与加密”中处理所有加密笔记。"
+        }
+        return "自动移除只会清掉这台设备上的本机密钥，不会删除已导出的 .snkey 文件。"
+    }
+
+    private func disableAutoUnloadIfNeeded() {
+        if vaultStore.encryptedEntryCount > 0 {
+            settings.autoUnloadKeyOnForeground = false
+        }
     }
 }
 

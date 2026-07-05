@@ -26,8 +26,19 @@ final class KeychainStore {
 
     private init() {}
 
-    func saveKey(_ keyMaterial: String, forVaultId vaultId: String) throws {
+    func saveKey(
+        _ keyMaterial: String,
+        forVaultId vaultId: String,
+        keyId: String? = nil,
+        keyFingerprint: String? = nil
+    ) throws {
         try saveString(keyMaterial, account: vaultId)
+        if let keyId {
+            try saveString(keyId, account: metadataAccount(forVaultId: vaultId, field: "key_id"))
+        }
+        if let keyFingerprint {
+            try saveString(keyFingerprint, account: metadataAccount(forVaultId: vaultId, field: "key_fingerprint"))
+        }
     }
 
     func saveString(_ value: String, account: String) throws {
@@ -52,6 +63,21 @@ final class KeychainStore {
 
     func loadKey(forVaultId vaultId: String) throws -> String {
         try loadString(account: vaultId)
+    }
+
+    func loadKeyId(forVaultId vaultId: String) -> String? {
+        try? loadString(account: metadataAccount(forVaultId: vaultId, field: "key_id"))
+    }
+
+    func loadKeyFingerprint(forVaultId vaultId: String) -> String? {
+        try? loadString(account: metadataAccount(forVaultId: vaultId, field: "key_fingerprint"))
+    }
+
+    func saveKeyMetadata(keyId: String?, keyFingerprint: String, forVaultId vaultId: String) throws {
+        if let keyId {
+            try saveString(keyId, account: metadataAccount(forVaultId: vaultId, field: "key_id"))
+        }
+        try saveString(keyFingerprint, account: metadataAccount(forVaultId: vaultId, field: "key_fingerprint"))
     }
 
     func loadString(account: String) throws -> String {
@@ -83,6 +109,8 @@ final class KeychainStore {
 
     func deleteKey(forVaultId vaultId: String) throws {
         try deleteString(account: vaultId)
+        try deleteString(account: metadataAccount(forVaultId: vaultId, field: "key_id"))
+        try deleteString(account: metadataAccount(forVaultId: vaultId, field: "key_fingerprint"))
     }
 
     func deleteString(account: String) throws {
@@ -121,5 +149,9 @@ final class KeychainStore {
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.deleteFailed(status)
         }
+    }
+
+    private func metadataAccount(forVaultId vaultId: String, field: String) -> String {
+        "\(vaultId).\(field)"
     }
 }
