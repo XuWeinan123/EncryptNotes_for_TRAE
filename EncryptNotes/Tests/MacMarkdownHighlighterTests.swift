@@ -215,6 +215,20 @@ final class MacMarkdownHighlighterTests: XCTestCase {
         })
     }
 
+    func testHTMLCommentIsHighlighted() {
+        let text = "<!--待办-->"
+        let s = spans(text)
+        XCTAssertTrue(hasRole(.htmlComment, in: s, text: text, substring: text))
+    }
+
+    #if os(macOS)
+    func testHTMLCommentUsesGreenTextColor() {
+        let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: "<!--待办-->", fontSize: 14)
+        let color = attributed.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
+        XCTAssertEqual(color, NSColor(DS.primaryDeep))
+    }
+    #endif
+
     // MARK: - Quote
 
     func testQuoteMarker() {

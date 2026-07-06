@@ -49,7 +49,7 @@ final class MacMarkdownFormatter {
         case .strike:
             return applyWrapper(text: text, selection: safeRange, open: "~~", close: "~~", placeholder: "strike", supportsToggle: true)
         case .htmlComment:
-            return applyWrapper(text: text, selection: safeRange, open: "<!-- ", close: " -->", placeholder: "comment", supportsToggle: true)
+            return applyWrapper(text: text, selection: safeRange, open: "<!--", close: "-->", placeholder: "待办", supportsToggle: true)
         case .link:
             return applyLink(text: text, selection: safeRange)
         }

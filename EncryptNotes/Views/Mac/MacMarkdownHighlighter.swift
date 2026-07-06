@@ -853,7 +853,7 @@ extension MacMarkdownHighlighter {
             ]
         case .htmlComment:
             return [
-                .foregroundColor: NSColor(DS.textSubtle),
+                .foregroundColor: NSColor(DS.primaryDeep),
                 .font: monoFontValue
             ]
         }

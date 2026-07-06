@@ -1415,10 +1415,16 @@ final class VaultStore: ObservableObject {
         return note
     }
 
-    func updateNote(_ note: Note, body: String) async throws {
+    func updateNote(_ note: Note, body: String, renameIfUntitled: Bool = true) async throws {
         guard let _ = vaultId else { throw VaultError.notReady }
         let latestNote = readableNotes.first(where: { $0.id == note.id }) ?? note
-        _ = try saveReadableNote(latestNote, body: body, mode: latestNote.isEncrypted ? .encrypted : .plain, sourceUpdatedAt: note.updatedAt)
+        _ = try saveReadableNote(
+            latestNote,
+            body: body,
+            mode: latestNote.isEncrypted ? .encrypted : .plain,
+            sourceUpdatedAt: note.updatedAt,
+            renameIfUntitled: renameIfUntitled
+        )
     }
 
     @discardableResult
@@ -1462,7 +1468,8 @@ final class VaultStore: ObservableObject {
         _ note: Note,
         body: String,
         mode: NoteFileMode,
-        sourceUpdatedAt: Date? = nil
+        sourceUpdatedAt: Date? = nil,
+        renameIfUntitled: Bool = true
     ) throws -> (note: Note, ciphertext: String) {
         let now = Date()
         let isEncrypted = mode == .encrypted
@@ -1484,7 +1491,7 @@ final class VaultStore: ObservableObject {
 
         let diskFile = try? storage.loadMarkdownFile(at: currentURL)
         let existingTitle = Self.stableExistingTitle(for: currentEntry, mdFile: diskFile)
-        let newFileName = existingTitle == nil
+        let newFileName = existingTitle == nil && renameIfUntitled
             ? Self.uniqueFileName(
                 for: body,
                 storage: storage,
@@ -1528,7 +1535,7 @@ final class VaultStore: ObservableObject {
             noteId: note.id,
             createdAt: note.createdAt,
             updatedAt: now,
-            title: existingTitle ?? Self.title(for: body),
+            title: existingTitle ?? (renameIfUntitled ? Self.title(for: body) : nil),
             body: finalBody
         )
         try storage.saveMarkdownFile(mdFile, at: targetURL)
@@ -1593,11 +1600,11 @@ final class VaultStore: ObservableObject {
         return (updatedNote, finalBody)
     }
 
-    func renameNote(_ note: Note, title: String) async throws {
+    func renameNote(_ note: Note, title: String, limitsLength: Bool = true) async throws {
         guard let entry = noteIndex.entry(for: note.id), entry.location == .notes else {
             throw StorageError.fileNotFound
         }
-        guard let cleanedTitle = NoteTitleFormatter.sanitizedGeneratedTitle(title) else {
+        guard let cleanedTitle = NoteTitleFormatter.sanitizedGeneratedTitle(title, limitsLength: limitsLength) else {
             throw StorageError.invalidData
         }
 

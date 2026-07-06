@@ -24,7 +24,7 @@ enum MarkdownShortcutAction: String, CaseIterable, Identifiable, Codable {
         case .inlineCode: return "行内代码"
         case .inlineMath: return "行内公式"
         case .strike: return "删除线"
-        case .htmlComment: return "HTML 注释"
+        case .htmlComment: return "待办注释"
         case .link: return "链接"
         }
     }
@@ -211,6 +211,7 @@ final class ShortcutStore: ObservableObject {
         let keyCode = UInt32(event.keyCode)
         return MarkdownShortcutAction.allCases.first { action in
             let shortcut = shortcut(for: action)
+            guard shortcut.isConfigured else { return false }
             return shortcut.keyCode == keyCode && shortcut.modifiers == modifiers
         }
     }
@@ -220,6 +221,7 @@ final class ShortcutStore: ObservableObject {
         let keyCode = UInt32(event.keyCode)
         return EditorShortcutAction.allCases.first { action in
             let shortcut = shortcut(for: action)
+            guard shortcut.isConfigured else { return false }
             return shortcut.keyCode == keyCode && shortcut.modifiers == modifiers
         }
     }
@@ -233,7 +235,7 @@ final class ShortcutStore: ObservableObject {
             .inlineCode: MarkdownShortcut(keyCode: 50, modifiers: UInt32(controlKey), keyEquivalent: "`"),
             .inlineMath: MarkdownShortcut(keyCode: 46, modifiers: UInt32(controlKey), keyEquivalent: "m"),
             .strike: MarkdownShortcut(keyCode: 50, modifiers: UInt32(controlKey | shiftKey), keyEquivalent: "`"),
-            .htmlComment: MarkdownShortcut(keyCode: 27, modifiers: UInt32(controlKey), keyEquivalent: "-")
+            .htmlComment: MarkdownShortcut.unset
         ]
     }
 
@@ -257,6 +259,9 @@ final class ShortcutStore: ObservableObject {
     }
 
     static func displayStringForKey(keyCode: UInt32, modifiers: UInt32) -> String {
+        if keyCode == 0 && modifiers == 0 {
+            return "未设置"
+        }
         var parts: [String] = []
         if modifiers & UInt32(controlKey) != 0 { parts.append("⌃") }
         if modifiers & UInt32(optionKey) != 0 { parts.append("⌥") }
@@ -340,6 +345,14 @@ final class ShortcutStore: ObservableObject {
     private struct ShortcutData: Codable {
         let keyCode: UInt32
         let modifiers: UInt32
+    }
+}
+
+extension MarkdownShortcut {
+    static let unset = MarkdownShortcut(keyCode: 0, modifiers: 0, keyEquivalent: "")
+
+    var isConfigured: Bool {
+        keyCode != 0 || modifiers != 0 || !keyEquivalent.isEmpty
     }
 }
 

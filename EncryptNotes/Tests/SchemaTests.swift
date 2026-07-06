@@ -250,6 +250,10 @@ final class SchemaTests: XCTestCase {
             NoteTitleFormatter.displayTitle(fromFileName: "（空笔记）.md"),
             "（空笔记）"
         )
+        XCTAssertEqual(
+            NoteTitleFormatter.displayTitle(from: ""),
+            "临时笔记"
+        )
     }
 
     func testEncryptedMarkdownBodyDoesNotContainPlaintext() throws {
