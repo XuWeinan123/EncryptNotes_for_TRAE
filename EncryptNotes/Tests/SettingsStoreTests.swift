@@ -52,7 +52,7 @@ final class SettingsStoreTests: XCTestCase {
         store.macEditorLineHeightMultiple = 1.6
         store.resetForTesting()
         XCTAssertEqual(store.macEditorFontSize, 14)
-        XCTAssertEqual(store.macEditorLineHeightMultiple, 1.25, accuracy: 0.0001)
+        XCTAssertEqual(store.macEditorLineHeightMultiple, 1.5, accuracy: 0.0001)
     }
 
     func testPersistedFontSizeIsLoaded() {
@@ -61,9 +61,9 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.macEditorFontSize, 15)
     }
 
-    func testDefaultLineHeightMultipleIs125() {
+    func testDefaultLineHeightMultipleIs150() {
         let store = makeStore()
-        XCTAssertEqual(store.macEditorLineHeightMultiple, 1.25, accuracy: 0.0001)
+        XCTAssertEqual(store.macEditorLineHeightMultiple, 1.5, accuracy: 0.0001)
     }
 
     func testLineHeightMultipleCanBeSetInRange() {

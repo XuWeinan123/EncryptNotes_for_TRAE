@@ -102,7 +102,7 @@ final class SettingsStore: ObservableObject {
     static let macEditorFontSizeRange: ClosedRange<Double> = 12...18
     static let macEditorFontSizeStep: Double = 1
     static let defaultMacEditorFontSize: Double = 14
-    static let defaultMacEditorLineHeightMultiple: Double = 1.25
+    static let defaultMacEditorLineHeightMultiple: Double = 1.5
     static let macEditorLineHeightRange: ClosedRange<Double> = 1.2...2.0
     static let defaultMacTheme: MacTheme = .pink
     static let macThemeDefaultsKey = "SNMacTheme"
