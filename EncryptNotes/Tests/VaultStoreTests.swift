@@ -421,6 +421,25 @@ final class VaultStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testPlainNotesSearchStableTitleAndBody() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_plain_title_search_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "test-plain-title-search")
+
+        let note = try await store.createNote(body: "假装是", isEncrypted: false)
+        try await store.renameNote(note, title: "标题内容")
+
+        store.searchText = "标题"
+        XCTAssertEqual(store.filteredNotes.map(\.id), [note.id])
+
+        store.searchText = "假装"
+        XCTAssertEqual(store.filteredNotes.map(\.id), [note.id])
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
     func testLockedEncryptedNotesSearchTitleOnly() {
         let store = VaultStore(storage: try? TemporaryStorage(baseURL: FileManager.default.temporaryDirectory))
         let locked = EncryptedNoteInfo(

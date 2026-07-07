@@ -226,7 +226,8 @@ final class VaultStore: ObservableObject {
             return displayTitle(for: note, emptyTitle: "").localizedCaseInsensitiveContains(query)
         }
 
-        return note.body.localizedCaseInsensitiveContains(query)
+        return displayTitle(for: note, emptyTitle: "").localizedCaseInsensitiveContains(query)
+            || note.body.localizedCaseInsensitiveContains(query)
     }
 
     func lockedNoteMatchesSearch(_ info: EncryptedNoteInfo, searchText: String) -> Bool {
@@ -1490,8 +1491,10 @@ final class VaultStore: ObservableObject {
         }
 
         let diskFile = try? storage.loadMarkdownFile(at: currentURL)
-        let existingTitle = Self.stableExistingTitle(for: currentEntry, mdFile: diskFile)
-        let newFileName = existingTitle == nil && renameIfUntitled
+        let stableTitle = Self.stableExistingTitle(for: currentEntry, mdFile: diskFile)
+        let shouldRename = settings.autoRenameNotesOnSave || (stableTitle == nil && renameIfUntitled)
+        let existingTitle = settings.autoRenameNotesOnSave ? nil : stableTitle
+        let newFileName = shouldRename
             ? Self.uniqueFileName(
                 for: body,
                 storage: storage,
@@ -1535,7 +1538,7 @@ final class VaultStore: ObservableObject {
             noteId: note.id,
             createdAt: note.createdAt,
             updatedAt: now,
-            title: existingTitle ?? (renameIfUntitled ? Self.title(for: body) : nil),
+            title: existingTitle ?? (shouldRename ? Self.title(for: body) : nil),
             body: finalBody
         )
         try storage.saveMarkdownFile(mdFile, at: targetURL)

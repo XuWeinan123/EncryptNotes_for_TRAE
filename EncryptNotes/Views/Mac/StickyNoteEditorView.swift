@@ -476,14 +476,10 @@ private struct MacMarkdownPreview: View {
             .padding(.top, titlebarHeight + textInset.height)
             .padding(.horizontal, textInset.width)
             .padding(.bottom, MacStickyEditorLayout.editorBottomInset)
+            .background(MacScrollPositionProbe(scrollY: $scrollY))
         }
         .scrollIndicators(.hidden)
-        .background(
-            ZStack {
-                MacTitlebarHeightReader(height: $titlebarHeight)
-                MacScrollPositionProbe(scrollY: $scrollY)
-            }
-        )
+        .background(MacTitlebarHeightReader(height: $titlebarHeight))
     }
 }
 
@@ -493,14 +489,13 @@ private struct MacScrollPositionProbe: NSViewRepresentable {
     func makeNSView(context: Context) -> MacScrollPositionProbeView {
         let view = MacScrollPositionProbeView()
         view.onScroll = { scrollY = $0 }
-        view.targetY = scrollY
+        view.setTargetY(scrollY)
         return view
     }
 
     func updateNSView(_ nsView: MacScrollPositionProbeView, context: Context) {
         nsView.onScroll = { scrollY = $0 }
-        nsView.targetY = scrollY
-        nsView.applyTargetIfNeeded()
+        nsView.setTargetY(scrollY)
     }
 
     static func dismantleNSView(_ nsView: MacScrollPositionProbeView, coordinator: ()) {
@@ -509,10 +504,13 @@ private struct MacScrollPositionProbe: NSViewRepresentable {
 }
 
 private final class MacScrollPositionProbeView: NSView {
-    var targetY: CGFloat = 0
     var onScroll: ((CGFloat) -> Void)?
+    private var targetY: CGFloat = 0
     private weak var observedClipView: NSClipView?
+    private weak var observedDocumentView: NSView?
     private var didApplyTarget = false
+    private var appliedTargetY: CGFloat?
+    private var restoreGeneration = 0
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -521,9 +519,14 @@ private final class MacScrollPositionProbeView: NSView {
         } else {
             DispatchQueue.main.async { [weak self] in
                 self?.observeScrollViewIfNeeded()
-                self?.applyTargetIfNeeded()
+                self?.scheduleApplyTarget()
             }
         }
+    }
+
+    override func layout() {
+        super.layout()
+        scheduleApplyTarget()
     }
 
     deinit {
@@ -538,34 +541,98 @@ private final class MacScrollPositionProbeView: NSView {
                 object: observedClipView
             )
         }
+        if let observedDocumentView {
+            NotificationCenter.default.removeObserver(
+                self,
+                name: NSView.frameDidChangeNotification,
+                object: observedDocumentView
+            )
+        }
         observedClipView = nil
+        observedDocumentView = nil
         didApplyTarget = false
+        appliedTargetY = nil
+        restoreGeneration += 1
     }
 
-    func applyTargetIfNeeded() {
+    func setTargetY(_ value: CGFloat) {
+        if abs(value - targetY) > 0.5 {
+            targetY = value
+            didApplyTarget = false
+            appliedTargetY = nil
+            restoreGeneration += 1
+        }
+        scheduleApplyTarget()
+    }
+
+    private func scheduleApplyTarget(retry: Int = 0) {
+        let generation = restoreGeneration
+        DispatchQueue.main.async { [weak self] in
+            self?.applyTargetIfNeeded(generation: generation, retry: retry)
+        }
+    }
+
+    private func applyTargetIfNeeded(generation: Int, retry: Int) {
+        guard generation == restoreGeneration else { return }
+        if let appliedTargetY, abs(appliedTargetY - targetY) > 0.5 {
+            didApplyTarget = false
+            self.appliedTargetY = nil
+        }
         guard !didApplyTarget else { return }
-        guard let scrollView = enclosingScrollView() else { return }
-        didApplyTarget = true
+        guard let scrollView = enclosingScrollView() else {
+            if retry < 30 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.016) { [weak self] in
+                    self?.applyTargetIfNeeded(generation: generation, retry: retry + 1)
+                }
+            }
+            return
+        }
+        observeScrollViewIfNeeded()
         let maxY = max(0, (scrollView.documentView?.bounds.height ?? 0) - scrollView.contentView.bounds.height)
+        if targetY > 0, maxY <= 0, retry < 30 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.016) { [weak self] in
+                self?.applyTargetIfNeeded(generation: generation, retry: retry + 1)
+            }
+            return
+        }
+        didApplyTarget = true
+        appliedTargetY = targetY
         scrollView.contentView.scroll(to: NSPoint(x: 0, y: min(max(0, targetY), maxY)))
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
     private func observeScrollViewIfNeeded() {
-        guard observedClipView == nil, let clipView = enclosingScrollView()?.contentView else { return }
-        observedClipView = clipView
-        clipView.postsBoundsChangedNotifications = true
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(boundsDidChange(_:)),
-            name: NSView.boundsDidChangeNotification,
-            object: clipView
-        )
+        guard let scrollView = enclosingScrollView() else { return }
+        if observedClipView == nil {
+            let clipView = scrollView.contentView
+            observedClipView = clipView
+            clipView.postsBoundsChangedNotifications = true
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(boundsDidChange(_:)),
+                name: NSView.boundsDidChangeNotification,
+                object: clipView
+            )
+        }
+        if observedDocumentView == nil, let documentView = scrollView.documentView {
+            observedDocumentView = documentView
+            documentView.postsFrameChangedNotifications = true
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(documentFrameDidChange(_:)),
+                name: NSView.frameDidChangeNotification,
+                object: documentView
+            )
+        }
     }
 
     @objc private func boundsDidChange(_ notification: Notification) {
         guard let clipView = notification.object as? NSClipView else { return }
         onScroll?(clipView.bounds.origin.y)
+    }
+
+    @objc private func documentFrameDidChange(_ notification: Notification) {
+        scheduleApplyTarget()
     }
 
     private func enclosingScrollView() -> NSScrollView? {

@@ -381,15 +381,16 @@ final class MacMarkdownHighlighter {
     }
 
     private static func matchHTMLComments(in line: String, lineRange: NSRange, excludedRanges: [NSRange]) -> [MarkdownHighlightSpan]? {
-        let pattern = "<!--.*?-->"
+        let pattern = "^\\s*(<!--.*?-->)\\s*$"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
-        let matches = regex.matches(in: line, options: [], range: NSRange(location: 0, length: (line as NSString).length))
-        let results = matches.compactMap { match -> MarkdownHighlightSpan? in
-            let absoluteRange = NSRange(location: lineRange.location + match.range.location, length: match.range.length)
-            if isExcluded(absoluteRange, by: excludedRanges) { return nil }
-            return MarkdownHighlightSpan(range: absoluteRange, role: .htmlComment)
+        let nsLine = line as NSString
+        guard let match = regex.firstMatch(in: line, options: [], range: NSRange(location: 0, length: nsLine.length)) else {
+            return nil
         }
-        return results.isEmpty ? nil : results
+        let commentRange = match.range(at: 1)
+        let absoluteRange = NSRange(location: lineRange.location + commentRange.location, length: commentRange.length)
+        guard !isExcluded(absoluteRange, by: excludedRanges) else { return nil }
+        return [MarkdownHighlightSpan(range: absoluteRange, role: .htmlComment)]
     }
 
     private static func matchImages(in line: String, lineRange: NSRange, excludedRanges: [NSRange]) -> [MarkdownHighlightSpan]? {
@@ -853,7 +854,7 @@ extension MacMarkdownHighlighter {
             ]
         case .htmlComment:
             return [
-                .foregroundColor: NSColor(DS.primaryDeep),
+                .foregroundColor: NSColor.systemGreen,
                 .font: monoFontValue
             ]
         }

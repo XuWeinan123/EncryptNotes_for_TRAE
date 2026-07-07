@@ -147,7 +147,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "退出Seal Note", action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "退出", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
     }
@@ -262,7 +262,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
             let hostingView = NSHostingView(rootView: AllNotesView())
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 640, height: 720),
-                styleMask: [.titled, .closable, .resizable, .miniaturizable],
+                styleMask: [.titled, .closable, .resizable, .unifiedTitleAndToolbar, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
@@ -271,6 +271,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
             window.center()
             window.isReleasedWhenClosed = false
             window.delegate = self
+            configureListWindowChrome(window)
             allNotesWindow = window
         }
         allNotesWindow?.makeKeyAndOrderFront(nil)
@@ -286,7 +287,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
             let hostingView = NSHostingView(rootView: TrashView())
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 640, height: 720),
-                styleMask: [.titled, .closable, .resizable, .miniaturizable],
+                styleMask: [.titled, .closable, .resizable, .unifiedTitleAndToolbar, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
@@ -295,6 +296,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
             window.center()
             window.isReleasedWhenClosed = false
             window.delegate = self
+            configureListWindowChrome(window)
             trashWindow = window
         }
         trashWindow?.makeKeyAndOrderFront(nil)
@@ -328,6 +330,20 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         }
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func configureListWindowChrome(_ window: NSWindow) {
+        window.isMovableByWindowBackground = true
+        window.tabbingMode = .disallowed
+        window.titleVisibility = .visible
+        window.titlebarAppearsTransparent = true
+        window.toolbarStyle = .unified
+        window.titlebarSeparatorStyle = .automatic
+        window.standardWindowButton(.closeButton)?.isHidden = false
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.miniaturizeButton)?.isEnabled = false
+        window.standardWindowButton(.zoomButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isEnabled = false
     }
 
     func openIntroWindowIfNeeded() {

@@ -4,42 +4,29 @@ import SwiftUI
 struct TrashView: View {
     @ObservedObject private var vaultStore = VaultStore.shared
     @State private var showingEmptyTrashConfirmation = false
+    @State private var searchText = ""
+    @State private var isSearchBarVisible = false
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: DS.s2) {
-                SWStatusBadge("\(vaultStore.trashNotes.count) 条", systemImage: "doc.text", style: .neutral)
-                Text(vaultStore.trashNotes.isEmpty ? "没有已删除笔记" : "删除的笔记会保留 30 天")
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSubtle)
-                Spacer()
-                Button(role: .destructive) {
-                    showingEmptyTrashConfirmation = true
-                } label: {
-                    Label("清空", systemImage: "trash")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(vaultStore.trashNotes.isEmpty)
-                .help(vaultStore.trashNotes.isEmpty ? "回收站为空" : "永久删除回收站中的所有笔记")
-            }
-            .padding(.horizontal, DS.s3)
-            .padding(.vertical, DS.s2)
-            .background(DS.surfaceRaised)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(DS.line)
-                    .frame(height: 0.5)
+            if isSearchBarVisible {
+                MacListSearchBar(
+                    placeholder: "搜索回收站…",
+                    text: $searchText,
+                    onClose: { hideSearchBar() }
+                )
             }
 
+            listSummary
+
             List {
-                if vaultStore.trashNotes.isEmpty {
+                if filteredTrashNotes.isEmpty {
                     emptyRow
                         .listRowInsets(EdgeInsets(top: DS.s3, leading: DS.s3, bottom: DS.s3, trailing: DS.s3))
                         .listRowSeparator(.hidden)
                         .listRowBackground(DS.bg)
                 } else {
-                    ForEach(vaultStore.trashNotes) { trashNote in
+                    ForEach(filteredTrashNotes) { trashNote in
                         trashRow(for: trashNote)
                             .contextMenu {
                                 Button("恢复") {
@@ -64,6 +51,10 @@ struct TrashView: View {
             .background(DS.bg)
         }
         .background(DS.bg)
+        .dsLiquidGlassToolbar()
+        .navigationTitle("回收站")
+        .toolbar { trashToolbar }
+        .background(MacListSearchToolbarAppearance(isActive: isSearchBarVisible))
         .alert("确认清空回收站？", isPresented: $showingEmptyTrashConfirmation) {
             Button("取消", role: .cancel) {}
             Button("清空", role: .destructive) {
@@ -76,10 +67,70 @@ struct TrashView: View {
         }
     }
 
+    @ToolbarContentBuilder
+    private var trashToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button {
+                toggleSearchBar()
+            } label: {
+                Label("搜索", systemImage: "magnifyingglass")
+                    .labelStyle(.iconOnly)
+            }
+            .help("搜索")
+            .keyboardShortcut("f", modifiers: .command)
+
+            Button(role: .destructive) {
+                showingEmptyTrashConfirmation = true
+            } label: {
+                Label("清空", systemImage: "trash")
+                    .labelStyle(.iconOnly)
+            }
+            .disabled(vaultStore.trashNotes.isEmpty)
+            .help(vaultStore.trashNotes.isEmpty ? "回收站为空" : "永久删除回收站中的所有笔记")
+        }
+    }
+
+    private func toggleSearchBar() {
+        if isSearchBarVisible {
+            hideSearchBar()
+        } else {
+            isSearchBarVisible = true
+        }
+    }
+
+    private func hideSearchBar() {
+        isSearchBarVisible = false
+        searchText = ""
+    }
+
+    private var listSummary: some View {
+        HStack(spacing: DS.s2) {
+            Text("回收站 \(filteredTrashNotes.count) 条笔记")
+                .font(DS.caption())
+                .foregroundColor(DS.textSubtle)
+            Text(vaultStore.trashNotes.isEmpty ? "没有已删除笔记" : "删除的笔记会保留 30 天")
+                .font(DS.caption())
+                .foregroundColor(DS.textSubtle)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, DS.s3)
+        .padding(.top, DS.s3)
+        .padding(.bottom, DS.s2)
+    }
+
+    private var filteredTrashNotes: [TrashNote] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return vaultStore.trashNotes }
+        return vaultStore.trashNotes.filter { trashNote in
+            trashTitle(for: trashNote).localizedCaseInsensitiveContains(query)
+                || trashNote.body?.localizedCaseInsensitiveContains(query) == true
+        }
+    }
+
     private var emptyRow: some View {
         SWEmptyState(
-            title: "回收站为空",
-            message: "删除的笔记会在这里保留 30 天",
+            title: vaultStore.trashNotes.isEmpty ? "回收站为空" : "没有匹配的笔记",
+            message: vaultStore.trashNotes.isEmpty ? "删除的笔记会在这里保留 30 天" : "换个关键词试试，或清空搜索内容。",
             systemImage: "trash"
         )
     }
