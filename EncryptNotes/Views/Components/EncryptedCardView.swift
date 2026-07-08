@@ -9,8 +9,6 @@ struct EncryptedCardView: View {
     var onDelete: (() -> Void)?
     var onToggleSelect: (() -> Void)?
 
-    @State private var isPressed = false
-
     var body: some View {
         HStack(alignment: .top, spacing: DS.s3) {
             if isSelecting {
@@ -81,9 +79,6 @@ struct EncryptedCardView: View {
         .padding(DS.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .dsCardSurface(shadow: false)
-        .opacity(isPressed ? 0.92 : 1.0)
-        .scaleEffect(isPressed ? 0.985 : 1.0)
-        .animation(.easeInOut(duration: 0.15), value: isPressed)
         .animation(.easeInOut(duration: 0.2), value: isSelected)
         .contentShape(Rectangle())
         .onTapGesture {
@@ -92,13 +87,6 @@ struct EncryptedCardView: View {
             } else {
                 onOpen?()
             }
-        }
-        .pressEvents {
-            if !isSelecting {
-                withAnimation(.easeInOut(duration: 0.1)) { isPressed = true }
-            }
-        } onRelease: {
-            withAnimation(.easeInOut(duration: 0.15)) { isPressed = false }
         }
     }
 

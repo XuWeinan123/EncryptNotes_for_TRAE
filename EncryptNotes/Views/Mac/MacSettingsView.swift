@@ -425,7 +425,7 @@ struct MacSettingsView: View {
             SWPageHeader(
                 title: "密钥",
                 subtitle: keyStatusSubtitle(keyStatus),
-                systemImage: vaultStore.isKeyLoaded ? "checkmark.shield.fill" : "lock.shield",
+                systemImage: keyStatus == .available ? "checkmark.shield.fill" : "lock.shield",
                 tint: DS.primaryDeep
             )
 
@@ -459,6 +459,8 @@ struct MacSettingsView: View {
             return "密钥已加载"
         case .invalid(.keyReplaced):
             return "密钥已被替换"
+        case .invalid(.keyDownloadPending):
+            return "密钥正在下载"
         case .invalid:
             return "密钥失效"
         }
@@ -470,6 +472,8 @@ struct MacSettingsView: View {
             return "加载密钥后才能查看加密笔记正文"
         case .available:
             return "这台 Mac 已经可以解锁加密笔记"
+        case .invalid(.keyDownloadPending):
+            return "密钥文件仍在从 iCloud 下载，请稍后再试"
         case .invalid:
             return "密钥需要重新定位后才能解锁加密笔记"
         }
@@ -483,12 +487,27 @@ struct MacSettingsView: View {
         case .noReference:
             return "当前未加载密钥。密钥只会在本机读取，不会保存到钥匙串。"
         case .available:
-            return vaultStore.keyFileDisplayPath ?? "请妥善保存密钥，丢失后无法恢复加密笔记。"
+            return abbreviatedDisplayPath(vaultStore.keyFileDisplayPath)
+                ?? "请妥善保存密钥，丢失后无法恢复加密笔记。"
+        case .invalid(.keyDownloadPending):
+            return "已请求 iCloud 下载密钥文件。下载完成后再打开加密笔记。"
         case .invalid where encryptedCount > 0:
             return "密钥失效，\(encryptedCount) 条加密笔记需要原密钥解锁。"
         case .invalid:
             return "密钥不可用、格式无效，或内容已被替换。"
         }
+    }
+
+    private func abbreviatedDisplayPath(_ path: String?) -> String? {
+        guard let path else { return nil }
+        let cloudDocsPrefix = NSHomeDirectory() + "/Library/Mobile Documents/com~apple~CloudDocs"
+        if path == cloudDocsPrefix {
+            return "iCloud Drive"
+        }
+        if path.hasPrefix(cloudDocsPrefix + "/") {
+            return "iCloud Drive/" + path.dropFirst(cloudDocsPrefix.count + 1)
+        }
+        return path
     }
 
     private func keyManagementIcon(for status: MacVaultKeyStatus) -> String {

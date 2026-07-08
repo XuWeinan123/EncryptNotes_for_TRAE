@@ -323,6 +323,139 @@ final class VaultStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testRefreshFromStorageIndexesUnindexedPlainMarkdownFile() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_unindexed_plain_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        try await storage.initializeVault()
+
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "test-vault-unindexed-plain")
+
+        let noteId = UUID().uuidString
+        let createdAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let mdFile = MarkdownNoteFile(
+            noteId: noteId,
+            createdAt: createdAt,
+            updatedAt: createdAt.addingTimeInterval(60),
+            title: "远端笔记",
+            body: "来自另一台 Mac 的内容"
+        )
+        let remoteURL = tmpDir.appendingPathComponent("远端笔记.md")
+        try storage.saveMarkdownFile(mdFile, at: remoteURL)
+
+        XCTAssertNil(try storage.loadIndex()?.entry(for: noteId))
+
+        await store.refreshFromStorage()
+
+        XCTAssertTrue(store.plainNotes.contains { $0.id == noteId })
+        let entry = try XCTUnwrap(storage.loadIndex()?.entry(for: noteId))
+        XCTAssertEqual(entry.fileName, "远端笔记.md")
+        XCTAssertEqual(entry.mode, .plain)
+        XCTAssertEqual(entry.location, .notes)
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
+    func testRefreshFromStorageIndexesUnindexedEncryptedMarkdownFileAsLocked() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_unindexed_encrypted_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        try await storage.initializeVault()
+
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "test-vault-unindexed-encrypted")
+
+        let noteId = UUID().uuidString
+        let createdAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let encryptedBody = try CryptoService.shared.encryptMarkdownBody(
+            "另一台 Mac 创建的加密内容",
+            using: SymmetricKey(size: .bits256)
+        )
+        let mdFile = MarkdownNoteFile(
+            noteId: noteId,
+            createdAt: createdAt,
+            updatedAt: createdAt.addingTimeInterval(120),
+            title: "远端加密",
+            body: encryptedBody
+        )
+        let remoteURL = tmpDir.appendingPathComponent("远端加密.md")
+        try storage.saveMarkdownFile(mdFile, at: remoteURL)
+
+        await store.refreshFromStorage()
+
+        XCTAssertTrue(store.lockedEncryptedNotes.contains { $0.id == noteId })
+        let entry = try XCTUnwrap(storage.loadIndex()?.entry(for: noteId))
+        XCTAssertEqual(entry.fileName, "远端加密.md")
+        XCTAssertEqual(entry.mode, .encrypted)
+        XCTAssertEqual(entry.location, .notes)
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
+    func testPendingICloudDownloadsDoNotSurfaceAsLastErrorOrDoubleCount() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_pending_download_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        try await storage.initializeVault()
+        SyncStatusStore.shared.setSaved()
+
+        let noteId = UUID().uuidString
+        let fileName = "待下载笔记.md"
+        let createdAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let mdFile = MarkdownNoteFile(
+            noteId: noteId,
+            createdAt: createdAt,
+            updatedAt: createdAt.addingTimeInterval(60),
+            title: "待下载笔记",
+            body: "下载完成后显示"
+        )
+        try storage.saveMarkdownFile(mdFile, at: tmpDir.appendingPathComponent(fileName))
+        try storage.saveIndex(NoteIndex(entries: [
+            NoteIndexEntry(noteId: noteId, fileName: fileName, mode: .plain, location: .notes)
+        ]))
+        storage.pendingMarkdownFileNames = [fileName]
+
+        let store = VaultStore(storage: storage)
+        await store.initialize()
+
+        XCTAssertEqual(store.state, .ready)
+        XCTAssertNil(store.lastError)
+        XCTAssertEqual(store.plainNotes.count, 0)
+        XCTAssertEqual(SyncStatusStore.shared.status, .pendingDownloads(count: 1))
+
+        storage.pendingMarkdownFileNames = []
+        await store.refreshFromStorage()
+
+        XCTAssertEqual(store.state, .ready)
+        XCTAssertNil(store.lastError)
+        XCTAssertTrue(store.plainNotes.contains { $0.id == noteId })
+        XCTAssertEqual(SyncStatusStore.shared.status, .saved)
+
+        SyncStatusStore.shared.setSaved()
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
+    func testRefreshFromStorageStillReportsRealErrorsAsFailedSync() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_refresh_real_error_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        try await storage.initializeVault()
+        SyncStatusStore.shared.setSaved()
+
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "test-vault-refresh-real-error")
+        storage.loadIndexError = StorageError.invalidData
+
+        await store.refreshFromStorage()
+
+        XCTAssertEqual(store.state, .error(message: StorageError.invalidData.localizedDescription))
+        XCTAssertEqual(SyncStatusStore.shared.status, .failed(message: StorageError.invalidData.localizedDescription))
+
+        SyncStatusStore.shared.setSaved()
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
     func testTagParserSpaceDelimiter() {
         let tags = TagParser.tags(in: "今天想到一个产品点 #产品 #隐私")
         XCTAssertEqual(tags, ["#产品", "#隐私"])
@@ -979,6 +1112,8 @@ final class VaultStoreTests: XCTestCase {
 private final class TemporaryStorage: VaultStorage, @unchecked Sendable {
     let fileManager = FileManager.default
     let _containerURL: URL
+    var pendingMarkdownFileNames = Set<String>()
+    var loadIndexError: Error?
 
     var containerURL: URL? { _containerURL }
     var isAvailable: Bool { true }
@@ -1013,6 +1148,9 @@ private final class TemporaryStorage: VaultStorage, @unchecked Sendable {
     }
 
     func loadIndex() throws -> NoteIndex? {
+        if let loadIndexError {
+            throw loadIndexError
+        }
         let url = _containerURL.appendingPathComponent("notes.json")
         guard fileManager.fileExists(atPath: url.path) else { return nil }
         let data = try Data(contentsOf: url)
@@ -1026,6 +1164,9 @@ private final class TemporaryStorage: VaultStorage, @unchecked Sendable {
     }
 
     func loadMarkdownFile(at url: URL) throws -> MarkdownNoteFile {
+        if pendingMarkdownFileNames.contains(url.lastPathComponent) {
+            throw StorageError.iCloudDownloadPending
+        }
         let data = try Data(contentsOf: url)
         return try MarkdownNoteFile.parse(from: data)
     }
