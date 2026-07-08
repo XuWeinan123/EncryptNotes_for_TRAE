@@ -22,7 +22,6 @@ struct MacSettingsView: View {
     @State private var deepSeekAPIKey = ""
     @State private var geminiAPIKey = ""
     @State private var apiKeyStatusMessage: String?
-    @State private var logStatusMessage: String?
 
     init(selectedTab: Tab = .general) {
         _selectedTab = State(initialValue: selectedTab == .aiTitle ? .general : selectedTab)
@@ -183,32 +182,31 @@ struct MacSettingsView: View {
             }
 
             macPanel("维护日志") {
-                toggleRow("记录维护日志", subtitle: "默认关闭；开启后记录保存、索引、冲突和文件操作元数据，不记录正文或密钥。", systemImage: "doc.text.magnifyingglass", isOn: $settings.maintenanceLoggingEnabled)
+                SWSettingsRow("开启日志记录", subtitle: "记录保存、索引、冲突和文件操作元数据，不记录正文或密钥。", systemImage: "doc.text.magnifyingglass") {
+                    if settings.maintenanceLoggingEnabled {
+                        HStack(spacing: DS.s2) {
+                            Button {
+                                openMaintenanceLogFolder()
+                            } label: {
+                                Label("打开文件夹", systemImage: "folder")
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
 
-                SWRowDivider()
-
-                SWSettingsRow("下载日志", subtitle: "导出本机维护日志，用于后续代码维护和问题排查。", systemImage: "square.and.arrow.down") {
-                    HStack(spacing: DS.s2) {
-                        Button("下载…") {
-                            exportMaintenanceLog()
+                            Button("关闭", role: .destructive) {
+                                settings.maintenanceLoggingEnabled = false
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-
-                        Button {
-                            openMaintenanceLogFolder()
-                        } label: {
-                            Label("打开文件夹", systemImage: "folder")
-                                .labelStyle(.iconOnly)
+                    } else {
+                        Button("开启") {
+                            settings.maintenanceLoggingEnabled = true
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.borderedProminent)
                         .controlSize(.small)
-                        .help("打开日志文件夹")
+                        .tint(DS.primary)
                     }
-                }
-
-                if let logStatusMessage {
-                    helperText(logStatusMessage)
                 }
             }
         }
@@ -823,26 +821,6 @@ struct MacSettingsView: View {
             if !NSWorkspace.shared.open(parentURL) {
                 settingsErrorMessage = "Finder 未能打开：\(parentURL.path)"
             }
-        }
-    }
-
-    private func exportMaintenanceLog() {
-        do {
-            let logURL = try MaintenanceLogStore.shared.exportLogFile()
-            let panel = NSSavePanel()
-            panel.title = "下载维护日志"
-            panel.message = "保存 Seal Note 的本机维护日志。"
-            panel.nameFieldStringValue = "seal-note-maintenance.log"
-            panel.allowedContentTypes = [.plainText]
-            if panel.runModal() == .OK, let saveURL = panel.url {
-                if FileManager.default.fileExists(atPath: saveURL.path) {
-                    try FileManager.default.removeItem(at: saveURL)
-                }
-                try FileManager.default.copyItem(at: logURL, to: saveURL)
-                logStatusMessage = "维护日志已导出。"
-            }
-        } catch {
-            settingsErrorMessage = "无法导出维护日志：\(error.localizedDescription)"
         }
     }
 
