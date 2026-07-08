@@ -38,6 +38,7 @@ struct StickyNoteEditorView: View {
     @State private var isToolbarHovering = false
     @State private var isFindBarVisible = false
     @State private var isMarkdownPreviewing = false
+    @State private var editorScrollY: CGFloat = 0
 
     init(note: Note, isPreview: Bool = false, startsLocked: Bool = false, initialKeyIssue: Error? = nil) {
         _viewModel = StateObject(wrappedValue: StickyNoteEditorViewModel(
@@ -54,7 +55,8 @@ struct StickyNoteEditorView: View {
                 MacMarkdownPreview(
                     text: viewModel.text,
                     fontSize: CGFloat(settings.macEditorFontSize),
-                    lineHeightMultiple: CGFloat(settings.macEditorLineHeightMultiple)
+                    lineHeightMultiple: CGFloat(settings.macEditorLineHeightMultiple),
+                    scrollY: $editorScrollY
                 )
                 .background(MacMarkdownPreviewShortcutMonitor(
                     noteId: viewModel.note.id,
@@ -286,11 +288,35 @@ struct StickyNoteEditorView: View {
     private func toggleMarkdownPreview() {
         guard !viewModel.isContentLocked, !viewModel.isEncryptionToggling else { return }
         if isMarkdownPreviewing {
+            editorScrollY = currentEditorScrollY()
             isMarkdownPreviewing = false
+            restoreEditorScrollYAfterLayout()
         } else {
+            editorScrollY = currentEditorScrollY()
             viewModel.saveImmediately()
             hideFindInterface()
             isMarkdownPreviewing = true
+        }
+    }
+
+    private func currentEditorScrollY() -> CGFloat {
+        guard let window = editorWindow(),
+              let textView = editorTextView(in: window),
+              let scrollView = textView.enclosingScrollView else {
+            return editorScrollY
+        }
+        return scrollView.contentView.bounds.origin.y
+    }
+
+    private func restoreEditorScrollYAfterLayout() {
+        let targetY = editorScrollY
+        DispatchQueue.main.async {
+            guard let window = editorWindow(),
+                  let textView = editorTextView(in: window),
+                  let scrollView = textView.enclosingScrollView else { return }
+            let maxY = max(0, (scrollView.documentView?.bounds.height ?? 0) - scrollView.contentView.bounds.height)
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: min(max(0, targetY), maxY)))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
         }
     }
 
@@ -410,6 +436,7 @@ private struct MacMarkdownPreview: View {
     let text: String
     let fontSize: CGFloat
     let lineHeightMultiple: CGFloat
+    @Binding var scrollY: CGFloat
     @State private var titlebarHeight: CGFloat = MacStickyEditorLayout.toolbarHoverRegionHeight
 
     private var previewFont: Font {
@@ -449,9 +476,174 @@ private struct MacMarkdownPreview: View {
             .padding(.top, titlebarHeight + textInset.height)
             .padding(.horizontal, textInset.width)
             .padding(.bottom, MacStickyEditorLayout.editorBottomInset)
+            .background(MacScrollPositionProbe(scrollY: $scrollY))
         }
         .scrollIndicators(.hidden)
         .background(MacTitlebarHeightReader(height: $titlebarHeight))
+    }
+}
+
+private struct MacScrollPositionProbe: NSViewRepresentable {
+    @Binding var scrollY: CGFloat
+
+    func makeNSView(context: Context) -> MacScrollPositionProbeView {
+        let view = MacScrollPositionProbeView()
+        view.onScroll = { scrollY = $0 }
+        view.setTargetY(scrollY)
+        return view
+    }
+
+    func updateNSView(_ nsView: MacScrollPositionProbeView, context: Context) {
+        nsView.onScroll = { scrollY = $0 }
+        nsView.setTargetY(scrollY)
+    }
+
+    static func dismantleNSView(_ nsView: MacScrollPositionProbeView, coordinator: ()) {
+        nsView.stopObserving()
+    }
+}
+
+private final class MacScrollPositionProbeView: NSView {
+    var onScroll: ((CGFloat) -> Void)?
+    private var targetY: CGFloat = 0
+    private weak var observedClipView: NSClipView?
+    private weak var observedDocumentView: NSView?
+    private var didApplyTarget = false
+    private var appliedTargetY: CGFloat?
+    private var restoreGeneration = 0
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            stopObserving()
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.observeScrollViewIfNeeded()
+                self?.scheduleApplyTarget()
+            }
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        scheduleApplyTarget()
+    }
+
+    deinit {
+        stopObserving()
+    }
+
+    func stopObserving() {
+        if let observedClipView {
+            NotificationCenter.default.removeObserver(
+                self,
+                name: NSView.boundsDidChangeNotification,
+                object: observedClipView
+            )
+        }
+        if let observedDocumentView {
+            NotificationCenter.default.removeObserver(
+                self,
+                name: NSView.frameDidChangeNotification,
+                object: observedDocumentView
+            )
+        }
+        observedClipView = nil
+        observedDocumentView = nil
+        didApplyTarget = false
+        appliedTargetY = nil
+        restoreGeneration += 1
+    }
+
+    func setTargetY(_ value: CGFloat) {
+        if abs(value - targetY) > 0.5 {
+            targetY = value
+            didApplyTarget = false
+            appliedTargetY = nil
+            restoreGeneration += 1
+        }
+        scheduleApplyTarget()
+    }
+
+    private func scheduleApplyTarget(retry: Int = 0) {
+        let generation = restoreGeneration
+        DispatchQueue.main.async { [weak self] in
+            self?.applyTargetIfNeeded(generation: generation, retry: retry)
+        }
+    }
+
+    private func applyTargetIfNeeded(generation: Int, retry: Int) {
+        guard generation == restoreGeneration else { return }
+        if let appliedTargetY, abs(appliedTargetY - targetY) > 0.5 {
+            didApplyTarget = false
+            self.appliedTargetY = nil
+        }
+        guard !didApplyTarget else { return }
+        guard let scrollView = enclosingScrollView() else {
+            if retry < 30 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.016) { [weak self] in
+                    self?.applyTargetIfNeeded(generation: generation, retry: retry + 1)
+                }
+            }
+            return
+        }
+        observeScrollViewIfNeeded()
+        let maxY = max(0, (scrollView.documentView?.bounds.height ?? 0) - scrollView.contentView.bounds.height)
+        if targetY > 0, maxY <= 0, retry < 30 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.016) { [weak self] in
+                self?.applyTargetIfNeeded(generation: generation, retry: retry + 1)
+            }
+            return
+        }
+        didApplyTarget = true
+        appliedTargetY = targetY
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: min(max(0, targetY), maxY)))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
+    private func observeScrollViewIfNeeded() {
+        guard let scrollView = enclosingScrollView() else { return }
+        if observedClipView == nil {
+            let clipView = scrollView.contentView
+            observedClipView = clipView
+            clipView.postsBoundsChangedNotifications = true
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(boundsDidChange(_:)),
+                name: NSView.boundsDidChangeNotification,
+                object: clipView
+            )
+        }
+        if observedDocumentView == nil, let documentView = scrollView.documentView {
+            observedDocumentView = documentView
+            documentView.postsFrameChangedNotifications = true
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(documentFrameDidChange(_:)),
+                name: NSView.frameDidChangeNotification,
+                object: documentView
+            )
+        }
+    }
+
+    @objc private func boundsDidChange(_ notification: Notification) {
+        guard let clipView = notification.object as? NSClipView else { return }
+        onScroll?(clipView.bounds.origin.y)
+    }
+
+    @objc private func documentFrameDidChange(_ notification: Notification) {
+        scheduleApplyTarget()
+    }
+
+    private func enclosingScrollView() -> NSScrollView? {
+        var nextView = superview
+        while let view = nextView {
+            if let scrollView = view as? NSScrollView {
+                return scrollView
+            }
+            nextView = view.superview
+        }
+        return nil
     }
 }
 
@@ -764,6 +956,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
     private var copyResetTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
     private var initialKeyIssue: Error?
+    private var didGenerateLocalTitle = false
 
     var isContentEmpty: Bool {
         let body = isContentLocked ? note.body : text
@@ -967,9 +1160,14 @@ final class StickyNoteEditorViewModel: ObservableObject {
 
     private func saveSnapshot(_ snapshot: String, note noteToUpdate: Note) async -> Bool {
         do {
-            try await vaultStore.updateNote(noteToUpdate, body: snapshot)
+            try await vaultStore.updateNote(noteToUpdate, body: snapshot, renameIfUntitled: false)
             if let updatedNote = vaultStore.readableNotes.first(where: { $0.id == noteToUpdate.id }) {
                 note = updatedNote
+                await generateLocalTitleIfNeeded(
+                    for: updatedNote,
+                    body: snapshot,
+                    requiresCompletedFirstLine: true
+                )
             }
             syncStore.setSaved()
             return true
@@ -1154,10 +1352,72 @@ final class StickyNoteEditorViewModel: ObservableObject {
                   let savedNote = vaultStore.readableNotes.first(where: { $0.id == noteToUpdate.id }) else {
                 return
             }
-            if canGenerateTitle {
+            await generateLocalTitleIfNeeded(
+                for: savedNote,
+                body: snapshot,
+                requiresCompletedFirstLine: false
+            )
+            if canGenerateTitle, !vaultStore.hasStableTitle(for: savedNote) {
                 await generateAITitleIfNeeded(for: savedNote, body: snapshot)
             }
         }
+    }
+
+    private func generateLocalTitleIfNeeded(
+        for savedNote: Note,
+        body: String,
+        requiresCompletedFirstLine: Bool
+    ) async {
+        guard !didGenerateLocalTitle else { return }
+        guard !vaultStore.hasStableTitle(for: savedNote) else {
+            didGenerateLocalTitle = true
+            return
+        }
+        guard let candidate = Self.localTitleCandidate(
+            in: body,
+            requiresCompletedFirstLine: requiresCompletedFirstLine
+        ) else {
+            return
+        }
+
+        do {
+            try await vaultStore.renameNote(
+                savedNote,
+                title: candidate.title,
+                limitsLength: candidate.limitsLength
+            )
+            didGenerateLocalTitle = true
+        } catch {
+            // Local title generation is opportunistic; saving remains the source of truth.
+        }
+    }
+
+    private static func localTitleCandidate(
+        in body: String,
+        requiresCompletedFirstLine: Bool
+    ) -> (title: String, limitsLength: Bool)? {
+        let normalized = body
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let lines = normalized.components(separatedBy: "\n")
+
+        for (index, line) in lines.enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            guard !requiresCompletedFirstLine || index < lines.count - 1 else { return nil }
+            guard NoteTitleFormatter.sanitizedGeneratedTitle(
+                trimmed,
+                limitsLength: !NoteTitleFormatter.firstNonEmptyLineIsMarkdownHeading(in: trimmed)
+            ) != nil else {
+                return nil
+            }
+            return (
+                title: trimmed,
+                limitsLength: !NoteTitleFormatter.firstNonEmptyLineIsMarkdownHeading(in: trimmed)
+            )
+        }
+
+        return nil
     }
 
     private func generateAITitleIfNeeded(for savedNote: Note, body: String) async {

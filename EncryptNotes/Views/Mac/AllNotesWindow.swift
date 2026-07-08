@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import AppKit
 
 struct AllNotesView: View {
     @ObservedObject private var vaultStore = VaultStore.shared
@@ -11,74 +12,21 @@ struct AllNotesView: View {
     @State private var renameTitle = ""
     @State private var renameErrorMessage: String?
     @State private var isRenamingNote = false
+    @State private var isSearchBarVisible = false
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: DS.s2) {
-                HStack(spacing: DS.s2) {
-                    SWSearchField(placeholder: "搜索笔记…", text: $searchText)
-                        .frame(minWidth: 260)
-
-                    SWStatusBadge(noteCountText, systemImage: "doc.text", style: .neutral)
-                    if !emptyNotes.isEmpty {
-                        SWStatusBadge("\(emptyNotes.count) 条空笔记", systemImage: "exclamationmark.triangle", style: .warning)
-                    }
-
-                    Spacer(minLength: 0)
-
-                    Button {
-                        showingClearEmptyConfirmation = true
-                    } label: {
-                        Label("清空空笔记", systemImage: "trash")
-                    }
-                    .font(DS.caption())
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .tint(DS.destructive)
-                    .disabled(emptyNotes.isEmpty || isClearingEmptyNotes)
-                    .help(emptyNotes.isEmpty ? "没有空笔记" : "将空笔记移到回收站")
-                }
-
-                if !vaultStore.allTags.isEmpty || selectedTag != nil {
-                    HStack(spacing: DS.s1) {
-                        SWFilterChip(title: "全部", isSelected: selectedTag == nil) {
-                            selectedTag = nil
-                        }
-                        ForEach(visibleTagCounts) { tagCount in
-                            SWFilterChip(title: tagCount.tag, isSelected: selectedTag == tagCount.tag) {
-                                selectedTag = tagCount.tag
-                            }
-                        }
-                        if let selectedTag, !visibleTagCounts.contains(where: { $0.tag == selectedTag }) {
-                            SWFilterChip(title: selectedTag, isSelected: true) {}
-                        }
-                        if !overflowTagCounts.isEmpty {
-                            Menu {
-                                ForEach(overflowTagCounts) { tagCount in
-                                    Button(tagCount.tag) {
-                                        selectedTag = tagCount.tag
-                                    }
-                                }
-                            } label: {
-                                Label("更多", systemImage: "ellipsis")
-                                    .font(DS.caption())
-                            }
-                            .menuStyle(.button)
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+            if isSearchBarVisible {
+                MacListSearchBar(
+                    placeholder: "搜索笔记…",
+                    text: $searchText,
+                    onClose: { hideSearchBar() }
+                )
             }
-            .padding(.horizontal, DS.s3)
-            .padding(.vertical, DS.s2)
-            .background(DS.surfaceRaised)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(DS.line)
-                    .frame(height: 0.5)
-            }
+
+            listSummary
+
+            tagFilters
 
             List {
                 if isLoading {
@@ -124,6 +72,10 @@ struct AllNotesView: View {
             .background(DS.bg)
         }
         .background(DS.bg)
+        .dsLiquidGlassToolbar()
+        .navigationTitle("全部笔记")
+        .toolbar { allNotesToolbar }
+        .background(MacListSearchToolbarAppearance(isActive: isSearchBarVisible))
         .sheet(isPresented: renameSheetBinding) {
             if let note = renamingNote {
                 AllNotesRenameSheet(
@@ -144,6 +96,95 @@ struct AllNotesView: View {
                 },
                 secondaryButton: .cancel()
             )
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var allNotesToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button {
+                toggleSearchBar()
+            } label: {
+                Label("搜索", systemImage: "magnifyingglass")
+                    .labelStyle(.iconOnly)
+            }
+            .help("搜索")
+            .keyboardShortcut("f", modifiers: .command)
+
+            Button {
+                showingClearEmptyConfirmation = true
+            } label: {
+                Label("清空空笔记", systemImage: "trash")
+                    .labelStyle(.iconOnly)
+            }
+            .tint(DS.destructive)
+            .disabled(emptyNotes.isEmpty || isClearingEmptyNotes)
+            .help(emptyNotes.isEmpty ? "没有空笔记" : "将空笔记移到回收站")
+        }
+    }
+
+    private func toggleSearchBar() {
+        if isSearchBarVisible {
+            hideSearchBar()
+        } else {
+            isSearchBarVisible = true
+        }
+    }
+
+    private func hideSearchBar() {
+        isSearchBarVisible = false
+        searchText = ""
+    }
+
+    private var listSummary: some View {
+        HStack(spacing: DS.s2) {
+            Text(noteCountText)
+                .font(DS.caption())
+                .foregroundColor(DS.textSubtle)
+            if !emptyNotes.isEmpty {
+                SWStatusBadge("\(emptyNotes.count) 条空笔记", systemImage: "exclamationmark.triangle", style: .warning)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, DS.s3)
+        .padding(.top, DS.s3)
+        .padding(.bottom, DS.s2)
+    }
+
+    @ViewBuilder
+    private var tagFilters: some View {
+        if !vaultStore.allTags.isEmpty || selectedTag != nil {
+            HStack(spacing: DS.s1) {
+                SWFilterChip(title: "全部", isSelected: selectedTag == nil) {
+                    selectedTag = nil
+                }
+                ForEach(visibleTagCounts) { tagCount in
+                    SWFilterChip(title: tagCount.tag, isSelected: selectedTag == tagCount.tag) {
+                        selectedTag = tagCount.tag
+                    }
+                }
+                if let selectedTag, !visibleTagCounts.contains(where: { $0.tag == selectedTag }) {
+                    SWFilterChip(title: selectedTag, isSelected: true) {}
+                }
+                if !overflowTagCounts.isEmpty {
+                    Menu {
+                        ForEach(overflowTagCounts) { tagCount in
+                            Button(tagCount.tag) {
+                                selectedTag = tagCount.tag
+                            }
+                        }
+                    } label: {
+                        Label("更多", systemImage: "ellipsis")
+                            .font(DS.caption())
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, DS.s3)
+            .padding(.bottom, DS.s2)
         }
     }
 
@@ -179,7 +220,7 @@ struct AllNotesView: View {
     }
 
     private var noteCountText: String {
-        isLoading ? "加载中" : "\(filteredNotes.count) 条"
+        isLoading ? "全部笔记加载中" : "全部 \(filteredNotes.count) 条笔记"
     }
 
     private var emptyNotes: [Note] {
@@ -377,5 +418,102 @@ private struct AllNotesRenameSheet: View {
         .padding(DS.s4)
         .frame(width: 420)
         .background(DS.bg)
+    }
+}
+
+struct MacListSearchBar: View {
+    let placeholder: String
+    @Binding var text: String
+    let onClose: () -> Void
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        HStack(spacing: DS.s2) {
+            HStack(spacing: DS.s2) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(DS.textSubtle)
+
+                TextField(placeholder, text: $text)
+                    .textFieldStyle(.plain)
+                    .font(DS.body())
+                    .focused($isFocused)
+
+                if !text.isEmpty {
+                    Button {
+                        text = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(DS.textSubtle)
+                    }
+                    .buttonStyle(.plain)
+                    .help("清空搜索")
+                }
+            }
+            .padding(.horizontal, DS.s3)
+            .padding(.vertical, DS.s2)
+            .dsInputSurface(cornerRadius: DS.rMd)
+
+            Button {
+                onClose()
+            } label: {
+                Label("关闭搜索", systemImage: "xmark")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.plain)
+            .foregroundColor(DS.textSecondary)
+            .help("关闭搜索")
+        }
+        .padding(.horizontal, DS.s3)
+        .padding(.vertical, DS.s2)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(DS.line)
+                .frame(height: 0.5)
+        }
+        .onAppear {
+            DispatchQueue.main.async {
+                isFocused = true
+            }
+        }
+        .onExitCommand {
+            onClose()
+        }
+    }
+}
+
+struct MacListSearchToolbarAppearance: NSViewRepresentable {
+    let isActive: Bool
+
+    func makeNSView(context: Context) -> MacListSearchToolbarAppearanceView {
+        let view = MacListSearchToolbarAppearanceView()
+        view.isActive = isActive
+        return view
+    }
+
+    func updateNSView(_ nsView: MacListSearchToolbarAppearanceView, context: Context) {
+        nsView.isActive = isActive
+        nsView.apply()
+    }
+
+    static func dismantleNSView(_ nsView: MacListSearchToolbarAppearanceView, coordinator: ()) {
+        nsView.isActive = false
+        nsView.apply()
+    }
+}
+
+final class MacListSearchToolbarAppearanceView: NSView {
+    var isActive = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        apply()
+    }
+
+    func apply() {
+        guard let window else { return }
+        window.titlebarAppearsTransparent = !isActive
+        window.backgroundColor = isActive ? .white : .textBackgroundColor
+        window.titlebarSeparatorStyle = isActive ? .line : .automatic
     }
 }

@@ -102,7 +102,7 @@ final class SettingsStore: ObservableObject {
     static let macEditorFontSizeRange: ClosedRange<Double> = 12...18
     static let macEditorFontSizeStep: Double = 1
     static let defaultMacEditorFontSize: Double = 14
-    static let defaultMacEditorLineHeightMultiple: Double = 1.25
+    static let defaultMacEditorLineHeightMultiple: Double = 1.5
     static let macEditorLineHeightRange: ClosedRange<Double> = 1.2...2.0
     static let defaultMacTheme: MacTheme = .pink
     static let macThemeDefaultsKey = "SNMacTheme"
@@ -168,6 +168,10 @@ final class SettingsStore: ObservableObject {
 
     @Published var autoDeleteEmptyNotes: Bool {
         didSet { defaults.set(autoDeleteEmptyNotes, forKey: Keys.autoDeleteEmptyNotes) }
+    }
+
+    @Published var autoRenameNotesOnSave: Bool {
+        didSet { defaults.set(autoRenameNotesOnSave, forKey: Keys.autoRenameNotesOnSave) }
     }
 
     @Published var maintenanceLoggingEnabled: Bool {
@@ -283,6 +287,7 @@ final class SettingsStore: ObservableObject {
 
         self.copyAddsParagraphSpacing = defaults.object(forKey: Keys.copyAddsParagraphSpacing) as? Bool ?? false
         self.autoDeleteEmptyNotes = defaults.object(forKey: Keys.autoDeleteEmptyNotes) as? Bool ?? true
+        self.autoRenameNotesOnSave = defaults.object(forKey: Keys.autoRenameNotesOnSave) as? Bool ?? false
         self.maintenanceLoggingEnabled = defaults.object(forKey: Keys.maintenanceLoggingEnabled) as? Bool ?? false
         self.macTheme = MacTheme(rawValue: defaults.string(forKey: Self.macThemeDefaultsKey) ?? "") ?? Self.defaultMacTheme
         let storedRecentNotesLimit = defaults.integer(forKey: Keys.macRecentNotesLimit)
@@ -321,6 +326,7 @@ final class SettingsStore: ObservableObject {
         macEditorLineHeightMultiple = Self.defaultMacEditorLineHeightMultiple
         copyAddsParagraphSpacing = false
         autoDeleteEmptyNotes = true
+        autoRenameNotesOnSave = false
         maintenanceLoggingEnabled = false
         macTheme = Self.defaultMacTheme
         macRecentNotesLimit = Self.defaultMacRecentNotesLimit
@@ -435,6 +441,7 @@ final class SettingsStore: ObservableObject {
         static let macEditorLineHeightMultiple = "SNMacEditorLineHeightMultiple"
         static let copyAddsParagraphSpacing = "SNCopyAddsParagraphSpacing"
         static let autoDeleteEmptyNotes = "SNAutoDeleteEmptyNotes"
+        static let autoRenameNotesOnSave = "SNAutoRenameNotesOnSave"
         static let maintenanceLoggingEnabled = "SNMaintenanceLoggingEnabled"
         static let macRecentNotesLimit = "SNMacRecentNotesLimit"
         static let iOSAppIconName = "SNIOSAppIconName"

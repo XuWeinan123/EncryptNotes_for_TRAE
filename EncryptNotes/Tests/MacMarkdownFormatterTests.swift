@@ -51,8 +51,8 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testHTMLCommentEmptySelectionInsertsPlaceholder() {
         let result = MacMarkdownFormatter.apply(command: .htmlComment, to: "", selection: .init(location: 0, length: 0))
-        XCTAssertEqual(result.text, "<!-- comment -->")
-        XCTAssertEqual(result.selection, NSRange(location: 5, length: 7))
+        XCTAssertEqual(result.text, "<!--待办-->")
+        XCTAssertEqual(result.selection, NSRange(location: 4, length: 2))
     }
 
     func testLinkEmptySelectionPlacesCursorInBrackets() {
@@ -196,11 +196,11 @@ final class MacMarkdownFormatterTests: XCTestCase {
     }
 
     func testCommentToggleRemovesMarker() {
-        let text = "<!-- hello -->"
+        let text = "<!--hello-->"
         let result = MacMarkdownFormatter.apply(
             command: .htmlComment,
             to: text,
-            selection: NSRange(location: 5, length: 5)
+            selection: NSRange(location: 4, length: 5)
         )
         XCTAssertEqual(result.text, "hello")
         XCTAssertEqual(result.selection, NSRange(location: 0, length: 5))

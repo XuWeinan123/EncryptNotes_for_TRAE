@@ -263,6 +263,10 @@ struct MacSettingsView: View {
                 SWRowDivider()
 
                 toggleRow("关闭空白笔记时自动丢弃", subtitle: "正文为空的便利贴关闭后直接移除。", systemImage: "trash", isOn: $settings.autoDeleteEmptyNotes)
+
+                SWRowDivider()
+
+                toggleRow("自动命名笔记", subtitle: "开启后每次自动保存都会按正文重新命名；关闭时仅保留手动标题和首次标题规则。", systemImage: "text.cursor", isOn: $settings.autoRenameNotesOnSave)
             }
         }
     }

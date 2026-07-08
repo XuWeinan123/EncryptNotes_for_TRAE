@@ -23,7 +23,7 @@ nonisolated struct Note: Identifiable, Equatable, Sendable {
 }
 
 nonisolated enum NoteTitleFormatter {
-    static let emptyTitle = "（空笔记）"
+    static let emptyTitle = "临时笔记"
     static let generatedTitleMaxLength = 20
 
     static func displayTitle(from body: String, emptyTitle: String = Self.emptyTitle) -> String {
@@ -69,8 +69,8 @@ nonisolated enum NoteTitleFormatter {
         return cleaned.isEmpty ? emptyTitle : cleaned
     }
 
-    static func sanitizedGeneratedTitle(_ title: String) -> String? {
-        let cleaned = sanitizedTitle(title, emptyTitle: "", limitsLength: true)
+    static func sanitizedGeneratedTitle(_ title: String, limitsLength: Bool = true) -> String? {
+        let cleaned = sanitizedTitle(title, emptyTitle: "", limitsLength: limitsLength)
         return cleaned.isEmpty ? nil : cleaned
     }
 

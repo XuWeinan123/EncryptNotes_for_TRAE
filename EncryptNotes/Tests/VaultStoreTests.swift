@@ -57,6 +57,32 @@ final class VaultStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testUntitledAutosaveCanPreserveTemporaryFileNameUntilExplicitRename() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_deferred_title_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "test-vault-deferred-title")
+
+        let note = try await store.createNote(body: "", isEncrypted: false)
+        let initialURL = try savedNoteURL(in: tmpDir, noteId: note.id)
+        XCTAssertEqual(initialURL.lastPathComponent, "临时笔记.md")
+
+        try await store.updateNote(note, body: "#", renameIfUntitled: false)
+        let autosavedURL = try savedNoteURL(in: tmpDir, noteId: note.id)
+        XCTAssertEqual(autosavedURL.lastPathComponent, "临时笔记.md")
+
+        guard let savedNote = store.readableNotes.first(where: { $0.id == note.id }) else {
+            return XCTFail("Expected updated note")
+        }
+        try await store.renameNote(savedNote, title: "# 标题", limitsLength: false)
+
+        let renamedURL = try savedNoteURL(in: tmpDir, noteId: note.id)
+        XCTAssertEqual(renamedURL.lastPathComponent, "标题.md")
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
     func testRenameNoteChangesFileNameButLeavesMarkdownContentUntouched() async throws {
         let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_ai_title_rename_\(UUID().uuidString)")
         let storage = try TemporaryStorage(baseURL: tmpDir)
@@ -392,6 +418,25 @@ final class VaultStoreTests: XCTestCase {
 
         store.searchText = "项目标题"
         XCTAssertEqual(store.filteredNotes, [.readable(encrypted)])
+    }
+
+    @MainActor
+    func testPlainNotesSearchStableTitleAndBody() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_plain_title_search_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "test-plain-title-search")
+
+        let note = try await store.createNote(body: "假装是", isEncrypted: false)
+        try await store.renameNote(note, title: "标题内容")
+
+        store.searchText = "标题"
+        XCTAssertEqual(store.filteredNotes.map(\.id), [note.id])
+
+        store.searchText = "假装"
+        XCTAssertEqual(store.filteredNotes.map(\.id), [note.id])
+
+        try? FileManager.default.removeItem(at: tmpDir)
     }
 
     @MainActor
