@@ -22,11 +22,14 @@ struct AllNotesView: View {
                 )
             }
 
-            listSummary
-
             tagFilters
 
             List {
+                listSummary
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(DS.bg)
+
                 if isLoading {
                     SWEmptyState(
                         title: "正在加载笔记",
@@ -49,18 +52,11 @@ struct AllNotesView: View {
                     ForEach(filteredNotes) { item in
                         noteRow(for: item)
                             .contentShape(Rectangle())
-                            .onTapGesture(count: 2) {
+                            .onTapGesture {
                                 openNote(item)
                             }
                             .contextMenu {
-                                Button("打开") { openNote(item) }
-                                if case .readable(let note) = item {
-                                    Button("重命名...") { beginRenaming(note) }
-                                }
-                                Divider()
-                                Button("移到回收站", role: .destructive) {
-                                    deleteNote(item)
-                                }
+                                noteContextMenu(for: item)
                             }
                     }
                 }
@@ -116,6 +112,7 @@ struct AllNotesView: View {
 
     private var listSummary: some View {
         HStack(spacing: DS.s2) {
+            Spacer(minLength: 0)
             Text(noteCountText)
                 .font(DS.caption())
                 .foregroundColor(DS.textSubtle)
@@ -189,7 +186,7 @@ struct AllNotesView: View {
             result.append(contentsOf: locked.map { .locked($0) })
         }
 
-        return result
+        return result.sorted(by: NoteListOrdering.newestCreatedFirst)
     }
 
     private var isLoading: Bool {
@@ -198,7 +195,17 @@ struct AllNotesView: View {
     }
 
     private var noteCountText: String {
-        isLoading ? "全部笔记加载中" : "全部 \(filteredNotes.count) 条笔记"
+        guard !isLoading else { return "全部笔记加载中" }
+        let encryptedCount = filteredNotes.filter { item in
+            switch item {
+            case .readable(let note): return note.isEncrypted
+            case .locked: return true
+            }
+        }.count
+        if encryptedCount > 0 {
+            return "共 \(filteredNotes.count) 条笔记，加密笔记 \(encryptedCount) 条"
+        }
+        return "共 \(filteredNotes.count) 条笔记"
     }
 
     private var emptyNotes: [Note] {
@@ -227,44 +234,42 @@ struct AllNotesView: View {
     private func noteRow(for item: NoteListItem) -> some View {
         switch item {
         case .readable(let note):
-            SWNoteListRow(
+            AllNotesListRow(
                 title: vaultStore.displayTitle(for: note, emptyTitle: NoteTitleFormatter.emptyTitle),
-                subtitle: note.isEncrypted ? "加密笔记" : "明文笔记",
-                systemImage: note.isEncrypted ? "lock.fill" : "doc.text",
-                tint: note.isEncrypted ? DS.primaryDeep : DS.textSubtle,
-                style: .compact
-            ) {
-                HStack(spacing: DS.s2) {
-                    if note.isEncrypted {
-                        SWStatusBadge("加密", systemImage: "lock.fill", style: .neutral)
-                    }
-                    Text(timeString(from: note.updatedAt))
-                        .font(DS.caption())
-                        .foregroundColor(DS.textSubtle)
-                }
-            }
+                subtitle: note.isEncrypted ? "" : notePreview(for: note),
+                isLocked: note.isEncrypted,
+                timeText: timeString(from: note.createdAt),
+                onOpen: { openNote(item) },
+                menu: { noteContextMenu(for: item) }
+            )
             .listRowInsets(EdgeInsets(top: DS.s1, leading: DS.s3, bottom: DS.s1, trailing: DS.s3))
             .listRowSeparator(.hidden)
             .listRowBackground(DS.bg)
 
         case .locked(let info):
-            SWNoteListRow(
+            AllNotesListRow(
                 title: info.title,
-                subtitle: "加密笔记",
-                systemImage: "lock.fill",
-                tint: DS.textSubtle,
-                style: .compact
-            ) {
-                HStack(spacing: DS.s2) {
-                    SWStatusBadge("锁定", systemImage: "lock.fill", style: .neutral)
-                    Text(timeString(from: info.updatedAt))
-                        .font(DS.caption())
-                        .foregroundColor(DS.textSubtle)
-                }
-            }
+                subtitle: "",
+                isLocked: true,
+                timeText: timeString(from: info.createdAt),
+                onOpen: { openNote(item) },
+                menu: { noteContextMenu(for: item) }
+            )
             .listRowInsets(EdgeInsets(top: DS.s1, leading: DS.s3, bottom: DS.s1, trailing: DS.s3))
             .listRowSeparator(.hidden)
             .listRowBackground(DS.bg)
+        }
+    }
+
+    @ViewBuilder
+    private func noteContextMenu(for item: NoteListItem) -> some View {
+        Button("打开") { openNote(item) }
+        if case .readable(let note) = item {
+            Button("重命名...") { beginRenaming(note) }
+        }
+        Divider()
+        Button("移到回收站", role: .destructive) {
+            deleteNote(item)
         }
     }
 
@@ -284,9 +289,11 @@ struct AllNotesView: View {
     }
 
     private func timeString(from date: Date) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        return formatter.localizedString(for: date, relativeTo: Date())
+        DateFormatters.formatNoteListRelativeTime(date)
+    }
+
+    private func notePreview(for note: Note) -> String {
+        NoteTitleFormatter.displayTitle(from: note.body, emptyTitle: "")
     }
 
     private func openNote(_ item: NoteListItem) {
@@ -342,6 +349,93 @@ struct AllNotesView: View {
         }
     }
 
+}
+
+private struct AllNotesListRow<MenuContent: View>: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
+
+    let title: String
+    let subtitle: String
+    let isLocked: Bool
+    let timeText: String
+    let onOpen: () -> Void
+    @ViewBuilder let menu: () -> MenuContent
+
+    var body: some View {
+        HStack(spacing: DS.s3) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(DS.textStrong)
+                    .lineLimit(1)
+
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(DS.caption())
+                        .foregroundColor(DS.textSubtle)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: DS.s3)
+
+            if isHovering {
+                HStack(spacing: DS.s1) {
+                    SWSettingsActionButton(.icon(systemImage: "arrow.up.right"), style: .light, action: onOpen)
+                        .help("打开")
+
+                    Menu {
+                        menu()
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(DS.textSecondary)
+                            .frame(width: 28, height: 28)
+                            .background(DS.surfaceSunken)
+                            .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
+                                    .stroke(DS.line, lineWidth: 0.5)
+                            )
+                    }
+                    .menuStyle(.borderlessButton)
+                    .buttonStyle(.plain)
+                    .help("更多操作")
+                }
+            } else {
+                HStack(spacing: DS.s2) {
+                    if isLocked {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(DS.textSecondary)
+                            .frame(width: 22, height: 22)
+                            .background(DS.surfaceSunken)
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(DS.line, lineWidth: 0.5))
+                    }
+
+                    Text(timeText)
+                        .font(DS.caption())
+                        .foregroundColor(DS.textSubtle)
+                        .monospacedDigit()
+                }
+            }
+        }
+        .padding(.horizontal, DS.s3)
+        .padding(.vertical, 10)
+        .frame(minHeight: 58)
+        .background(isHovering ? DS.primaryContainer.opacity(0.42) : DS.surfaceCard.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
+                .stroke(isHovering ? DS.primary.opacity(0.28) : DS.line, lineWidth: 0.5)
+        )
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: isHovering)
+        .onHover { hovering in
+            isHovering = hovering
+        }
+    }
 }
 
 private struct AllNotesRenameSheet: View {

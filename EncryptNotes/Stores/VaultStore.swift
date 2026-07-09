@@ -44,6 +44,7 @@ nonisolated struct EncryptedNoteInfo: Identifiable, Equatable {
     let title: String
     let ciphertextPreview: String
     let fileSize: Int
+    let createdAt: Date
     let updatedAt: Date
 }
 
@@ -209,7 +210,12 @@ final class VaultStore: ObservableObject {
     var isUsingICloudStorage: Bool { storage is ICloudVaultStorage }
 
     var readableNotes: [Note] {
-        (plainNotes + decryptedNotes).sorted { $0.updatedAt > $1.updatedAt }
+        (plainNotes + decryptedNotes).sorted {
+            if $0.createdAt != $1.createdAt {
+                return $0.createdAt > $1.createdAt
+            }
+            return $0.id < $1.id
+        }
     }
 
     func displayTitle(for note: Note, emptyTitle: String = NoteTitleFormatter.emptyTitle) -> String {
@@ -269,7 +275,7 @@ final class VaultStore: ObservableObject {
             items.append(contentsOf: locked.map { .locked($0) })
         }
 
-        return items
+        return items.sorted(by: NoteListOrdering.newestCreatedFirst)
     }
 
     var allTags: [TagCount] {
@@ -674,6 +680,7 @@ final class VaultStore: ObservableObject {
                                 title: title(for: entry, mdFile: mdFile),
                                 ciphertextPreview: String(mdFile.body.prefix(50)),
                                 fileSize: size,
+                                createdAt: mdFile.createdAt,
                                 updatedAt: mdFile.updatedAt
                             ))
                         }
@@ -684,6 +691,7 @@ final class VaultStore: ObservableObject {
                             title: title(for: entry, mdFile: mdFile),
                             ciphertextPreview: String(mdFile.body.prefix(50)),
                             fileSize: size,
+                            createdAt: mdFile.createdAt,
                             updatedAt: mdFile.updatedAt
                         ))
                     }
@@ -2214,6 +2222,20 @@ nonisolated enum NoteListItem: Identifiable, Equatable {
         switch self {
         case .readable(let note): return note.id
         case .locked(let info): return info.id
+        }
+    }
+
+    var createdAt: Date {
+        switch self {
+        case .readable(let note): return note.createdAt
+        case .locked(let info): return info.createdAt
+        }
+    }
+
+    var updatedAt: Date {
+        switch self {
+        case .readable(let note): return note.updatedAt
+        case .locked(let info): return info.updatedAt
         }
     }
 }

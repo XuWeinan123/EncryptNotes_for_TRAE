@@ -35,7 +35,7 @@
 				App/Mac/MacAppDelegate.swift,
 				App/Mac/MacAppIconController.swift,
 				App/Mac/MacMainMenuController.swift,
-				Info-iOS.plist,
+				"Info-iOS.plist",
 				Stores/Mac/MacNoteWindowStore.swift,
 				Stores/Mac/ShortcutStore.swift,
 				Tests/CryptoServiceTests.swift,

@@ -3,6 +3,10 @@ import Foundation
 import AppKit
 import SwiftUI
 #endif
+#if os(iOS)
+import UIKit
+import SwiftUI
+#endif
 
 enum MarkdownHighlightRole: Equatable {
     case headingMarker
@@ -923,6 +927,99 @@ extension MacMarkdownHighlighter {
             mutable.addAttributes(mergedAttrs, range: span.range)
         }
         return mutable
+    }
+}
+#endif
+
+#if os(iOS)
+extension MacMarkdownHighlighter {
+    static func makeIOSHighlightedAttributedString(text: String, fontSize: CGFloat, lineHeightMultiple: CGFloat = 1.3) -> NSAttributedString {
+        let bodyFont = UIFont.systemFont(ofSize: fontSize)
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineHeightMultiple = lineHeightMultiple
+
+        let mutable = NSMutableAttributedString(string: text)
+        let fullRange = NSRange(location: 0, length: (text as NSString).length)
+        mutable.setAttributes([
+            .font: bodyFont,
+            .foregroundColor: UIColor(DS.textBody),
+            .paragraphStyle: paragraphStyle
+        ], range: fullRange)
+
+        let spans = highlight(text)
+        for span in spans {
+            var attrs = iosAttributes(for: span.role, fontSize: fontSize)
+            if attrs[.paragraphStyle] == nil {
+                attrs[.paragraphStyle] = paragraphStyle
+            }
+            mutable.addAttributes(attrs, range: span.range)
+        }
+
+        return mutable
+    }
+
+    static func iosTypingAttributes(fontSize: CGFloat, lineHeightMultiple: CGFloat = 1.3) -> [NSAttributedString.Key: Any] {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineHeightMultiple = lineHeightMultiple
+        return [
+            .font: UIFont.systemFont(ofSize: fontSize),
+            .foregroundColor: UIColor(DS.textBody),
+            .paragraphStyle: paragraphStyle
+        ]
+    }
+
+    private static func iosAttributes(for role: MarkdownHighlightRole, fontSize: CGFloat) -> [NSAttributedString.Key: Any] {
+        let bodyFont = UIFont.systemFont(ofSize: fontSize)
+        let monoFont = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+
+        switch role {
+        case .headingMarker:
+            return [.foregroundColor: UIColor(DS.ai), .font: bodyFont]
+        case .headingText:
+            return [.foregroundColor: UIColor(DS.textEmphasize), .font: UIFont.systemFont(ofSize: fontSize, weight: .bold)]
+        case .emphasisMarker:
+            return [.foregroundColor: UIColor(DS.textSubtle), .font: bodyFont]
+        case .strongText:
+            return [.foregroundColor: UIColor(DS.textStrong), .font: UIFont.systemFont(ofSize: fontSize, weight: .bold)]
+        case .italicText:
+            let italicFont = UIFont.italicSystemFont(ofSize: fontSize)
+            return [.foregroundColor: UIColor(DS.textBody), .font: italicFont]
+        case .strikeText:
+            return [
+                .foregroundColor: UIColor(DS.textSecondary),
+                .font: bodyFont,
+                .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+                .strikethroughColor: UIColor(DS.textSubtle)
+            ]
+        case .underlineText:
+            return [
+                .foregroundColor: UIColor(DS.textBody),
+                .font: bodyFont,
+                .underlineStyle: NSUnderlineStyle.single.rawValue
+            ]
+        case .inlineCode:
+            return [
+                .foregroundColor: UIColor(DS.primaryDeep),
+                .font: monoFont,
+                .backgroundColor: UIColor(DS.surfaceSunken)
+            ]
+        case .codeFenceMarker:
+            return [.foregroundColor: UIColor(DS.textSubtle), .font: monoFont]
+        case .codeBlockText:
+            return [.foregroundColor: UIColor(DS.textBody), .font: bodyFont]
+        case .listMarker, .taskMarker:
+            return [.foregroundColor: UIColor(DS.primaryDeep), .font: bodyFont]
+        case .quoteMarker, .linkText:
+            return [.foregroundColor: UIColor(DS.link), .font: bodyFont]
+        case .linkURL:
+            return [.foregroundColor: UIColor(DS.textSubtle), .font: monoFont]
+        case .imageMarker, .tableDelimiter:
+            return [.foregroundColor: UIColor(DS.textSubtle), .font: bodyFont]
+        case .horizontalRule:
+            return [.foregroundColor: UIColor(DS.line), .font: bodyFont]
+        case .htmlComment:
+            return [.foregroundColor: UIColor.systemGreen, .font: monoFont]
+        }
     }
 }
 #endif

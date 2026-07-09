@@ -119,11 +119,9 @@ struct MacSettingsView: View {
                     systemImage: vaultStore.isUsingICloudStorage ? "icloud" : "folder",
                     tint: vaultStore.isUsingICloudStorage ? DS.primaryDeep : DS.pro
                 ) {
-                    Button("打开…") {
+                    SWSettingsActionButton(.text("打开…"), style: .light) {
                         openStorageFolder()
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
                 }
             }
 
@@ -181,31 +179,30 @@ struct MacSettingsView: View {
                 }
             }
 
+            macPanel("组件") {
+                SWSettingsRow("查看组件", subtitle: "展示应用中使用的系统组件和自建组件。", systemImage: "square.grid.2x2") {
+                    SWSettingsActionButton(.iconText(systemImage: "arrow.up.right", title: "打开"), style: .light) {
+                        MacMenuBarController.shared.openComponentCatalogWindow()
+                    }
+                }
+            }
+
             macPanel("维护日志") {
                 SWSettingsRow("开启日志记录", subtitle: "记录保存、索引、冲突和文件操作元数据，不记录正文或密钥。", systemImage: "doc.text.magnifyingglass") {
                     if settings.maintenanceLoggingEnabled {
                         HStack(spacing: DS.s2) {
-                            Button {
+                            SWSettingsActionButton(.iconText(systemImage: "folder", title: "打开文件夹"), style: .light) {
                                 openMaintenanceLogFolder()
-                            } label: {
-                                Label("打开文件夹", systemImage: "folder")
                             }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
 
-                            Button("关闭", role: .destructive) {
+                            SWSettingsActionButton(.text("关闭"), style: .light, role: .destructive) {
                                 settings.maintenanceLoggingEnabled = false
                             }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
                         }
                     } else {
-                        Button("开启") {
+                        SWSettingsActionButton(.text("开启"), style: .fill) {
                             settings.maintenanceLoggingEnabled = true
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                        .tint(DS.primary)
                     }
                 }
             }
@@ -329,11 +326,9 @@ struct MacSettingsView: View {
                             .font(DS.body())
                             .foregroundColor(DS.textStrong)
                         Spacer()
-                        Button("恢复默认") {
+                        SWSettingsActionButton(.text("恢复默认"), style: .light) {
                             settings.resetMacAITitlePrompt()
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
                     }
 
                     TextEditor(text: $settings.macAITitlePrompt)
@@ -364,31 +359,30 @@ struct MacSettingsView: View {
             )
 
             macPanel("常用操作") {
-                shortcutRow(
-                    title: "新建笔记",
-                    value: ShortcutStore.displayStringForKey(
-                        keyCode: shortcutStore.newNoteKey.keyCode,
-                        modifiers: shortcutStore.newNoteKey.modifiers
-                    ),
-                    isRecording: recordingAction == .newNote,
-                    onRecord: { recordingAction = .newNote }
-                )
-                SWRowDivider()
-
-                ForEach(EditorShortcutAction.allCases) { action in
-                    let shortcut = shortcutStore.shortcut(for: action)
+                LazyVGrid(columns: shortcutGridColumns, alignment: .leading, spacing: DS.s2) {
                     shortcutTile(
-                        title: action.title,
+                        title: "新建笔记",
                         value: ShortcutStore.displayStringForKey(
-                            keyCode: shortcut.keyCode,
-                            modifiers: shortcut.modifiers
+                            keyCode: shortcutStore.newNoteKey.keyCode,
+                            modifiers: shortcutStore.newNoteKey.modifiers
                         ),
-                        isRecording: recordingAction == .editor(action),
-                        onRecord: { recordingAction = .editor(action) }
+                        isRecording: recordingAction == .newNote,
+                        onRecord: { recordingAction = .newNote }
                     )
-                }
 
-                helperText("新建笔记默认快捷键：⌃⌘Z")
+                    ForEach(EditorShortcutAction.allCases) { action in
+                        let shortcut = shortcutStore.shortcut(for: action)
+                        shortcutTile(
+                            title: action.title,
+                            value: ShortcutStore.displayStringForKey(
+                                keyCode: shortcut.keyCode,
+                                modifiers: shortcut.modifiers
+                            ),
+                            isRecording: recordingAction == .editor(action),
+                            onRecord: { recordingAction = .editor(action) }
+                        )
+                    }
+                }
             }
 
             macPanel("Markdown 格式") {
@@ -407,15 +401,16 @@ struct MacSettingsView: View {
                     }
                 }
 
-                helperText(recordingAction == nil ? "点击录制后按下新的组合键；Esc 取消。" : "正在录制：按下新的组合键，或按 Esc 取消。")
             }
 
-            Button("恢复默认快捷键") {
-                shortcutStore.resetAllShortcuts()
-                recordingAction = nil
+            HStack(spacing: DS.s2) {
+                helperText(recordingAction == nil ? "点击录制后按下新的组合键；Esc 取消。" : "正在录制：按下新的组合键，或按 Esc 取消。")
+                Spacer(minLength: DS.s3)
+                SWSettingsActionButton(.text("恢复默认快捷键"), style: .light) {
+                    shortcutStore.resetAllShortcuts()
+                    recordingAction = nil
+                }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
         }
     }
 
@@ -538,63 +533,44 @@ struct MacSettingsView: View {
         case .noReference:
             if vaultStore.encryptedEntryCount > 0 {
                 HStack(spacing: DS.s2) {
-                    Button("加载已有密钥") {
+                    SWSettingsActionButton(.text("加载已有密钥"), style: .fill) {
                         loadKey()
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .tint(DS.primary)
 
-                    Button("创建新密钥") {
+                    SWSettingsActionButton(.text("创建新密钥"), style: .light) {
                         createNewKey()
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
                 }
             } else {
                 HStack(spacing: DS.s2) {
-                    Button("创建新密钥") {
+                    SWSettingsActionButton(.text("创建新密钥"), style: .fill) {
                         createNewKey()
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .tint(DS.primary)
 
-                    Button("加载已有密钥") {
+                    SWSettingsActionButton(.text("加载已有密钥"), style: .light) {
                         loadKey()
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
                 }
             }
         case .available:
             HStack(spacing: DS.s2) {
-                Button("打开密钥位置") {
+                SWSettingsActionButton(.text("打开密钥位置"), style: .light) {
                     openKeyLocation()
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
 
-                Button("移除密钥引用", role: .destructive) {
+                SWSettingsActionButton(.text("移除密钥引用"), style: .light, role: .destructive) {
                     unloadKey()
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
             }
         case .invalid:
             HStack(spacing: DS.s2) {
-                Button("重新定位密钥") {
+                SWSettingsActionButton(.text("重新定位密钥"), style: .fill) {
                     loadKey()
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .tint(DS.primary)
 
-                Button("移除密钥引用", role: .destructive) {
+                SWSettingsActionButton(.text("移除密钥引用"), style: .light, role: .destructive) {
                     unloadKey()
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
             }
         }
     }
@@ -674,11 +650,9 @@ struct MacSettingsView: View {
                 SecureField(title, text: key)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 210)
-                Button("保存") {
+                SWSettingsActionButton(.text("保存"), style: .light) {
                     saveAIAPIKey(key.wrappedValue, provider: provider)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
                 SWStatusBadge(key.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未保存" : "已填写", style: key.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .neutral : .success)
             }
         }
@@ -711,10 +685,6 @@ struct MacSettingsView: View {
         }
     }
 
-    private func shortcutRow(title: String, value: String, isRecording: Bool, onRecord: @escaping () -> Void) -> some View {
-        shortcutTile(title: title, value: value, isRecording: isRecording, onRecord: onRecord)
-    }
-
     private func shortcutTile(title: String, value: String, isRecording: Bool, onRecord: @escaping () -> Void) -> some View {
         HStack(spacing: DS.s2) {
             Image(systemName: isRecording ? "record.circle" : "keyboard")
@@ -738,28 +708,21 @@ struct MacSettingsView: View {
                 .monospacedDigit()
                 .lineLimit(1)
 
-            Button {
+            SWSettingsActionButton(.icon(systemImage: isRecording ? "record.circle.fill" : "record.circle"), style: isRecording ? .fill : .ghost) {
                 onRecord()
-            } label: {
-                Label(isRecording ? "录制中" : "录制", systemImage: isRecording ? "record.circle" : "record.circle")
-                    .labelStyle(.iconOnly)
-                    .frame(width: 22, height: 22)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .frame(width: 28, height: 28)
             .help(isRecording ? "正在录制" : "录制快捷键")
         }
         .padding(.horizontal, DS.s2)
         .padding(.vertical, DS.s2)
         .frame(minHeight: 40)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(isRecording ? DS.primaryContainer : DS.surfaceSunken)
-        .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
-                .stroke(isRecording ? DS.primary.opacity(0.26) : DS.line, lineWidth: 0.5)
-        )
+        .overlay {
+            if isRecording {
+                RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
+                    .stroke(DS.primary.opacity(0.26), lineWidth: 0.5)
+            }
+        }
     }
 
     private func statusRow(_ title: String, systemImage: String, tint: Color) -> some View {

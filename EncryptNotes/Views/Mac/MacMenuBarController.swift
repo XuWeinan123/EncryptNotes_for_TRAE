@@ -16,6 +16,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
     private var allNotesWindow: NSWindow?
     private var trashWindow: NSWindow?
     private var settingsWindow: NSWindow?
+    private var componentCatalogWindow: NSWindow?
     private var introWindow: NSWindow?
 
     private enum RecentMenuNote {
@@ -194,12 +195,17 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
 
     private func recentMenuNotes() -> [RecentMenuNote] {
         let limit = settings.macRecentNotesLimit
-        var items = vaultStore.readableNotes.prefix(limit).map { RecentMenuNote.readable($0) }
-        if items.count < limit {
-            let remaining = limit - items.count
-            items.append(contentsOf: vaultStore.lockedEncryptedNotes.prefix(remaining).map { .locked($0) })
-        }
-        return items
+        let readableItems = vaultStore.readableNotes.map { NoteListItem.readable($0) }
+        let lockedItems = vaultStore.lockedEncryptedNotes.map { NoteListItem.locked($0) }
+        return (readableItems + lockedItems)
+            .sorted(by: NoteListOrdering.newestCreatedFirst)
+            .prefix(limit)
+            .map { item in
+                switch item {
+                case .readable(let note): return .readable(note)
+                case .locked(let info): return .locked(info)
+                }
+            }
     }
 
     private func menuItem(for recentItem: RecentMenuNote, index: Int) -> NSMenuItem {
@@ -332,6 +338,28 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    func openComponentCatalogWindow() {
+        if componentCatalogWindow == nil {
+            let hostingView = NSHostingView(rootView: MacComponentCatalogView())
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 760, height: 720),
+                styleMask: [.titled, .closable, .resizable, .unifiedTitleAndToolbar, .fullSizeContentView],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "查看组件"
+            window.contentView = hostingView
+            window.contentMinSize = NSSize(width: 680, height: 560)
+            window.center()
+            window.isReleasedWhenClosed = false
+            window.delegate = self
+            configureListWindowChrome(window)
+            componentCatalogWindow = window
+        }
+        componentCatalogWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     private func configureListWindowChrome(_ window: NSWindow) {
         window.isMovableByWindowBackground = true
         window.tabbingMode = .disallowed
@@ -402,6 +430,8 @@ extension MacMenuBarController: NSWindowDelegate {
             trashWindow = nil
         } else if window == settingsWindow {
             settingsWindow = nil
+        } else if window == componentCatalogWindow {
+            componentCatalogWindow = nil
         } else if window == introWindow {
             introWindow = nil
         }

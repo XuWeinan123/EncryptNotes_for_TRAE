@@ -22,6 +22,15 @@ nonisolated struct Note: Identifiable, Equatable, Sendable {
     }
 }
 
+nonisolated enum NoteListOrdering {
+    static func newestCreatedFirst(_ lhs: NoteListItem, _ rhs: NoteListItem) -> Bool {
+        if lhs.createdAt != rhs.createdAt {
+            return lhs.createdAt > rhs.createdAt
+        }
+        return lhs.id < rhs.id
+    }
+}
+
 nonisolated enum NoteTitleFormatter {
     static let emptyTitle = "临时笔记"
     static let generatedTitleMaxLength = 20

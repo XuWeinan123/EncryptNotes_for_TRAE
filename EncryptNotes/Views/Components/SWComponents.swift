@@ -282,6 +282,104 @@ struct SWSettingsRow<Trailing: View>: View {
     }
 }
 
+enum SWSettingsActionButtonShape {
+    case icon(systemImage: String)
+    case iconText(systemImage: String, title: String)
+    case text(String)
+}
+
+enum SWSettingsActionButtonStyle {
+    case ghost
+    case light
+    case fill
+}
+
+struct SWSettingsActionButton: View {
+    let shape: SWSettingsActionButtonShape
+    let style: SWSettingsActionButtonStyle
+    let role: ButtonRole?
+    let action: () -> Void
+
+    init(
+        _ shape: SWSettingsActionButtonShape,
+        style: SWSettingsActionButtonStyle = .light,
+        role: ButtonRole? = nil,
+        action: @escaping () -> Void
+    ) {
+        self.shape = shape
+        self.style = style
+        self.role = role
+        self.action = action
+    }
+
+    var body: some View {
+        Button(role: role, action: action) {
+            label
+                .font(DS.caption().weight(.medium))
+                .lineLimit(1)
+                .foregroundColor(foreground)
+                .frame(width: fixedWidth, height: 28)
+                .padding(.horizontal, horizontalPadding)
+                .background(background)
+                .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
+                        .stroke(border, lineWidth: 0.5)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var label: some View {
+        switch shape {
+        case .icon(let systemImage):
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+        case .iconText(let systemImage, let title):
+            Label(title, systemImage: systemImage)
+        case .text(let title):
+            Text(title)
+        }
+    }
+
+    private var fixedWidth: CGFloat? {
+        if case .icon = shape { return 28 }
+        return nil
+    }
+
+    private var horizontalPadding: CGFloat {
+        if case .icon = shape { return 0 }
+        return DS.s2
+    }
+
+    private var foreground: Color {
+        if role == .destructive {
+            return DS.destructive
+        }
+        switch style {
+        case .fill: return .white
+        case .ghost, .light: return DS.textSecondary
+        }
+    }
+
+    private var background: Color {
+        switch style {
+        case .ghost: return .clear
+        case .light: return role == .destructive ? DS.destructive.opacity(0.10) : DS.surfaceSunken
+        case .fill: return role == .destructive ? DS.destructive : DS.primary
+        }
+    }
+
+    private var border: Color {
+        switch style {
+        case .ghost: return DS.line.opacity(0.0)
+        case .light: return role == .destructive ? DS.destructive.opacity(0.22) : DS.line
+        case .fill: return .clear
+        }
+    }
+}
+
 struct SWRowDivider: View {
     var body: some View {
         Rectangle()

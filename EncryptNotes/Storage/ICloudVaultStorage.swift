@@ -56,7 +56,6 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
         let directories = [
             container,
             container.appendingPathComponent("trash"),
-            container.appendingPathComponent("conflicts"),
             container.appendingPathComponent(".meta")
         ]
 

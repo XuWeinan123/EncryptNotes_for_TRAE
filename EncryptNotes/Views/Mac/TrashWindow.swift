@@ -17,9 +17,12 @@ struct TrashView: View {
                 )
             }
 
-            listSummary
-
             List {
+                listSummary
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(DS.bg)
+
                 if filteredTrashNotes.isEmpty {
                     emptyRow
                         .listRowInsets(EdgeInsets(top: DS.s3, leading: DS.s3, bottom: DS.s3, trailing: DS.s3))
@@ -105,6 +108,7 @@ struct TrashView: View {
 
     private var listSummary: some View {
         HStack(spacing: DS.s2) {
+            Spacer(minLength: 0)
             Text("回收站 \(filteredTrashNotes.count) 条笔记")
                 .font(DS.caption())
                 .foregroundColor(DS.textSubtle)
@@ -137,12 +141,9 @@ struct TrashView: View {
 
     @ViewBuilder
     private func trashRow(for trashNote: TrashNote) -> some View {
-        SWNoteListRow(
+        TrashListRow(
             title: trashTitle(for: trashNote),
-            subtitle: "删除于 \(timeString(from: trashNote.deletedAt))",
-            systemImage: trashNote.isEncrypted ? "lock.fill" : "doc.text",
-            tint: trashNote.isEncrypted ? DS.primaryDeep : DS.textSubtle,
-            style: .compact
+            subtitle: "删除于 \(timeString(from: trashNote.deletedAt))"
         ) {
             HStack(spacing: DS.s2) {
                 if trashNote.isEncrypted {
@@ -201,5 +202,46 @@ struct TrashView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
         return formatter.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+private struct TrashListRow<Trailing: View>: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
+
+    let title: String
+    let subtitle: String
+    @ViewBuilder let trailing: () -> Trailing
+
+    var body: some View {
+        HStack(spacing: DS.s3) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(DS.textStrong)
+                    .lineLimit(1)
+
+                Text(subtitle)
+                    .font(DS.caption())
+                    .foregroundColor(DS.textSubtle)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: DS.s3)
+
+            trailing()
+        }
+        .padding(.horizontal, DS.s3)
+        .padding(.vertical, 10)
+        .background(isHovering ? DS.primaryContainer.opacity(0.42) : DS.surfaceCard.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
+                .stroke(isHovering ? DS.primary.opacity(0.28) : DS.line, lineWidth: 0.5)
+        )
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: isHovering)
+        .onHover { hovering in
+            isHovering = hovering
+        }
     }
 }

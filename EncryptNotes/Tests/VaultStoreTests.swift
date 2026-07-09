@@ -524,6 +524,7 @@ final class VaultStoreTests: XCTestCase {
             title: "锁定标题",
             ciphertextPreview: "cipher",
             fileSize: 12,
+            createdAt: Date(),
             updatedAt: Date()
         )
         store.configureForTesting(
@@ -581,6 +582,7 @@ final class VaultStoreTests: XCTestCase {
             title: "锁定项目标题",
             ciphertextPreview: "隐藏正文关键词",
             fileSize: 12,
+            createdAt: Date(),
             updatedAt: Date()
         )
         store.configureForTesting(vaultId: "v", lockedEncryptedNotes: [locked])

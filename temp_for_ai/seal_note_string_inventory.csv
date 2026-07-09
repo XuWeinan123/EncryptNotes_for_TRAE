@@ -1,0 +1,361 @@
+﻿file,line,kind,text
+EncryptNotes/App/Mac/MacMainMenuController.swift,31,TitleArg,编辑
+EncryptNotes/App/Mac/MacMainMenuController.swift,32,TitleArg,编辑
+EncryptNotes/App/Mac/MacMainMenuController.swift,41,TitleArg,格式
+EncryptNotes/App/Mac/MacMainMenuController.swift,42,TitleArg,格式
+EncryptNotes/App/Mac/MacMainMenuController.swift,51,TitleArg,便签
+EncryptNotes/App/Mac/MacMainMenuController.swift,52,TitleArg,便签
+EncryptNotes/App/Mac/MacMainMenuController.swift,83,TitleArg,关于 \(appName)
+EncryptNotes/App/Mac/MacMainMenuController.swift,85,TitleArg,设置...
+EncryptNotes/App/Mac/MacMainMenuController.swift,89,TitleArg,隐藏 \(appName)
+EncryptNotes/App/Mac/MacMainMenuController.swift,90,TitleArg,隐藏其他
+EncryptNotes/App/Mac/MacMainMenuController.swift,93,TitleArg,全部显示
+EncryptNotes/App/Mac/MacMainMenuController.swift,95,TitleArg,退出
+EncryptNotes/App/Mac/MacMainMenuController.swift,100,TitleArg,撤销
+EncryptNotes/App/Mac/MacMainMenuController.swift,101,TitleArg,重做
+EncryptNotes/App/Mac/MacMainMenuController.swift,105,TitleArg,剪切
+EncryptNotes/App/Mac/MacMainMenuController.swift,106,TitleArg,复制
+EncryptNotes/App/Mac/MacMainMenuController.swift,107,TitleArg,粘贴
+EncryptNotes/App/Mac/MacMainMenuController.swift,108,TitleArg,全选
+EncryptNotes/App/Mac/MacMainMenuController.swift,150,TitleArg,保存
+EncryptNotes/App/Mac/MacMainMenuController.swift,154,TitleArg,应用并保持打开
+EncryptNotes/App/Mac/MacMainMenuController.swift,161,TitleArg,适应内容
+EncryptNotes/Tests/SchemaTests.swift,116,TitleArg,"明文标题 ""A"""
+EncryptNotes/Tests/SchemaTests.swift,233,TitleArg,`# 私密/标题?`
+EncryptNotes/Tests/VaultStoreTests.swift,77,TitleArg,# 标题
+EncryptNotes/Tests/VaultStoreTests.swift,97,TitleArg,AI 总结/标题?
+EncryptNotes/Tests/VaultStoreTests.swift,120,TitleArg,固定标题
+EncryptNotes/Tests/VaultStoreTests.swift,340,TitleArg,远端笔记
+EncryptNotes/Tests/VaultStoreTests.swift,378,TitleArg,远端加密
+EncryptNotes/Tests/VaultStoreTests.swift,409,TitleArg,待下载笔记
+EncryptNotes/Tests/VaultStoreTests.swift,524,TitleArg,锁定标题
+EncryptNotes/Tests/VaultStoreTests.swift,565,TitleArg,标题内容
+EncryptNotes/Tests/VaultStoreTests.swift,582,TitleArg,锁定项目标题
+EncryptNotes/Views/Components/BottomComposerView.swift,34,Label,展开编辑
+EncryptNotes/Views/Components/BottomComposerView.swift,34,AccessibilityLabel,展开编辑
+EncryptNotes/Views/Components/BottomComposerView.swift,49,Label,保存笔记
+EncryptNotes/Views/Components/BottomComposerView.swift,49,AccessibilityLabel,保存笔记
+EncryptNotes/Views/Components/BottomComposerView.swift,53,Text,在密钥设置中创建或加载密钥后，可将新笔记保存为加密笔记。
+EncryptNotes/Views/Components/BottomComposerView.swift,74,Label,明文
+EncryptNotes/Views/Components/BottomComposerView.swift,77,Label,加密
+EncryptNotes/Views/Components/EncryptedCardView.swift,40,Label,删除
+EncryptNotes/Views/Components/EncryptedCardView.swift,69,Text,·
+EncryptNotes/Views/Components/NoteCardView.swift,32,Label,编辑
+EncryptNotes/Views/Components/NoteCardView.swift,37,Label,删除
+EncryptNotes/Views/HomeView.swift,95,Button,立即保存
+EncryptNotes/Views/HomeView.swift,96,Button,稍后
+EncryptNotes/Views/HomeView.swift,98,Text,"密钥已经创建并加载。
+请导出并妥善保存密钥。丢失密钥后，加密笔记将无法恢复。"
+EncryptNotes/Views/HomeView.swift,101,Button,取消
+EncryptNotes/Views/HomeView.swift,102,Button,删除
+EncryptNotes/Views/HomeView.swift,115,Text,删除后笔记将进入回收站，30 天后自动永久删除。
+EncryptNotes/Views/HomeView.swift,118,Button,取消
+EncryptNotes/Views/HomeView.swift,119,Button,删除\(selectedItems.count)条
+EncryptNotes/Views/HomeView.swift,123,Text,选中的笔记将移动至回收站，30 天后自动永久删除。
+EncryptNotes/Views/HomeView.swift,126,Button,确定
+EncryptNotes/Views/HomeView.swift,131,Button,打开密钥设置
+EncryptNotes/Views/HomeView.swift,132,Button,取消
+EncryptNotes/Views/HomeView.swift,140,Button,确定
+EncryptNotes/Views/HomeView.swift,216,Label,设置
+EncryptNotes/Views/HomeView.swift,216,AccessibilityLabel,设置
+EncryptNotes/Views/HomeView.swift,222,Text,\(selectedItems.count) selected
+EncryptNotes/Views/HomeView.swift,226,Text,Seal Note
+EncryptNotes/Views/HomeView.swift,245,Label,多选笔记
+EncryptNotes/Views/HomeView.swift,250,Label,导出笔记
+EncryptNotes/Views/HomeView.swift,264,Label,复制
+EncryptNotes/Views/HomeView.swift,273,Label,删除
+EncryptNotes/Views/HomeView.swift,288,Label,新建笔记
+EncryptNotes/Views/HomeView.swift,288,AccessibilityLabel,新建笔记
+EncryptNotes/Views/HomeView.swift,369,Text,密钥未加载
+EncryptNotes/Views/HomeView.swift,372,Text,\(vaultStore.lockedNoteCount) 条加密笔记
+EncryptNotes/Views/HomeView.swift,387,Label,打开密钥设置
+EncryptNotes/Views/HomeView.swift,387,AccessibilityLabel,打开密钥设置
+EncryptNotes/Views/HomeView.swift,436,Text,标签
+EncryptNotes/Views/HomeView.swift,446,Text,清除 \(selectedTag)
+EncryptNotes/Views/HomeView.swift,459,TitleArg,全部
+EncryptNotes/Views/HomeView.swift,481,Text,\(count)
+EncryptNotes/Views/HomeView.swift,504,Text,同步失败
+EncryptNotes/Views/HomeView.swift,513,Button,重试
+EncryptNotes/Views/HomeView.swift,545,Label,语音搜索
+EncryptNotes/Views/HomeView.swift,545,AccessibilityLabel,语音搜索
+EncryptNotes/Views/HomeView.swift,566,Label,新建笔记
+EncryptNotes/Views/HomeView.swift,566,AccessibilityLabel,新建笔记
+EncryptNotes/Views/HomeView.swift,757,Text,Seal Note
+EncryptNotes/Views/HomeView.swift,778,Text,出错了
+EncryptNotes/Views/HomeView.swift,788,Button,重试
+EncryptNotes/Views/Mac/AllNotesWindow.swift,19,Placeholder,搜索笔记…
+EncryptNotes/Views/Mac/AllNotesWindow.swift,32,TitleArg,正在加载笔记
+EncryptNotes/Views/Mac/AllNotesWindow.swift,33,MessageArg,笔记会在同步和索引读取完成后显示。
+EncryptNotes/Views/Mac/AllNotesWindow.swift,41,TitleArg,没有匹配的笔记
+EncryptNotes/Views/Mac/AllNotesWindow.swift,95,Label,搜索
+EncryptNotes/Views/Mac/AllNotesWindow.swift,136,TitleArg,全部
+EncryptNotes/Views/Mac/AllNotesWindow.swift,155,Label,更多
+EncryptNotes/Views/Mac/AllNotesWindow.swift,269,Button,打开
+EncryptNotes/Views/Mac/AllNotesWindow.swift,271,Button,重命名...
+EncryptNotes/Views/Mac/AllNotesWindow.swift,274,Button,移到回收站
+EncryptNotes/Views/Mac/AllNotesWindow.swift,447,TitleArg,重命名笔记
+EncryptNotes/Views/Mac/AllNotesWindow.swift,448,TitleArg,标题只影响列表、菜单和文件名，不会改写正文。
+EncryptNotes/Views/Mac/AllNotesWindow.swift,466,Button,取消
+EncryptNotes/Views/Mac/AllNotesWindow.swift,514,Label,关闭搜索
+EncryptNotes/Views/Mac/LockedStickyNoteView.swift,24,Text,这台 Mac 还没有当前加密空间的密钥。
+EncryptNotes/Views/Mac/LockedStickyNoteView.swift,29,Text,前往密钥设置后，笔记将在本机解密显示。
+EncryptNotes/Views/Mac/LockedStickyNoteView.swift,34,Button,打开密钥设置…
+EncryptNotes/Views/Mac/LockedStickyNoteView.swift,50,Text,无网络
+EncryptNotes/Views/Mac/LockedStickyNoteView.swift,66,Text,加密笔记
+EncryptNotes/Views/Mac/LockedStickyNoteView.swift,71,Label,加密笔记
+EncryptNotes/Views/Mac/LockedStickyNoteView.swift,81,Label,移到回收站
+EncryptNotes/Views/Mac/LockedStickyNoteView.swift,92,Label,取消置顶
+EncryptNotes/Views/Mac/LockedStickyNoteView.swift,103,Label,置顶
+EncryptNotes/Views/Mac/LockedStickyNoteView.swift,116,Text,删除这条加密笔记？
+EncryptNotes/Views/Mac/LockedStickyNoteView.swift,117,Text,笔记将移到回收站，加载密钥后可以恢复。
+EncryptNotes/Views/Mac/LockedStickyNoteView.swift,118,Text,删除
+EncryptNotes/Views/Mac/MacIntroView.swift,27,Text,Seal Note
+EncryptNotes/Views/Mac/MacIntroView.swift,31,Text,快速记录，不打断当前工作。
+EncryptNotes/Views/Mac/MacIntroView.swift,40,TitleArg,菜单栏便签
+EncryptNotes/Views/Mac/MacIntroView.swift,41,TitleArg,Markdown 文件
+EncryptNotes/Views/Mac/MacIntroView.swift,42,TitleArg,正文加密
+EncryptNotes/Views/Mac/MacIntroView.swift,47,Text,通过右上角菜单栏图标，或按 \(newNoteShortcut) 新建笔记。
+EncryptNotes/Views/Mac/MacIntroView.swift,61,Text,关闭
+EncryptNotes/Views/Mac/MacMarkdownFormatter.swift,40,Placeholder,strong
+EncryptNotes/Views/Mac/MacMarkdownFormatter.swift,42,Placeholder,emphasis
+EncryptNotes/Views/Mac/MacMarkdownFormatter.swift,44,Placeholder,underline
+EncryptNotes/Views/Mac/MacMarkdownFormatter.swift,46,Placeholder,code
+EncryptNotes/Views/Mac/MacMarkdownFormatter.swift,48,Placeholder,math
+EncryptNotes/Views/Mac/MacMarkdownFormatter.swift,50,Placeholder,strike
+EncryptNotes/Views/Mac/MacMarkdownFormatter.swift,52,Placeholder,待办
+EncryptNotes/Views/Mac/MacMenuBarController.swift,98,TitleArg,新建笔记
+EncryptNotes/Views/Mac/MacMenuBarController.swift,109,TitleArg,正在加载笔记…
+EncryptNotes/Views/Mac/MacMenuBarController.swift,121,TitleArg,暂无笔记
+EncryptNotes/Views/Mac/MacMenuBarController.swift,127,TitleArg,全部笔记(\(vaultStore.totalNoteCount))...
+EncryptNotes/Views/Mac/MacMenuBarController.swift,134,TitleArg,回收站\(vaultStore.trashCount > 0 ? 
+EncryptNotes/Views/Mac/MacMenuBarController.swift,143,TitleArg,设置…
+EncryptNotes/Views/Mac/MacMenuBarController.swift,150,TitleArg,退出
+EncryptNotes/Views/Mac/MacMenuBarController.swift,215,TitleArg,\(note.isEncrypted ? 
+EncryptNotes/Views/Mac/MacMenuBarController.swift,218,TitleArg,🔒 \(info.title)
+EncryptNotes/Views/Mac/MacMenuBarController.swift,394,AlertMessageText,出错了
+EncryptNotes/Views/Mac/MacMenuBarController.swift,396,AlertButton,确定
+EncryptNotes/Views/Mac/MacSettingsView.swift,34,Label,通用
+EncryptNotes/Views/Mac/MacSettingsView.swift,40,Label,编辑器
+EncryptNotes/Views/Mac/MacSettingsView.swift,46,Label,快捷键
+EncryptNotes/Views/Mac/MacSettingsView.swift,52,Label,密钥
+EncryptNotes/Views/Mac/MacSettingsView.swift,58,Label,关于
+EncryptNotes/Views/Mac/MacSettingsView.swift,76,Button,确定
+EncryptNotes/Views/Mac/MacSettingsView.swift,85,TitleArg,通用设置
+EncryptNotes/Views/Mac/MacSettingsView.swift,86,TitleArg,调整菜单栏、置顶、存储位置和主题
+EncryptNotes/Views/Mac/MacSettingsView.swift,92,TitleArg,登录 Mac 后自动启动应用，并显示在菜单栏中。
+EncryptNotes/Views/Mac/MacSettingsView.swift,96,TitleArg,控制菜单栏中显示的最近笔记数量
+EncryptNotes/Views/Mac/MacSettingsView.swift,99,Text,\(count)
+EncryptNotes/Views/Mac/MacSettingsView.swift,109,TitleArg,新建笔记窗口默认保持在其他窗口上方。
+EncryptNotes/Views/Mac/MacSettingsView.swift,129,TitleArg,影响按钮、选中态和强调色
+EncryptNotes/Views/Mac/MacSettingsView.swift,151,Text,Seal Note
+EncryptNotes/Views/Mac/MacSettingsView.swift,155,Text,v0.2
+EncryptNotes/Views/Mac/MacSettingsView.swift,159,Text,快速记录，不打断当前工作。
+EncryptNotes/Views/Mac/MacSettingsView.swift,169,TitleArg,从右上角菜单快速新建、打开最近笔记。
+EncryptNotes/Views/Mac/MacSettingsView.swift,173,TitleArg,每条笔记都是可同步、可迁移的 Markdown 文件。
+EncryptNotes/Views/Mac/MacSettingsView.swift,177,TitleArg,加密笔记只加密正文，密钥来自你选择的密钥。
+EncryptNotes/Views/Mac/MacSettingsView.swift,183,TitleArg,记录保存、索引、冲突和文件操作元数据，不记录正文或密钥。
+EncryptNotes/Views/Mac/MacSettingsView.swift,186,TitleArg,打开文件夹
+EncryptNotes/Views/Mac/MacSettingsView.swift,207,TitleArg,编辑器
+EncryptNotes/Views/Mac/MacSettingsView.swift,208,TitleArg,调整便利贴正文输入和复制行为
+EncryptNotes/Views/Mac/MacSettingsView.swift,214,TitleArg,仅影响 mac 便利贴编辑器。
+EncryptNotes/Views/Mac/MacSettingsView.swift,232,TitleArg,控制编辑器正文的阅读密度。
+EncryptNotes/Views/Mac/MacSettingsView.swift,250,TitleArg,复制时自动补充段落空行，便于粘贴到 Typora 等 Markdown 编辑器使用。
+EncryptNotes/Views/Mac/MacSettingsView.swift,254,TitleArg,正文为空的便利贴关闭后直接移除。
+EncryptNotes/Views/Mac/MacSettingsView.swift,258,TitleArg,开启后每次自动保存都会按正文重新命名；关闭时仅保留手动标题和首次标题规则。
+EncryptNotes/Views/Mac/MacSettingsView.swift,266,TitleArg,AI
+EncryptNotes/Views/Mac/MacSettingsView.swift,267,TitleArg,关闭便利贴后为菜单栏和 iCloud 文件名生成标题
+EncryptNotes/Views/Mac/MacSettingsView.swift,273,TitleArg,关闭编辑器后发送正文给所选服务生成标题；不会改写正文。
+EncryptNotes/Views/Mac/MacSettingsView.swift,277,TitleArg,如果第一行已经是 # 标题，则跳过 AI 标题。
+EncryptNotes/Views/Mac/MacSettingsView.swift,281,TitleArg,选择关闭编辑器后调用的模型服务
+EncryptNotes/Views/Mac/MacSettingsView.swift,296,TitleArg,DeepSeek API Key
+EncryptNotes/Views/Mac/MacSettingsView.swift,304,TitleArg,Gemini API Key
+EncryptNotes/Views/Mac/MacSettingsView.swift,317,Label,自定义 Prompt
+EncryptNotes/Views/Mac/MacSettingsView.swift,338,Text,正文会发送给当前选择的服务商；加密笔记在已解锁编辑时也会参与生成。
+EncryptNotes/Views/Mac/MacSettingsView.swift,347,TitleArg,快捷键
+EncryptNotes/Views/Mac/MacSettingsView.swift,348,TitleArg,录制 mac 菜单栏应用的常用操作组合键
+EncryptNotes/Views/Mac/MacSettingsView.swift,356,TitleArg,新建笔记
+EncryptNotes/Views/Mac/MacSettingsView.swift,413,TitleArg,密钥
+EncryptNotes/Views/Mac/MacSettingsView.swift,772,AlertMessageText,无法打开文件夹
+EncryptNotes/Views/Mac/MacSettingsView.swift,773,AlertInformativeText,当前没有可用的存储目录。
+EncryptNotes/Views/Mac/MacSettingsView.swift,774,AlertButton,确定
+EncryptNotes/Views/Mac/MacSettingsView.swift,781,AlertMessageText,无法打开文件夹
+EncryptNotes/Views/Mac/MacSettingsView.swift,782,AlertInformativeText,Finder 未能打开：\(containerURL.path)
+EncryptNotes/Views/Mac/MacSettingsView.swift,783,AlertButton,确定
+EncryptNotes/Views/Mac/MacSettingsView.swift,851,AlertMessageText,移除密钥引用？
+EncryptNotes/Views/Mac/MacSettingsView.swift,852,AlertInformativeText,只会让 Seal Note 忘记密钥位置，不会删除密钥本身。
+EncryptNotes/Views/Mac/MacSettingsView.swift,853,AlertButton,移除密钥引用
+EncryptNotes/Views/Mac/MacSettingsView.swift,854,AlertButton,取消
+EncryptNotes/Views/Mac/MacSettingsView.swift,869,AlertMessageText,移除密钥引用前如何处理加密笔记？
+EncryptNotes/Views/Mac/MacSettingsView.swift,871,AlertButton,删除全部加密笔记
+EncryptNotes/Views/Mac/MacSettingsView.swift,872,AlertButton,先全部解密成明文
+EncryptNotes/Views/Mac/MacSettingsView.swift,873,AlertButton,取消
+EncryptNotes/Views/Mac/MacSettingsView.swift,888,AlertMessageText,密钥失效时移除密钥引用？
+EncryptNotes/Views/Mac/MacSettingsView.swift,890,AlertButton,删除全部加密笔记
+EncryptNotes/Views/Mac/MacSettingsView.swift,891,AlertButton,取消
+EncryptNotes/Views/Mac/MacSettingsView.swift,933,AlertMessageText,创建新密钥会影响已有加密笔记
+EncryptNotes/Views/Mac/MacSettingsView.swift,935,AlertButton,删除这些加密笔记并创建新密钥
+EncryptNotes/Views/Mac/MacSettingsView.swift,936,AlertButton,取消
+EncryptNotes/Views/Mac/MacSettingsView.swift,956,AlertMessageText,创建新密钥？
+EncryptNotes/Views/Mac/MacSettingsView.swift,957,AlertInformativeText,请将密钥保存到安全位置。丢失密钥将无法解密加密笔记。
+EncryptNotes/Views/Mac/MacSettingsView.swift,958,AlertButton,创建
+EncryptNotes/Views/Mac/MacSettingsView.swift,959,AlertButton,取消
+EncryptNotes/Views/Mac/MacSettingsView.swift,977,AlertMessageText,创建失败
+EncryptNotes/Views/Mac/MacSettingsView.swift,979,AlertButton,确定
+EncryptNotes/Views/Mac/MacSettingsView.swift,993,AlertMessageText,所选密钥无法解锁现有加密笔记
+EncryptNotes/Views/Mac/MacSettingsView.swift,995,AlertButton,重新选择密钥
+EncryptNotes/Views/Mac/MacSettingsView.swift,996,AlertButton,删除这些加密笔记并使用此密钥
+EncryptNotes/Views/Mac/MacSettingsView.swift,997,AlertButton,取消
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,70,Placeholder,随便写点什么吧
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,110,Text,无网络
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,183,Label,适应内容
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,188,Label,搜索
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,197,Label,转为明文笔记
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,204,Label,转为加密笔记
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,212,Label,移到回收站
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,215,Label,更多
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,227,Label,取消置顶
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,237,Label,置顶
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,249,Text,删除这条笔记？
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,250,Text,笔记将移到回收站，可以恢复。
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,251,Text,删除
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,258,Button,打开密钥设置
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,261,Button,取消
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,274,Label,已上锁
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,274,AccessibilityLabel,已上锁
+EncryptNotes/Views/Mac/StickyNoteEditorView.swift,462,Text,随便写点什么吧
+EncryptNotes/Views/Mac/TrashWindow.swift,14,Placeholder,搜索回收站…
+EncryptNotes/Views/Mac/TrashWindow.swift,32,Button,恢复
+EncryptNotes/Views/Mac/TrashWindow.swift,37,Button,永久删除
+EncryptNotes/Views/Mac/TrashWindow.swift,59,Button,取消
+EncryptNotes/Views/Mac/TrashWindow.swift,60,Button,清空
+EncryptNotes/Views/Mac/TrashWindow.swift,66,Text,回收站中的所有笔记将被永久删除，无法恢复。
+EncryptNotes/Views/Mac/TrashWindow.swift,76,Label,搜索
+EncryptNotes/Views/Mac/TrashWindow.swift,85,Label,清空
+EncryptNotes/Views/Mac/TrashWindow.swift,109,Text,回收站 \(filteredTrashNotes.count) 条笔记
+EncryptNotes/Views/Mac/TrashWindow.swift,143,TitleArg,删除于 \(timeString(from: trashNote.deletedAt))
+EncryptNotes/Views/Mac/TrashWindow.swift,159,Label,恢复
+EncryptNotes/Views/Mac/TrashWindow.swift,166,Button,恢复
+EncryptNotes/Views/Mac/TrashWindow.swift,172,Button,永久删除
+EncryptNotes/Views/NoteEditorView.swift,91,Label,复制正文
+EncryptNotes/Views/NoteEditorView.swift,101,Label,转为明文笔记
+EncryptNotes/Views/NoteEditorView.swift,108,Label,转为加密笔记
+EncryptNotes/Views/NoteEditorView.swift,117,Label,移到回收站
+EncryptNotes/Views/NoteEditorView.swift,151,Button,取消
+EncryptNotes/Views/NoteEditorView.swift,152,Button,删除
+EncryptNotes/Views/NoteEditorView.swift,156,Text,笔记将移到回收站，可以恢复。
+EncryptNotes/Views/NoteEditorView.swift,159,Button,确定
+EncryptNotes/Views/NoteEditorView.swift,164,Button,打开密钥设置
+EncryptNotes/Views/NoteEditorView.swift,165,Button,取消
+EncryptNotes/Views/NoteEditorView.swift,184,Placeholder,写下想法，支持 Markdown 和 #标签
+EncryptNotes/Views/NoteEditorView.swift,189,Text,随便写点什么吧
+EncryptNotes/Views/NoteEditorView.swift,219,Button,bold
+EncryptNotes/Views/NoteEditorView.swift,219,TitleArg,粗体
+EncryptNotes/Views/NoteEditorView.swift,220,Button,italic
+EncryptNotes/Views/NoteEditorView.swift,220,TitleArg,斜体
+EncryptNotes/Views/NoteEditorView.swift,221,Button,curlybraces
+EncryptNotes/Views/NoteEditorView.swift,221,TitleArg,代码
+EncryptNotes/Views/NoteEditorView.swift,222,Button,link
+EncryptNotes/Views/NoteEditorView.swift,222,TitleArg,链接
+EncryptNotes/Views/NoteEditorView.swift,223,Button,strikethrough
+EncryptNotes/Views/NoteEditorView.swift,223,TitleArg,删除线
+EncryptNotes/Views/NoteEditorView.swift,224,Button,chevron.left.forwardslash.chevron.right
+EncryptNotes/Views/NoteEditorView.swift,224,TitleArg,注释
+EncryptNotes/Views/SettingsView.swift,37,TitleArg,默认模式、Markdown 与编辑行为
+EncryptNotes/Views/SettingsView.swift,39,TitleArg,创建、导入、移除或处理加密笔记
+EncryptNotes/Views/SettingsView.swift,41,TitleArg,后台隐藏与本机密钥保护
+EncryptNotes/Views/SettingsView.swift,43,TitleArg,回收站、同步、导出与维护
+EncryptNotes/Views/SettingsView.swift,45,TitleArg,主题色与应用图标
+EncryptNotes/Views/SettingsView.swift,47,TitleArg,版本、同步与安全说明
+EncryptNotes/Views/SettingsView.swift,121,TitleArg,可快速插入粗体、斜体、代码和链接
+EncryptNotes/Views/SettingsView.swift,125,TitleArg,在编辑器右上角切换预览
+EncryptNotes/Views/SettingsView.swift,206,Button,确定
+EncryptNotes/Views/SettingsView.swift,295,Button,加载
+EncryptNotes/Views/SettingsView.swift,296,Button,创建
+EncryptNotes/Views/SettingsView.swift,300,Button,创建
+EncryptNotes/Views/SettingsView.swift,301,Button,加载
+EncryptNotes/Views/SettingsView.swift,306,Button,导出
+EncryptNotes/Views/SettingsView.swift,307,Button,移除
+EncryptNotes/Views/SettingsView.swift,311,Button,重新导入
+EncryptNotes/Views/SettingsView.swift,312,Button,移除
+EncryptNotes/Views/SettingsView.swift,322,TitleArg,保存当前密钥
+EncryptNotes/Views/SettingsView.swift,331,TitleArg,移除前需要先处理所有加密笔记
+EncryptNotes/Views/SettingsView.swift,345,TitleArg,解密所有加密笔记并移除本机密钥
+EncryptNotes/Views/SettingsView.swift,354,TitleArg,导出明文 zip 后永久移除本地加密笔记
+EncryptNotes/Views/SettingsView.swift,364,TitleArg,不进入回收站，无法恢复
+EncryptNotes/Views/SettingsView.swift,584,Button,取消
+EncryptNotes/Views/SettingsView.swift,585,Button,移除本机密钥
+EncryptNotes/Views/SettingsView.swift,589,Button,删除全部加密笔记
+EncryptNotes/Views/SettingsView.swift,592,Button,先全部解密成明文
+EncryptNotes/Views/SettingsView.swift,595,Button,取消
+EncryptNotes/Views/SettingsView.swift,597,Button,删除全部加密笔记
+EncryptNotes/Views/SettingsView.swift,600,Button,取消
+EncryptNotes/Views/SettingsView.swift,602,Button,删除这些加密笔记并创建新密钥
+EncryptNotes/Views/SettingsView.swift,605,Button,取消
+EncryptNotes/Views/SettingsView.swift,607,Button,重新选择密钥
+EncryptNotes/Views/SettingsView.swift,611,Button,删除这些加密笔记并使用此密钥
+EncryptNotes/Views/SettingsView.swift,616,Button,取消
+EncryptNotes/Views/SettingsView.swift,620,Button,取消
+EncryptNotes/Views/SettingsView.swift,621,Button,永久删除
+EncryptNotes/Views/SettingsView.swift,625,Button,取消
+EncryptNotes/Views/SettingsView.swift,626,Button,转为明文
+EncryptNotes/Views/SettingsView.swift,630,Button,取消
+EncryptNotes/Views/SettingsView.swift,631,Button,导出并移除
+EncryptNotes/Views/SettingsView.swift,651,TitleArg,切换到其他应用时遮住笔记内容
+EncryptNotes/Views/SettingsView.swift,719,Button,刷新
+EncryptNotes/Views/SettingsView.swift,731,TitleArg,恢复或永久删除已移除笔记
+EncryptNotes/Views/SettingsView.swift,742,TitleArg,只移除已经到期的回收站笔记
+EncryptNotes/Views/SettingsView.swift,751,TitleArg,永久删除回收站中的所有笔记
+EncryptNotes/Views/SettingsView.swift,762,TitleArg,导出 zip，跳过加密笔记
+EncryptNotes/Views/SettingsView.swift,771,TitleArg,将正文为空的可读笔记移到回收站
+EncryptNotes/Views/SettingsView.swift,777,TitleArg,不记录正文或密钥
+EncryptNotes/Views/SettingsView.swift,786,TitleArg,用于问题排查
+EncryptNotes/Views/SettingsView.swift,801,Button,确定
+EncryptNotes/Views/SettingsView.swift,806,Button,取消
+EncryptNotes/Views/SettingsView.swift,807,Button,清空
+EncryptNotes/Views/SettingsView.swift,814,Text,将永久删除回收站中的所有笔记，无法恢复。
+EncryptNotes/Views/SettingsView.swift,817,Button,取消
+EncryptNotes/Views/SettingsView.swift,818,Button,清理
+EncryptNotes/Views/SettingsView.swift,822,Text,正文为空的可读笔记会移到回收站，可以恢复。
+EncryptNotes/Views/SettingsView.swift,937,Button,取消
+EncryptNotes/Views/SettingsView.swift,938,Button,更换
+EncryptNotes/Views/SettingsView.swift,942,Text,主屏幕上的 Seal Note 图标会改变。接下来 iOS 还会显示一次系统确认。
+EncryptNotes/Views/SettingsView.swift,1021,Text,Seal Note
+EncryptNotes/Views/SettingsView.swift,1025,Text,v0.2
+EncryptNotes/Views/SettingsView.swift,1030,TitleArg,笔记文件保存在 iCloud Drive 中，可在多设备间同步。
+EncryptNotes/Views/SettingsView.swift,1034,TitleArg,明文笔记不会加密，敏感内容建议使用加密笔记。
+EncryptNotes/Views/SidebarView.swift,28,Button,打开密钥设置
+EncryptNotes/Views/SidebarView.swift,29,Button,稍后
+EncryptNotes/Views/SidebarView.swift,31,Text,请前往密钥设置导出并妥善保存密钥。没有密钥，换设备或重装应用后将无法解密笔记。
+EncryptNotes/Views/SidebarView.swift,37,Text,Seal Note
+EncryptNotes/Views/SidebarView.swift,55,Label,设置
+EncryptNotes/Views/SidebarView.swift,55,AccessibilityLabel,设置
+EncryptNotes/Views/SidebarView.swift,66,Label,正在同步
+EncryptNotes/Views/SidebarView.swift,66,AccessibilityLabel,正在同步
+EncryptNotes/Views/SidebarView.swift,72,Label,正在下载 \(count) 篇笔记
+EncryptNotes/Views/SidebarView.swift,72,AccessibilityLabel,正在下载 \(count) 篇笔记
+EncryptNotes/Views/SidebarView.swift,84,Label,iCloud 同步失败
+EncryptNotes/Views/SidebarView.swift,84,AccessibilityLabel,iCloud 同步失败
+EncryptNotes/Views/SidebarView.swift,106,Label,打开密钥设置
+EncryptNotes/Views/SidebarView.swift,139,TitleArg,全部笔记
+EncryptNotes/Views/SidebarView.swift,152,Text,标签
+EncryptNotes/Views/SidebarView.swift,158,Text,暂无标签
+EncryptNotes/Views/SidebarView.swift,186,TitleArg,回收站
+EncryptNotes/Views/SidebarView.swift,215,Text,\(count)
+EncryptNotes/Views/TrashView.swift,44,Button,取消
+EncryptNotes/Views/TrashView.swift,45,Button,恢复
+EncryptNotes/Views/TrashView.swift,58,Text,恢复后笔记将回到主列表。
+EncryptNotes/Views/TrashView.swift,64,Button,取消
+EncryptNotes/Views/TrashView.swift,65,Button,永久删除
+EncryptNotes/Views/TrashView.swift,78,Text,永久删除后无法恢复。
+EncryptNotes/Views/TrashView.swift,81,Button,取消
+EncryptNotes/Views/TrashView.swift,82,Button,清空
+EncryptNotes/Views/TrashView.swift,92,Text,将永久删除回收站中的所有笔记，无法恢复。
+EncryptNotes/Views/TrashView.swift,104,TitleArg,回收站为空
+EncryptNotes/Views/TrashView.swift,105,MessageArg,删除的笔记会在这里保留 30 天
+EncryptNotes/Views/TrashView.swift,130,Label,恢复
+EncryptNotes/Views/TrashView.swift,138,Label,永久删除
+EncryptNotes/Views/TrashView.swift,145,Label,恢复
+EncryptNotes/Views/TrashView.swift,151,Label,永久删除
+EncryptNotes/Views/TrashView.swift,176,Label,恢复
+EncryptNotes/Views/TrashView.swift,182,Label,永久删除
+EncryptNotes/Views/TrashView.swift,195,Text,删除于 \(DateFormatters.formatDisplayDateTime(trashNote.deletedAt).replacingOccurrences(of: 
