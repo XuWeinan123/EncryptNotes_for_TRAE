@@ -235,6 +235,8 @@ private struct KeyManagementView: View {
             return "未加载本机密钥"
         case .available:
             return "本机密钥已加载"
+        case .invalid(.keyDownloadPending):
+            return "密钥正在下载"
         case .invalid(.keyReplaced):
             return "本机密钥已被替换"
         case .invalid:
@@ -253,6 +255,8 @@ private struct KeyManagementView: View {
             return encryptedCount > 0
                 ? "这台设备可以查看加密笔记，请确认已导出并保存密钥。"
                 : "这台设备可以创建和查看加密笔记，请导出并妥善保存密钥。"
+        case .invalid(.keyDownloadPending):
+            return "密钥文件仍在从 iCloud 下载，请稍后再试。"
         case .invalid(let error) where encryptedCount > 0:
             return "\(error.localizedDescription)\n\(encryptedCount) 条加密笔记需要原密钥解锁。"
         case .invalid(let error):
@@ -822,6 +826,7 @@ private struct DataSettingsView: View {
     private var syncTitle: String {
         switch syncStore.status {
         case .syncing: return "正在同步"
+        case .pendingDownloads: return "正在下载笔记"
         case .saved: return syncStore.isNetworkAvailable ? "同步可用" : "网络离线"
         case .failed: return "同步失败"
         }
@@ -830,6 +835,7 @@ private struct DataSettingsView: View {
     private var syncSubtitle: String {
         switch syncStore.status {
         case .syncing: return "正在读取和写入笔记文件"
+        case .pendingDownloads(let count): return "还有 \(count) 篇笔记在从 iCloud 下载，完成后会自动显示。"
         case .saved: return vaultStore.isUsingICloudStorage ? "当前使用 iCloud Drive" : "当前使用本地回退存储"
         case .failed(let message): return message
         }
@@ -839,14 +845,14 @@ private struct DataSettingsView: View {
         switch syncStore.status {
         case .failed: return "exclamationmark.icloud"
         case .saved: return syncStore.isNetworkAvailable ? "icloud" : "icloud.slash"
-        case .syncing: return "arrow.triangle.2.circlepath.icloud"
+        case .syncing, .pendingDownloads: return "arrow.triangle.2.circlepath.icloud"
         }
     }
 
     private var syncTint: Color {
         switch syncStore.status {
         case .failed: return DS.destructive
-        case .syncing: return DS.pro
+        case .syncing, .pendingDownloads: return DS.pro
         case .saved: return DS.primaryDeep
         }
     }

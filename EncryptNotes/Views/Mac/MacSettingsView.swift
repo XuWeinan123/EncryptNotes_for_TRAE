@@ -22,7 +22,6 @@ struct MacSettingsView: View {
     @State private var deepSeekAPIKey = ""
     @State private var geminiAPIKey = ""
     @State private var apiKeyStatusMessage: String?
-    @State private var logStatusMessage: String?
 
     init(selectedTab: Tab = .general) {
         _selectedTab = State(initialValue: selectedTab == .aiTitle ? .general : selectedTab)
@@ -183,32 +182,31 @@ struct MacSettingsView: View {
             }
 
             macPanel("维护日志") {
-                toggleRow("记录维护日志", subtitle: "默认关闭；开启后记录保存、索引、冲突和文件操作元数据，不记录正文或密钥。", systemImage: "doc.text.magnifyingglass", isOn: $settings.maintenanceLoggingEnabled)
+                SWSettingsRow("开启日志记录", subtitle: "记录保存、索引、冲突和文件操作元数据，不记录正文或密钥。", systemImage: "doc.text.magnifyingglass") {
+                    if settings.maintenanceLoggingEnabled {
+                        HStack(spacing: DS.s2) {
+                            Button {
+                                openMaintenanceLogFolder()
+                            } label: {
+                                Label("打开文件夹", systemImage: "folder")
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
 
-                SWRowDivider()
-
-                SWSettingsRow("下载日志", subtitle: "导出本机维护日志，用于后续代码维护和问题排查。", systemImage: "square.and.arrow.down") {
-                    HStack(spacing: DS.s2) {
-                        Button("下载…") {
-                            exportMaintenanceLog()
+                            Button("关闭", role: .destructive) {
+                                settings.maintenanceLoggingEnabled = false
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-
-                        Button {
-                            openMaintenanceLogFolder()
-                        } label: {
-                            Label("打开文件夹", systemImage: "folder")
-                                .labelStyle(.iconOnly)
+                    } else {
+                        Button("开启") {
+                            settings.maintenanceLoggingEnabled = true
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.borderedProminent)
                         .controlSize(.small)
-                        .help("打开日志文件夹")
+                        .tint(DS.primary)
                     }
-                }
-
-                if let logStatusMessage {
-                    helperText(logStatusMessage)
                 }
             }
         }
@@ -427,7 +425,7 @@ struct MacSettingsView: View {
             SWPageHeader(
                 title: "密钥",
                 subtitle: keyStatusSubtitle(keyStatus),
-                systemImage: vaultStore.isKeyLoaded ? "checkmark.shield.fill" : "lock.shield",
+                systemImage: keyStatus == .available ? "checkmark.shield.fill" : "lock.shield",
                 tint: DS.primaryDeep
             )
 
@@ -461,6 +459,8 @@ struct MacSettingsView: View {
             return "密钥已加载"
         case .invalid(.keyReplaced):
             return "密钥已被替换"
+        case .invalid(.keyDownloadPending):
+            return "密钥正在下载"
         case .invalid:
             return "密钥失效"
         }
@@ -472,6 +472,8 @@ struct MacSettingsView: View {
             return "加载密钥后才能查看加密笔记正文"
         case .available:
             return "这台 Mac 已经可以解锁加密笔记"
+        case .invalid(.keyDownloadPending):
+            return "密钥文件仍在从 iCloud 下载，请稍后再试"
         case .invalid:
             return "密钥需要重新定位后才能解锁加密笔记"
         }
@@ -485,12 +487,27 @@ struct MacSettingsView: View {
         case .noReference:
             return "当前未加载密钥。密钥只会在本机读取，不会保存到钥匙串。"
         case .available:
-            return vaultStore.keyFileDisplayPath ?? "请妥善保存密钥，丢失后无法恢复加密笔记。"
+            return abbreviatedDisplayPath(vaultStore.keyFileDisplayPath)
+                ?? "请妥善保存密钥，丢失后无法恢复加密笔记。"
+        case .invalid(.keyDownloadPending):
+            return "已请求 iCloud 下载密钥文件。下载完成后再打开加密笔记。"
         case .invalid where encryptedCount > 0:
             return "密钥失效，\(encryptedCount) 条加密笔记需要原密钥解锁。"
         case .invalid:
             return "密钥不可用、格式无效，或内容已被替换。"
         }
+    }
+
+    private func abbreviatedDisplayPath(_ path: String?) -> String? {
+        guard let path else { return nil }
+        let cloudDocsPrefix = NSHomeDirectory() + "/Library/Mobile Documents/com~apple~CloudDocs"
+        if path == cloudDocsPrefix {
+            return "iCloud Drive"
+        }
+        if path.hasPrefix(cloudDocsPrefix + "/") {
+            return "iCloud Drive/" + path.dropFirst(cloudDocsPrefix.count + 1)
+        }
+        return path
     }
 
     private func keyManagementIcon(for status: MacVaultKeyStatus) -> String {
@@ -827,26 +844,6 @@ struct MacSettingsView: View {
             if !NSWorkspace.shared.open(parentURL) {
                 settingsErrorMessage = "Finder 未能打开：\(parentURL.path)"
             }
-        }
-    }
-
-    private func exportMaintenanceLog() {
-        do {
-            let logURL = try MaintenanceLogStore.shared.exportLogFile()
-            let panel = NSSavePanel()
-            panel.title = "下载维护日志"
-            panel.message = "保存 Seal Note 的本机维护日志。"
-            panel.nameFieldStringValue = "seal-note-maintenance.log"
-            panel.allowedContentTypes = [.plainText]
-            if panel.runModal() == .OK, let saveURL = panel.url {
-                if FileManager.default.fileExists(atPath: saveURL.path) {
-                    try FileManager.default.removeItem(at: saveURL)
-                }
-                try FileManager.default.copyItem(at: logURL, to: saveURL)
-                logStatusMessage = "维护日志已导出。"
-            }
-        } catch {
-            settingsErrorMessage = "无法导出维护日志：\(error.localizedDescription)"
         }
     }
 

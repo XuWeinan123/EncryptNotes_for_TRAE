@@ -13,9 +13,10 @@ enum NoteEditorMode {
 struct NoteEditorView: View {
     let mode: NoteEditorMode
     let initialBody: String
-    let onSave: (String, Bool) async throws -> Void
+    let onSave: (String, Bool) async throws -> Note?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var vaultStore = VaultStore.shared
     private let settings = SettingsStore.shared
 
@@ -25,9 +26,12 @@ struct NoteEditorView: View {
     @State private var errorMessage = ""
     @State private var isSaving = false
     @State private var isPreviewing = false
-    @State private var showDiscardConfirmation = false
     @State private var showDeleteConfirmation = false
     @State private var editorSelection = NSRange(location: 0, length: 0)
+    @State private var persistedNote: Note?
+    @State private var lastSavedBody = ""
+    @State private var lastSavedEncrypted = false
+    @State private var didConfigureInitialState = false
 
     @State private var showFirstKeyPrompt = false
     @State private var showKeySettings = false
@@ -43,19 +47,18 @@ struct NoteEditorView: View {
         return nil
     }
 
-    private var initialEffectiveBody: String {
-        if case .edit(let note) = mode { return note.body }
-        return initialBody
+    private var currentPersistedNote: Note? {
+        persistedNote ?? editingNote
     }
 
     private var hasUnsavedChanges: Bool {
-        noteBody != initialEffectiveBody || (editingNote == nil && isEncrypted != (vaultStore.isKeyLoaded && settings.preferredNoteMode == .encrypted))
+        noteBody != lastSavedBody || isEncrypted != lastSavedEncrypted
     }
 
     init(
         mode: NoteEditorMode,
         initialBody: String = "",
-        onSave: @escaping (String, Bool) async throws -> Void
+        onSave: @escaping (String, Bool) async throws -> Note?
     ) {
         self.mode = mode
         self.initialBody = initialBody
@@ -83,91 +86,80 @@ struct NoteEditorView: View {
                             .font(.system(size: 16, weight: .semibold))
                     }
                     .disabled(isSaving)
-                    .dsGlassToolbarButton()
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    HStack(spacing: DS.s2) {
-                        #if os(iOS)
-                        Button { togglePreview() } label: {
-                            Image(systemName: isPreviewing ? "stop.fill" : "play.fill")
+                ToolbarItemGroup(placement: .confirmationAction) {
+                    #if os(iOS)
+                    Button { togglePreview() } label: {
+                        Image(systemName: isPreviewing ? "stop.fill" : "play.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(isPreviewing ? DS.primaryDeep : DS.textSecondary)
+                    }
+                    .disabled(isSaving)
+                    .accessibilityLabel(isPreviewing ? "返回编辑" : "Markdown 预览")
+                    #endif
+
+                    Menu {
+                        Button {
+                            copyNoteText()
+                        } label: {
+                            Label("复制正文", systemImage: "doc.on.doc")
+                        }
+                        .disabled(noteBody.isEmpty)
+
+                        if let note = currentPersistedNote {
+                            Divider()
+                            if note.isEncrypted {
+                                Button {
+                                    convertCurrentNote(to: .plain)
+                                } label: {
+                                    Label("转为明文笔记", systemImage: "lock.open")
+                                }
+                                .disabled(isSaving)
+                            } else {
+                                Button {
+                                    convertCurrentNote(to: .encrypted)
+                                } label: {
+                                    Label("转为加密笔记", systemImage: "lock")
+                                }
+                                .disabled(isSaving)
+                            }
+
+                            Divider()
+                            Button(role: .destructive) {
+                                showDeleteConfirmation = true
+                            } label: {
+                                Label("移到回收站", systemImage: "trash")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+
+                    if !isEditing {
+                        Button {
+                            toggleEncryption()
+                        } label: {
+                            Image(systemName: isEncrypted ? "lock.fill" : "lock.open")
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(isPreviewing ? DS.primaryDeep : DS.textSecondary)
+                                .foregroundColor(isEncrypted ? DS.primaryDeep : DS.textSecondary)
                         }
                         .disabled(isSaving)
-                        .accessibilityLabel(isPreviewing ? "返回编辑" : "Markdown 预览")
-                        .dsGlassToolbarButton()
-                        #endif
+                    }
 
-                        Menu {
-                            Button {
-                                copyNoteText()
-                            } label: {
-                                Label("复制正文", systemImage: "doc.on.doc")
-                            }
-                            .disabled(noteBody.isEmpty)
-
-                            if let note = editingNote {
-                                Divider()
-                                if note.isEncrypted {
-                                    Button {
-                                        convertCurrentNote(to: .plain)
-                                    } label: {
-                                        Label("转为明文笔记", systemImage: "lock.open")
-                                    }
-                                    .disabled(isSaving)
-                                } else {
-                                    Button {
-                                        convertCurrentNote(to: .encrypted)
-                                    } label: {
-                                        Label("转为加密笔记", systemImage: "lock")
-                                    }
-                                    .disabled(isSaving)
-                                }
-
-                                Divider()
-                                Button(role: .destructive) {
-                                    showDeleteConfirmation = true
-                                } label: {
-                                    Label("移到回收站", systemImage: "trash")
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.system(size: 16, weight: .semibold))
-                        }
-                        .dsGlassToolbarButton()
-
-                        if !isEditing {
-                            Button {
-                                toggleEncryption()
-                            } label: {
-                                Image(systemName: isEncrypted ? "lock.fill" : "lock.open")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(isEncrypted ? DS.primaryDeep : DS.textSecondary)
-                            }
-                            .disabled(isSaving)
-                            .dsGlassToolbarButton()
-                        }
-
-                        if isSaving {
-                            ProgressView()
-                        } else {
-                            Button { saveNote() } label: {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 16, weight: .semibold))
-                            }
-                            .disabled(noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            .dsGlassToolbarButton(isProminent: true)
-                        }
+                    if isSaving {
+                        ProgressView()
                     }
                 }
             }
             .onAppear { configureInitialState() }
-            .alert("放弃更改？", isPresented: $showDiscardConfirmation) {
-                Button("继续编辑", role: .cancel) {}
-                Button("放弃", role: .destructive) { dismiss() }
-            } message: {
-                Text("当前笔记有未保存的修改，关闭后不会保留。")
+            .onDisappear {
+                persistBeforeViewDisappears()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase != .active {
+                    persistCurrentSnapshot()
+                }
             }
             .alert("删除这条笔记？", isPresented: $showDeleteConfirmation) {
                 Button("取消", role: .cancel) {}
@@ -207,7 +199,7 @@ struct NoteEditorView: View {
                 } else {
                     #if os(iOS)
                     NoteTextView(text: $noteBody, selectedRange: $editorSelection, placeholder: "写下想法，支持 Markdown 和 #标签")
-                        .frame(minHeight: 400)
+                        .frame(maxWidth: .infinity, minHeight: 400, alignment: .topLeading)
                     #else
                     ZStack(alignment: .topLeading) {
                         if noteBody.isEmpty {
@@ -229,7 +221,7 @@ struct NoteEditorView: View {
             }
             .padding(DS.cardPadding)
             .frame(maxWidth: DS.contentMax, alignment: .leading)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 
@@ -258,24 +250,26 @@ struct NoteEditorView: View {
 
     #if os(iOS)
     private var markdownFormatBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: DS.s2) {
-                formatButton("bold", title: "粗体", command: .bold)
-                formatButton("italic", title: "斜体", command: .italic)
-                formatButton("curlybraces", title: "代码", command: .inlineCode)
-                formatButton("link", title: "链接", command: .link)
-                formatButton("strikethrough", title: "删除线", command: .strike)
-                formatButton("chevron.left.forwardslash.chevron.right", title: "注释", command: .htmlComment)
-            }
-            .padding(.horizontal, DS.cardPadding)
-            .padding(.vertical, DS.s2)
-        }
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .top) {
+        VStack(spacing: 0) {
             Rectangle()
                 .fill(DS.line)
                 .frame(height: 0.5)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: DS.s2) {
+                    formatButton("bold", title: "粗体", command: .bold)
+                    formatButton("italic", title: "斜体", command: .italic)
+                    formatButton("curlybraces", title: "代码", command: .inlineCode)
+                    formatButton("link", title: "链接", command: .link)
+                    formatButton("strikethrough", title: "删除线", command: .strike)
+                    formatButton("chevron.left.forwardslash.chevron.right", title: "注释", command: .htmlComment)
+                }
+                .padding(.horizontal, DS.cardPadding)
+                .padding(.vertical, DS.s2)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.ultraThinMaterial)
     }
 
     private func formatButton(_ systemImage: String, title: String, command: MacMarkdownFormatCommand) -> some View {
@@ -299,10 +293,70 @@ struct NoteEditorView: View {
     #endif
 
     private func closeEditor() {
-        if hasUnsavedChanges {
-            showDiscardConfirmation = true
-        } else {
-            dismiss()
+        persistCurrentSnapshot(dismissAfterSave: true)
+    }
+
+    private func persistBeforeViewDisappears() {
+        guard didConfigureInitialState else { return }
+        guard hasUnsavedChanges || shouldCreateInitialNote else { return }
+        persistCurrentSnapshot()
+    }
+
+    private func persistCurrentSnapshot(dismissAfterSave: Bool = false) {
+        Task { await saveCurrentSnapshot(dismissAfterSave: dismissAfterSave) }
+    }
+
+    @MainActor
+    private func saveCurrentSnapshot(dismissAfterSave: Bool = false) async {
+        guard didConfigureInitialState else {
+            if dismissAfterSave { dismiss() }
+            return
+        }
+
+        guard !isSaving else { return }
+
+        let bodySnapshot = noteBody
+        let encryptedSnapshot = isEncrypted
+        let trimmedBody = bodySnapshot.trimmingCharacters(in: .whitespacesAndNewlines)
+        let noteToUpdate = currentPersistedNote
+        let shouldCreate = noteToUpdate == nil && !trimmedBody.isEmpty
+        let shouldUpdate = noteToUpdate != nil && hasUnsavedChanges
+
+        guard shouldCreate || shouldUpdate else {
+            if dismissAfterSave { dismiss() }
+            return
+        }
+
+        isSaving = true
+        do {
+            if let noteToUpdate {
+                let updatedNote: Note
+                if noteToUpdate.isEncrypted != encryptedSnapshot {
+                    updatedNote = try await vaultStore.updateNoteMode(
+                        noteToUpdate,
+                        body: bodySnapshot,
+                        mode: encryptedSnapshot ? .encrypted : .plain
+                    )
+                } else {
+                    try await vaultStore.updateNote(noteToUpdate, body: bodySnapshot)
+                    updatedNote = vaultStore.readableNotes.first(where: { $0.id == noteToUpdate.id }) ?? noteToUpdate
+                }
+                persistedNote = updatedNote
+            } else if let createdNote = try await onSave(bodySnapshot, encryptedSnapshot) {
+                persistedNote = createdNote
+            }
+
+            lastSavedBody = bodySnapshot
+            lastSavedEncrypted = encryptedSnapshot
+            isSaving = false
+
+            if dismissAfterSave {
+                dismiss()
+            }
+        } catch {
+            isSaving = false
+            errorMessage = error.localizedDescription
+            showError = true
         }
     }
 
@@ -326,7 +380,7 @@ struct NoteEditorView: View {
     }
 
     private func convertCurrentNote(to mode: NoteMode) {
-        guard let note = editingNote else { return }
+        guard let note = currentPersistedNote else { return }
         if mode == .encrypted && !vaultStore.isKeyLoaded {
             showFirstKeyPrompt = true
             return
@@ -335,7 +389,10 @@ struct NoteEditorView: View {
         Task {
             do {
                 let updated = try await vaultStore.updateNoteMode(note, body: noteBody, mode: mode)
+                persistedNote = updated
                 isEncrypted = updated.isEncrypted
+                lastSavedBody = noteBody
+                lastSavedEncrypted = updated.isEncrypted
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription
@@ -346,7 +403,7 @@ struct NoteEditorView: View {
     }
 
     private func deleteCurrentNote() {
-        guard let note = editingNote else { return }
+        guard let note = currentPersistedNote else { return }
         Task {
             do {
                 try await vaultStore.deleteNote(note)
@@ -373,9 +430,12 @@ struct NoteEditorView: View {
     }
 
     private func configureInitialState() {
+        guard !didConfigureInitialState else { return }
+
         if case .edit(let note) = mode {
             noteBody = note.body
             isEncrypted = note.isEncrypted
+            persistedNote = note
         } else {
             noteBody = initialBody
             if vaultStore.isKeyLoaded {
@@ -385,6 +445,13 @@ struct NoteEditorView: View {
             }
 
         }
+        lastSavedBody = noteBody
+        lastSavedEncrypted = isEncrypted
+        didConfigureInitialState = true
+    }
+
+    private var shouldCreateInitialNote: Bool {
+        currentPersistedNote == nil && !noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var keyPromptTitle: String {
@@ -405,44 +472,6 @@ struct NoteEditorView: View {
         return "需要先前往设置页创建或加载密钥。"
     }
 
-    private func saveNote() {
-        guard !noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorMessage = "正文不能为空"
-            showError = true
-            return
-        }
-
-        isSaving = true
-        Task {
-            do {
-                try await onSave(noteBody, isEncrypted)
-                dismiss()
-            } catch {
-                errorMessage = error.localizedDescription
-                showError = true
-            }
-            isSaving = false
-        }
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    func dsGlassToolbarButton(isProminent: Bool = false) -> some View {
-        if #available(iOS 26.0, *) {
-            if isProminent {
-                self.buttonStyle(.glassProminent)
-            } else {
-                self.buttonStyle(.glass)
-            }
-        } else {
-            self
-                .foregroundColor(isProminent ? DS.onPrimary : DS.textBody)
-                .frame(width: 36, height: 36)
-                .background(isProminent ? DS.primary : DS.surfaceSunken.opacity(0.6))
-                .clipShape(Circle())
-        }
-    }
 }
 
 #if os(iOS)
@@ -475,6 +504,8 @@ private class PlaceholderTextView: UITextView {
         smartQuotesType = .no
         smartInsertDeleteType = .no
         autocorrectionType = .default
+        setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         let font = UIFont.systemFont(ofSize: 15)
         self.font = font
@@ -487,7 +518,10 @@ private class PlaceholderTextView: UITextView {
             .paragraphStyle: paragraphStyle
         ]
 
-        textContainerInset = UIEdgeInsets(top: DS.cardPadding, left: DS.cardPadding - 5, bottom: DS.cardPadding, right: DS.cardPadding - 5)
+        textContainer.lineFragmentPadding = 0
+        textContainer.lineBreakMode = .byWordWrapping
+        textContainer.widthTracksTextView = true
+        textContainerInset = UIEdgeInsets(top: DS.cardPadding, left: DS.cardPadding, bottom: DS.cardPadding, right: DS.cardPadding)
 
         placeholderLabel.textColor = UIColor(DS.textSubtle)
         placeholderLabel.font = font
@@ -531,6 +565,13 @@ private struct NoteTextView: UIViewRepresentable {
         context.coordinator.textView = textView
         textView.backgroundColor = UIColor(DS.surfaceCard)
         return textView
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: PlaceholderTextView, context: Context) -> CGSize? {
+        let width = proposal.width ?? UIScreen.main.bounds.width - DS.cardPadding * 2
+        let fittingSize = CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        let measuredSize = uiView.sizeThatFits(fittingSize)
+        return CGSize(width: width, height: max(400, measuredSize.height))
     }
 
     func updateUIView(_ uiView: PlaceholderTextView, context: Context) {

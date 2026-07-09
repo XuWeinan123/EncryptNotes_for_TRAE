@@ -64,6 +64,12 @@ struct SidebarView: View {
                 .controlSize(.small)
                 .frame(width: 32, height: 32)
                 .accessibilityLabel("正在同步")
+        case .pendingDownloads(let count):
+            Image(systemName: "arrow.triangle.2.circlepath.icloud")
+                .font(.system(size: 16, weight: .regular))
+                .foregroundColor(DS.pro)
+                .frame(width: 32, height: 32)
+                .accessibilityLabel("正在下载 \(count) 篇笔记")
         case .saved:
             Image(systemName: syncStore.isNetworkAvailable ? "icloud" : "icloud.slash")
                 .font(.system(size: 16, weight: .regular))

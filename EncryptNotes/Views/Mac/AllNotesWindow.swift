@@ -6,8 +6,6 @@ struct AllNotesView: View {
     @ObservedObject private var vaultStore = VaultStore.shared
     @State private var searchText = ""
     @State private var selectedTag: String?
-    @State private var showingClearEmptyConfirmation = false
-    @State private var isClearingEmptyNotes = false
     @State private var renamingNote: Note?
     @State private var renameTitle = ""
     @State private var renameErrorMessage: String?
@@ -87,16 +85,6 @@ struct AllNotesView: View {
                 )
             }
         }
-        .alert(isPresented: $showingClearEmptyConfirmation) {
-            Alert(
-                title: Text("清空空笔记？"),
-                message: Text("将 \(emptyNotes.count) 条空笔记移到回收站，可以恢复。"),
-                primaryButton: .destructive(Text("清空")) {
-                    clearEmptyNotes()
-                },
-                secondaryButton: .cancel()
-            )
-        }
     }
 
     @ToolbarContentBuilder
@@ -110,16 +98,6 @@ struct AllNotesView: View {
             }
             .help("搜索")
             .keyboardShortcut("f", modifiers: .command)
-
-            Button {
-                showingClearEmptyConfirmation = true
-            } label: {
-                Label("清空空笔记", systemImage: "trash")
-                    .labelStyle(.iconOnly)
-            }
-            .tint(DS.destructive)
-            .disabled(emptyNotes.isEmpty || isClearingEmptyNotes)
-            .help(emptyNotes.isEmpty ? "没有空笔记" : "将空笔记移到回收站")
         }
     }
 
@@ -364,19 +342,6 @@ struct AllNotesView: View {
         }
     }
 
-    private func clearEmptyNotes() {
-        let notesToDelete = emptyNotes
-        guard !notesToDelete.isEmpty else { return }
-
-        isClearingEmptyNotes = true
-        Task {
-            for note in notesToDelete {
-                StickyNoteWindowManager.shared.closeWindow(for: note.id)
-                try? await vaultStore.deleteNote(note)
-            }
-            isClearingEmptyNotes = false
-        }
-    }
 }
 
 private struct AllNotesRenameSheet: View {

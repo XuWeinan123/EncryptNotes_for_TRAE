@@ -1,5 +1,17 @@
 import Foundation
 
+extension Notification.Name {
+    static let vaultStorageDidMutate = Notification.Name("SealNoteVaultStorageDidMutate")
+}
+
+nonisolated func postVaultStorageMutation(at url: URL) {
+    NotificationCenter.default.post(
+        name: .vaultStorageDidMutate,
+        object: nil,
+        userInfo: ["path": url.path]
+    )
+}
+
 nonisolated enum StorageError: Error, LocalizedError {
     case iCloudUnavailable
     case directoryCreationFailed
@@ -77,6 +89,7 @@ extension VaultStorage {
             throw StorageError.fileNotFound
         }
         try fm.removeItem(at: url)
+        postVaultStorageMutation(at: url)
     }
 
     nonisolated func moveFile(from srcURL: URL, to dstURL: URL) throws {
@@ -92,6 +105,7 @@ extension VaultStorage {
             try fm.createDirectory(at: dstDir, withIntermediateDirectories: true)
         }
         try fm.moveItem(at: srcURL, to: dstURL)
+        postVaultStorageMutation(at: dstURL)
     }
 
     nonisolated func emptyTrash() throws {
@@ -106,6 +120,7 @@ extension VaultStorage {
                 try? fm.removeItem(at: file)
             }
         }
+        postVaultStorageMutation(at: trashURL)
     }
 
     nonisolated func createConflictCopy(for url: URL) throws -> URL {
@@ -124,6 +139,7 @@ extension VaultStorage {
             try fm.createDirectory(at: conflictDir, withIntermediateDirectories: true)
         }
         try fm.copyItem(at: url, to: conflictURL)
+        postVaultStorageMutation(at: conflictURL)
         return conflictURL
     }
 

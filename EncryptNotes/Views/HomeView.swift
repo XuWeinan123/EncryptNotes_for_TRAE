@@ -41,6 +41,13 @@ struct HomeView: View {
         return false
     }
 
+    private var pendingDownloadCount: Int {
+        if case .pendingDownloads(let count) = syncStore.status {
+            return count
+        }
+        return 0
+    }
+
     var body: some View {
         ZStack {
             mainContent
@@ -52,10 +59,11 @@ struct HomeView: View {
         }
         .onChange(of: scenePhase) { _, newPhase in
             appLockStore.handleScenePhaseChange(newPhase)
+            refreshNotesWhenAppBecomesActive(newPhase)
         }
         .sheet(isPresented: $showNewNoteEditor) {
             NoteEditorView(mode: .create) { body, isEncrypted in
-                try await vaultStore.createNote(body: body, isEncrypted: isEncrypted)
+                return try await vaultStore.createNote(body: body, isEncrypted: isEncrypted)
             }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -63,6 +71,7 @@ struct HomeView: View {
         .sheet(item: $selectedNote) { note in
             NoteEditorView(mode: .edit(note)) { body, _ in
                 try await vaultStore.updateNote(note, body: body)
+                return vaultStore.readableNotes.first(where: { $0.id == note.id }) ?? note
             }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -136,6 +145,14 @@ struct HomeView: View {
             if case .loading = vaultStore.state {
                 await vaultStore.initialize()
             }
+        }
+    }
+
+    private func refreshNotesWhenAppBecomesActive(_ phase: ScenePhase) {
+        guard phase == .active else { return }
+        guard case .ready = vaultStore.state else { return }
+        Task {
+            await vaultStore.refreshFromStorage()
         }
     }
 
@@ -323,6 +340,7 @@ struct HomeView: View {
     private var emptyTitle: String {
         if !vaultStore.searchText.isEmpty { return "未找到匹配笔记" }
         if let tag = vaultStore.selectedTag { return "没有 \(tag)" }
+        if pendingDownloadCount > 0 { return "正在同步笔记" }
         if vaultStore.lockedNoteCount > 0 && !vaultStore.isKeyLoaded { return "有笔记待解锁" }
         return "暂无笔记"
     }
@@ -331,6 +349,9 @@ struct HomeView: View {
         if !vaultStore.searchText.isEmpty { return "换个关键词试试。" }
         if let tag = vaultStore.selectedTag {
             return "没有包含 \(tag) 的可读笔记。"
+        }
+        if pendingDownloadCount > 0 {
+            return "还有 \(pendingDownloadCount) 篇笔记在从 iCloud 下载，完成后会自动显示。"
         }
         if vaultStore.lockedNoteCount > 0 && !vaultStore.isKeyLoaded {
             return "前往密钥设置加载原密钥后，加密笔记会在本机解密显示。"

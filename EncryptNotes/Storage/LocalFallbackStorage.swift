@@ -60,6 +60,7 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
 
         let data = try JSONEncoder.default.encode(index)
         try data.write(to: url, options: .atomic)
+        postVaultStorageMutation(at: url)
         MaintenanceLogStore.shared.record("index_saved", fields: [
             "entries": index.entries.count,
             "file": url.lastPathComponent,
@@ -87,6 +88,7 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
     func saveMarkdownFile(_ file: MarkdownNoteFile, at url: URL) throws {
         let data = try file.render()
         try data.write(to: url, options: .atomic)
+        postVaultStorageMutation(at: url)
         MaintenanceLogStore.shared.record("markdown_saved", fields: [
             "note_id": file.noteId,
             "file": url.lastPathComponent,
@@ -108,6 +110,7 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
             try FileManager.default.removeItem(at: dstURL)
         }
         try FileManager.default.moveItem(at: srcURL, to: dstURL)
+        postVaultStorageMutation(at: dstURL)
         MaintenanceLogStore.shared.record("file_moved", fields: [
             "from": srcURL.lastPathComponent,
             "to": dstURL.lastPathComponent,
@@ -120,6 +123,7 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
             throw StorageError.fileNotFound
         }
         try FileManager.default.removeItem(at: url)
+        postVaultStorageMutation(at: url)
         MaintenanceLogStore.shared.record("file_deleted", fields: [
             "file": url.lastPathComponent,
             "storage": "local"
@@ -139,6 +143,7 @@ final class LocalFallbackStorage: VaultStorage, @unchecked Sendable {
         }
         let conflictURL = conflictDir.appendingPathComponent(conflictFilename)
         try FileManager.default.copyItem(at: url, to: conflictURL)
+        postVaultStorageMutation(at: conflictURL)
         MaintenanceLogStore.shared.record("conflict_copy_created", fields: [
             "source": url.lastPathComponent,
             "conflict": conflictURL.lastPathComponent,

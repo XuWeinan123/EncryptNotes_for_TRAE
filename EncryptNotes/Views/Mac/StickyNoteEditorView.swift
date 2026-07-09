@@ -1308,6 +1308,8 @@ final class StickyNoteEditorViewModel: ObservableObject {
                 return "已经配置了密钥引用。"
             case .encryptedNotesExist:
                 return "仍有加密笔记，请先在密钥设置中处理。"
+            case .keyDownloadPending:
+                return "密钥仍在从 iCloud 下载。下载完成后请再试一次。"
             }
         }
 

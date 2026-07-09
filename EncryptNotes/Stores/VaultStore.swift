@@ -70,6 +70,8 @@ final class VaultStore: ObservableObject {
     private var vaultId: String?
     private var currentKey: CryptoKit.SymmetricKey?
     private var noteIndex: NoteIndex = NoteIndex()
+    private var pendingDownloadRetryTask: Task<Void, Never>?
+    private var pendingDownloadCount = 0
 
     private struct LoadedNotesSnapshot {
         let currentKey: CryptoKit.SymmetricKey?
@@ -79,18 +81,26 @@ final class VaultStore: ObservableObject {
         let lockedEncryptedNotes: [EncryptedNoteInfo]
         let trashNotes: [TrashNote]
         let noteIndex: NoteIndex
-        let pendingDownloadCount: Int
+        let pendingDownloadKeys: Set<String>
     }
 
     private struct PreparedIndexResult {
         let index: NoteIndex
         let removedMissingFiles: [String]
-        let pendingDownloadCount: Int
+        let pendingDownloadKeys: Set<String>
+        let discoveredFileCount: Int
     }
 
     private struct ReconciledIndexResult {
         let missingFiles: [String]
-        let pendingDownloadCount: Int
+        let pendingDownloadKeys: Set<String>
+        let changed: Bool
+    }
+
+    private struct DiscoveredIndexResult {
+        let discoveredFileCount: Int
+        let pendingDownloadKeys: Set<String>
+        let changed: Bool
     }
 
     private enum KeyReloadMode {
@@ -295,15 +305,16 @@ final class VaultStore: ObservableObject {
             noteIndex = prepared.index
             reportMissingIndexedFiles(prepared.removedMissingFiles)
 
-            let loadedPendingDownloadCount = await loadAllNotes()
-            let pendingDownloadCount = prepared.pendingDownloadCount + loadedPendingDownloadCount
+            let loadedPendingDownloadKeys = await loadAllNotes()
+            let pendingDownloadCount = prepared.pendingDownloadKeys.union(loadedPendingDownloadKeys).count
             if case .error = state {
                 return
             }
             if pendingDownloadCount == 0 {
+                handlePendingDownloads(0)
                 seedDefaultNotesIfNeeded()
             } else {
-                reportPendingDownloads(pendingDownloadCount)
+                handlePendingDownloads(pendingDownloadCount)
             }
             state = .ready
         } catch {
@@ -323,44 +334,181 @@ final class VaultStore: ObservableObject {
         let loadedIndex = try storage.loadIndex()
         var index = loadedIndex ?? fallbackIndex
         let reconciled = try reconcileIndexWithFiles(&index, storage: storage)
-        _ = purgeExpiredTrash(in: &index, storage: storage)
-        try storage.saveIndex(index)
+        let discovered = try discoverUnindexedMarkdownFiles(in: &index, storage: storage)
+        let purged = purgeExpiredTrash(in: &index, storage: storage)
+        if loadedIndex == nil || reconciled.changed || discovered.changed || purged {
+            try storage.saveIndex(index)
+        }
+        if discovered.discoveredFileCount > 0 {
+            MaintenanceLogStore.shared.record("unindexed_markdown_files_added_to_index", fields: [
+                "count": discovered.discoveredFileCount
+            ])
+        }
         return PreparedIndexResult(
             index: index,
             removedMissingFiles: reconciled.missingFiles,
-            pendingDownloadCount: reconciled.pendingDownloadCount
+            pendingDownloadKeys: reconciled.pendingDownloadKeys.union(discovered.pendingDownloadKeys),
+            discoveredFileCount: discovered.discoveredFileCount
         )
     }
 
     nonisolated private static func reconcileIndexWithFiles(_ index: inout NoteIndex, storage: VaultStorage) throws -> ReconciledIndexResult {
         var missingFiles: [String] = []
-        var pendingDownloadCount = 0
+        var pendingDownloadKeys = Set<String>()
         var survivingEntries: [NoteIndexEntry] = []
+        var changed = false
+        let preservesTemporarilyMissingFiles = storage is ICloudVaultStorage
 
         for entry in index.entries {
-            guard let url = urlForEntry(entry, storage: storage),
-                  FileManager.default.fileExists(atPath: url.path) else {
+            guard let url = urlForEntry(entry, storage: storage) else {
                 missingFiles.append(entry.fileName)
+                changed = true
+                continue
+            }
+
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                if preservesTemporarilyMissingFiles {
+                    pendingDownloadKeys.insert(fileKey(fileName: entry.fileName, location: entry.location))
+                    survivingEntries.append(entry)
+                    continue
+                }
+                missingFiles.append(entry.fileName)
+                changed = true
                 continue
             }
 
             do {
-                _ = try storage.loadMarkdownFile(at: url)
+                let mdFile = try storage.loadMarkdownFile(at: url)
+                let actualMode: NoteFileMode = mdFile.isEncrypted ? .encrypted : .plain
+                if actualMode != entry.mode {
+                    survivingEntries.append(NoteIndexEntry(
+                        noteId: entry.noteId,
+                        fileName: entry.fileName,
+                        mode: actualMode,
+                        location: entry.location,
+                        deletedAt: entry.deletedAt,
+                        purgeAfter: entry.purgeAfter,
+                        originalLocation: entry.originalLocation
+                    ))
+                    changed = true
+                } else {
+                    survivingEntries.append(entry)
+                }
             } catch StorageError.iCloudDownloadPending {
-                pendingDownloadCount += 1
+                pendingDownloadKeys.insert(fileKey(fileName: entry.fileName, location: entry.location))
                 survivingEntries.append(entry)
                 continue
             } catch {
+                if preservesTemporarilyMissingFiles {
+                    pendingDownloadKeys.insert(fileKey(fileName: entry.fileName, location: entry.location))
+                    survivingEntries.append(entry)
+                    continue
+                }
                 missingFiles.append(entry.fileName)
+                changed = true
                 continue
             }
-            survivingEntries.append(entry)
         }
 
         index.entries = survivingEntries
         return ReconciledIndexResult(
             missingFiles: missingFiles,
-            pendingDownloadCount: pendingDownloadCount
+            pendingDownloadKeys: pendingDownloadKeys,
+            changed: changed
+        )
+    }
+
+    nonisolated private static func discoverUnindexedMarkdownFiles(
+        in index: inout NoteIndex,
+        storage: VaultStorage
+    ) throws -> DiscoveredIndexResult {
+        var entriesById = Dictionary(uniqueKeysWithValues: index.entries.map { ($0.noteId, $0) })
+        var indexedFileKeys = Set(index.entries.map { fileKey(fileName: $0.fileName, location: $0.location) })
+        var discoveredFileCount = 0
+        var pendingDownloadKeys = Set<String>()
+        var changed = false
+
+        for location in [NoteFileLocation.notes, .trash] {
+            let urls = try storage.listMarkdownFiles(in: location)
+            for url in urls {
+                let currentFileKey = fileKey(fileName: url.lastPathComponent, location: location)
+                guard !indexedFileKeys.contains(currentFileKey) else { continue }
+
+                let mdFile: MarkdownNoteFile
+                do {
+                    mdFile = try storage.loadMarkdownFile(at: url)
+                } catch StorageError.iCloudDownloadPending {
+                    pendingDownloadKeys.insert(currentFileKey)
+                    continue
+                } catch {
+                    MaintenanceLogStore.shared.record("unindexed_markdown_file_skipped", fields: [
+                        "file": url.lastPathComponent,
+                        "location": location.rawValue,
+                        "error": error.localizedDescription
+                    ])
+                    continue
+                }
+
+                if let existingEntry = entriesById[mdFile.noteId] {
+                    guard let existingURL = urlForEntry(existingEntry, storage: storage),
+                          !FileManager.default.fileExists(atPath: existingURL.path) else {
+                        MaintenanceLogStore.shared.record("duplicate_note_file_skipped", fields: [
+                            "note_id": mdFile.noteId,
+                            "file": url.lastPathComponent,
+                            "location": location.rawValue
+                        ])
+                        continue
+                    }
+                }
+
+                let entry = discoveredIndexEntry(
+                    fileName: url.lastPathComponent,
+                    location: location,
+                    mdFile: mdFile
+                )
+                index.upsert(entry)
+                entriesById[entry.noteId] = entry
+                indexedFileKeys.insert(currentFileKey)
+                discoveredFileCount += 1
+                changed = true
+            }
+        }
+
+        return DiscoveredIndexResult(
+            discoveredFileCount: discoveredFileCount,
+            pendingDownloadKeys: pendingDownloadKeys,
+            changed: changed
+        )
+    }
+
+    nonisolated private static func fileKey(fileName: String, location: NoteFileLocation) -> String {
+        "\(location.rawValue)/\(fileName)"
+    }
+
+    nonisolated private static func discoveredIndexEntry(
+        fileName: String,
+        location: NoteFileLocation,
+        mdFile: MarkdownNoteFile
+    ) -> NoteIndexEntry {
+        let mode: NoteFileMode = mdFile.isEncrypted ? .encrypted : .plain
+        if location == .trash {
+            let deletedAt = mdFile.updatedAt
+            return NoteIndexEntry(
+                noteId: mdFile.noteId,
+                fileName: fileName,
+                mode: mode,
+                location: location,
+                deletedAt: deletedAt,
+                purgeAfter: deletedAt.addingTimeInterval(30 * 86400),
+                originalLocation: .notes
+            )
+        }
+
+        return NoteIndexEntry(
+            noteId: mdFile.noteId,
+            fileName: fileName,
+            mode: mode,
+            location: location
         )
     }
 
@@ -375,16 +523,41 @@ final class VaultStore: ObservableObject {
         ])
     }
 
-    private func reportPendingDownloads(_ count: Int) {
+    private func recordPendingDownloads(_ count: Int) {
         guard count > 0 else { return }
-        lastError = "有 \(count) 篇笔记仍在从 iCloud 下载。下载完成后请刷新笔记列表。"
         MaintenanceLogStore.shared.record("icloud_note_downloads_pending", fields: [
             "count": count
         ])
     }
 
+    private func handlePendingDownloads(_ count: Int) {
+        pendingDownloadCount = count
+        if count > 0 {
+            recordPendingDownloads(count)
+            SyncStatusStore.shared.setPendingDownloads(count: count)
+            schedulePendingDownloadRetry()
+        } else {
+            pendingDownloadRetryTask?.cancel()
+            pendingDownloadRetryTask = nil
+            SyncStatusStore.shared.setSaved()
+        }
+    }
+
+    private func schedulePendingDownloadRetry() {
+        guard isUsingICloudStorage else { return }
+        guard pendingDownloadRetryTask == nil else { return }
+        pendingDownloadRetryTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.pendingDownloadRetryTask = nil
+            }
+            await self?.refreshFromStorage()
+        }
+    }
+
     @discardableResult
-    private func loadAllNotes() async -> Int {
+    private func loadAllNotes() async -> Set<String> {
         do {
             let loadedKey: CryptoKit.SymmetricKey?
             #if os(macOS)
@@ -423,24 +596,23 @@ final class VaultStore: ObservableObject {
             trashNotes = snapshot.trashNotes
             noteIndex = snapshot.noteIndex
             state = .ready
-            reportPendingDownloads(snapshot.pendingDownloadCount)
             MaintenanceLogStore.shared.record("vault_loaded", fields: [
                 "plain": plainNotes.count,
                 "decrypted": decryptedNotes.count,
                 "locked": lockedEncryptedNotes.count,
                 "trash": trashNotes.count,
-                "pending_downloads": snapshot.pendingDownloadCount,
+                "pending_downloads": snapshot.pendingDownloadKeys.count,
                 "index_entries": noteIndex.entries.count,
                 "storage": isUsingICloudStorage ? "icloud" : "local",
                 "container": storage.containerURL?.path
             ])
-            return snapshot.pendingDownloadCount
+            return snapshot.pendingDownloadKeys
         } catch {
             state = .error(message: error.localizedDescription)
             MaintenanceLogStore.shared.record("vault_load_failed", fields: [
                 "error": error.localizedDescription
             ])
-            return 0
+            return []
         }
     }
 
@@ -456,10 +628,11 @@ final class VaultStore: ObservableObject {
         var lockedEncryptedNotes: [EncryptedNoteInfo] = []
         var trashNotes: [TrashNote] = []
         let updatedIndex = index
-        var pendingDownloadCount = 0
+        var pendingDownloadKeys = Set<String>()
 
         for entry in index.entries {
             guard let url = urlForEntry(entry, storage: storage) else { continue }
+            let currentFileKey = fileKey(fileName: entry.fileName, location: entry.location)
 
             guard FileManager.default.fileExists(atPath: url.path) else { continue }
 
@@ -516,7 +689,7 @@ final class VaultStore: ObservableObject {
                     }
                 }
             } catch StorageError.iCloudDownloadPending {
-                pendingDownloadCount += 1
+                pendingDownloadKeys.insert(currentFileKey)
                 continue
             } catch {
                 continue
@@ -535,7 +708,7 @@ final class VaultStore: ObservableObject {
             lockedEncryptedNotes: lockedEncryptedNotes,
             trashNotes: trashNotes,
             noteIndex: updatedIndex,
-            pendingDownloadCount: pendingDownloadCount
+            pendingDownloadKeys: pendingDownloadKeys
         )
     }
 
@@ -782,6 +955,7 @@ final class VaultStore: ObservableObject {
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw VaultKeyFileError.fileMissing
         }
+        try requestICloudKeyDownloadIfNeeded(at: url)
 
         let data: Data
         do {
@@ -820,6 +994,36 @@ final class VaultStore: ObservableObject {
         guard url.pathExtension.lowercased() == "snkey" else {
             throw VaultKeyFileError.unsupportedFileExtension
         }
+    }
+
+    private func requestICloudKeyDownloadIfNeeded(at url: URL) throws {
+        let resourceKeys: Set<URLResourceKey> = [
+            .isUbiquitousItemKey,
+            .ubiquitousItemDownloadingStatusKey
+        ]
+        guard let values = try? url.resourceValues(forKeys: resourceKeys),
+              values.isUbiquitousItem == true else {
+            return
+        }
+
+        let status = values.ubiquitousItemDownloadingStatus
+        if status == .current || status == .downloaded {
+            return
+        }
+
+        do {
+            try FileManager.default.startDownloadingUbiquitousItem(at: url)
+            MaintenanceLogStore.shared.record("vault_key_icloud_download_requested", fields: [
+                "file": url.lastPathComponent
+            ])
+        } catch {
+            MaintenanceLogStore.shared.record("vault_key_icloud_download_request_failed", fields: [
+                "file": url.lastPathComponent,
+                "error": error.localizedDescription
+            ])
+        }
+
+        throw VaultKeyFileError.keyDownloadPending
     }
 
     private func validateKeyAgainstExistingEncryptedNote(_ key: CryptoKit.SymmetricKey) throws {
@@ -1118,6 +1322,7 @@ final class VaultStore: ObservableObject {
                 url.stopAccessingSecurityScopedResource()
             }
         }
+        try requestSelectedKeyDownloadIfNeeded(at: url)
 
         let data: Data
         do {
@@ -1274,7 +1479,6 @@ final class VaultStore: ObservableObject {
             }.value
             noteIndex = prepared.index
             reportMissingIndexedFiles(prepared.removedMissingFiles)
-            reportPendingDownloads(prepared.pendingDownloadCount)
 
             let loadedKey: CryptoKit.SymmetricKey?
             switch keyReloadMode {
@@ -1308,8 +1512,12 @@ final class VaultStore: ObservableObject {
             lockedEncryptedNotes = snapshot.lockedEncryptedNotes
             trashNotes = snapshot.trashNotes
             noteIndex = snapshot.noteIndex
+            handlePendingDownloads(prepared.pendingDownloadKeys.union(snapshot.pendingDownloadKeys).count)
         } catch {
             state = .error(message: error.localizedDescription)
+            pendingDownloadRetryTask?.cancel()
+            pendingDownloadRetryTask = nil
+            pendingDownloadCount = 0
         }
     }
 
@@ -1321,7 +1529,11 @@ final class VaultStore: ObservableObject {
             SyncStatusStore.shared.setFailed(message: message)
         } else {
             state = .ready
-            SyncStatusStore.shared.setSaved()
+            if pendingDownloadCount > 0 {
+                SyncStatusStore.shared.setPendingDownloads(count: pendingDownloadCount)
+            } else {
+                SyncStatusStore.shared.setSaved()
+            }
         }
     }
 
@@ -1849,6 +2061,36 @@ final class VaultStore: ObservableObject {
         return false
     }
 
+    private func requestSelectedKeyDownloadIfNeeded(at url: URL) throws {
+        let resourceKeys: Set<URLResourceKey> = [
+            .isUbiquitousItemKey,
+            .ubiquitousItemDownloadingStatusKey
+        ]
+        guard let values = try? url.resourceValues(forKeys: resourceKeys),
+              values.isUbiquitousItem == true else {
+            return
+        }
+
+        let status = values.ubiquitousItemDownloadingStatus
+        if status == .current || status == .downloaded {
+            return
+        }
+
+        do {
+            try FileManager.default.startDownloadingUbiquitousItem(at: url)
+            MaintenanceLogStore.shared.record("vault_key_icloud_download_requested", fields: [
+                "file": url.lastPathComponent
+            ])
+        } catch {
+            MaintenanceLogStore.shared.record("vault_key_icloud_download_request_failed", fields: [
+                "file": url.lastPathComponent,
+                "error": error.localizedDescription
+            ])
+        }
+
+        throw VaultKeyFileError.keyDownloadPending
+    }
+
     private func reloadTrashOnly() async {
         let preferredMode = settings.preferredNoteMode
         let snapshot = try? await Task.detached(priority: .userInitiated) { [storage, noteIndex, currentKey, preferredMode] in
@@ -1998,6 +2240,7 @@ nonisolated enum VaultKeyFileError: Error, LocalizedError, Equatable {
     case keyMismatch
     case keyAlreadyConfigured
     case encryptedNotesExist
+    case keyDownloadPending
 
     var errorDescription: String? {
         switch self {
@@ -2019,6 +2262,8 @@ nonisolated enum VaultKeyFileError: Error, LocalizedError, Equatable {
             return "已经存在密钥引用，请先移除当前密钥引用。"
         case .encryptedNotesExist:
             return "仍有加密笔记，请先删除全部加密笔记，或先全部解密成明文。"
+        case .keyDownloadPending:
+            return "密钥仍在从 iCloud 下载，请稍后再试。"
         }
     }
 }
