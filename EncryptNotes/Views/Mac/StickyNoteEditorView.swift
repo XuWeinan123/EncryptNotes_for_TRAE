@@ -1850,16 +1850,23 @@ extension MacTextView {
             }
 
             textView.isUpdating = true
+            defer { textView.isUpdating = false }
             let newText = textView.string
             parent.onChange(newText)
             lastText = newText
             let scrollView = textView.enclosingScrollView as? ToolbarInsetScrollView
-            MacMarkdownHighlighter.applyMarkdownHighlighting(to: textView, lineHeightMultiple: parent.lineHeightMultiple)
-            markStyleRendered(fontSize: parent.fontSize, lineHeightMultiple: parent.lineHeightMultiple)
-            textView.typingAttributes = Self.typingAttributes(fontSize: parent.fontSize, lineHeightMultiple: parent.lineHeightMultiple)
-            parent.updatePlaceholderVisibility(textView)
-            scrollView?.syncDocumentSize(textView)
-            textView.isUpdating = false
+            let refreshEditorState = {
+                MacMarkdownHighlighter.applyMarkdownHighlighting(to: textView, lineHeightMultiple: self.parent.lineHeightMultiple)
+                self.markStyleRendered(fontSize: self.parent.fontSize, lineHeightMultiple: self.parent.lineHeightMultiple)
+                textView.typingAttributes = Self.typingAttributes(fontSize: self.parent.fontSize, lineHeightMultiple: self.parent.lineHeightMultiple)
+                self.parent.updatePlaceholderVisibility(textView)
+                scrollView?.syncDocumentSize(textView)
+            }
+            if let scrollView {
+                scrollView.preservingVisibleOrigin(refreshEditorState)
+            } else {
+                refreshEditorState()
+            }
         }
 
         func textDidBeginEditing(_ notification: Notification) {}
