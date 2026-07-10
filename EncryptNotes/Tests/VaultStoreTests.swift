@@ -502,7 +502,7 @@ final class VaultStoreTests: XCTestCase {
         )
         let plain = Note(
             id: "plain-1", body: "明文",
-            createdAt: Date(timeIntervalSince1970: 100),
+            createdAt: Date(timeIntervalSince1970: 150),
             updatedAt: Date(timeIntervalSince1970: 300),
             isEncrypted: false
         )

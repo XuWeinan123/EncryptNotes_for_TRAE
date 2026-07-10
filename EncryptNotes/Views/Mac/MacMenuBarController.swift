@@ -194,18 +194,17 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
     }
 
     private func recentMenuNotes() -> [RecentMenuNote] {
-        let limit = settings.macRecentNotesLimit
-        let readableItems = vaultStore.readableNotes.map { NoteListItem.readable($0) }
-        let lockedItems = vaultStore.lockedEncryptedNotes.map { NoteListItem.locked($0) }
-        return (readableItems + lockedItems)
-            .sorted(by: NoteListOrdering.newestCreatedFirst)
-            .prefix(limit)
-            .map { item in
-                switch item {
-                case .readable(let note): return .readable(note)
-                case .locked(let info): return .locked(info)
-                }
+        let snapshot = MacNoteListSnapshotBuilder.make(
+            readableNotes: vaultStore.readableNotes,
+            lockedEncryptedNotes: vaultStore.lockedEncryptedNotes,
+            titleProvider: { vaultStore.displayTitle(for: $0, emptyTitle: "") }
+        )
+        return snapshot.recentItems(limit: settings.macRecentNotesLimit).map { item in
+            switch item {
+            case .readable(let note): return .readable(note)
+            case .locked(let info): return .locked(info)
             }
+        }
     }
 
     private func menuItem(for recentItem: RecentMenuNote, index: Int) -> NSMenuItem {

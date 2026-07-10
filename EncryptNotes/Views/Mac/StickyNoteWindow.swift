@@ -213,7 +213,7 @@ final class StickyNoteWindowManager: NSObject {
 
         let newFrame = NSRect(origin: newOrigin, size: NSSize(width: finalWidth, height: finalHeight))
         window.setFrame(newFrame, display: true, animate: true)
-        saveWindowFrame(window, noteId: noteId)
+        saveWindowFrame(window, noteId: noteId, persistImmediately: false)
     }
 
     private func measureTextHeight(text: String, width: CGFloat, fontSize: CGFloat) -> CGFloat {
@@ -251,7 +251,7 @@ final class StickyNoteWindowManager: NSObject {
         }
     }
 
-    private func saveWindowFrame(_ window: NSWindow, noteId: String) {
+    private func saveWindowFrame(_ window: NSWindow, noteId: String, persistImmediately: Bool = false) {
         let frame = window.frame
         MacNoteWindowStore.shared.updateFrame(
             for: noteId,
@@ -261,7 +261,8 @@ final class StickyNoteWindowManager: NSObject {
                 width: Double(max(Self.minimumContentSize.width, frame.size.width)),
                 height: Double(max(Self.minimumContentSize.height, frame.size.height))
             ),
-            remembersAsNewNoteSize: noteIdsRememberingNewNoteSize.contains(noteId)
+            remembersAsNewNoteSize: noteIdsRememberingNewNoteSize.contains(noteId),
+            persistImmediately: persistImmediately
         )
     }
 
@@ -315,7 +316,7 @@ extension StickyNoteWindowManager: NSWindowDelegate {
         guard let window = notification.object as? NSWindow,
               let id = window.identifier?.rawValue else { return }
 
-        saveWindowFrame(window, noteId: id)
+        saveWindowFrame(window, noteId: id, persistImmediately: true)
         noteWindows.removeValue(forKey: id)
         noteIdsRememberingNewNoteSize.remove(id)
         MacNoteWindowStore.shared.closeWindow(for: id)

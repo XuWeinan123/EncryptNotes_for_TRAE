@@ -6,6 +6,7 @@ struct TrashView: View {
     @State private var showingEmptyTrashConfirmation = false
     @State private var searchText = ""
     @State private var isSearchBarVisible = false
+    @State private var actionErrorMessage: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,14 +34,10 @@ struct TrashView: View {
                         trashRow(for: trashNote)
                             .contextMenu {
                                 Button("恢复") {
-                                    Task {
-                                        try? await vaultStore.restoreTrashNote(trashNote)
-                                    }
+                                    restore(trashNote)
                                 }
                                 Button("永久删除", role: .destructive) {
-                                    Task {
-                                        try? await vaultStore.permanentlyDeleteTrashNote(trashNote)
-                                    }
+                                    permanentlyDelete(trashNote)
                                 }
                             }
                             .listRowInsets(EdgeInsets(top: DS.s1, leading: DS.s3, bottom: DS.s1, trailing: DS.s3))
@@ -61,12 +58,17 @@ struct TrashView: View {
         .alert("确认清空回收站？", isPresented: $showingEmptyTrashConfirmation) {
             Button("取消", role: .cancel) {}
             Button("清空", role: .destructive) {
-                Task {
-                    try? await vaultStore.emptyTrash()
-                }
+                emptyTrash()
             }
         } message: {
             Text("回收站中的所有笔记将被永久删除，无法恢复。")
+        }
+        .alert("操作失败", isPresented: actionErrorBinding) {
+            Button("好") {
+                actionErrorMessage = nil
+            }
+        } message: {
+            Text(actionErrorMessage ?? "")
         }
     }
 
@@ -152,9 +154,7 @@ struct TrashView: View {
                 SWStatusBadge("剩 \(trashNote.remainingDays) 天", systemImage: "clock", style: .warning)
 
                 Button {
-                    Task {
-                        try? await vaultStore.restoreTrashNote(trashNote)
-                    }
+                    restore(trashNote)
                 } label: {
                     Label("恢复", systemImage: "arrow.uturn.backward")
                 }
@@ -164,15 +164,11 @@ struct TrashView: View {
 
                 Menu {
                     Button("恢复") {
-                        Task {
-                            try? await vaultStore.restoreTrashNote(trashNote)
-                        }
+                        restore(trashNote)
                     }
                     Divider()
                     Button("永久删除", role: .destructive) {
-                        Task {
-                            try? await vaultStore.permanentlyDeleteTrashNote(trashNote)
-                        }
+                        permanentlyDelete(trashNote)
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -202,6 +198,52 @@ struct TrashView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
         return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    private var actionErrorBinding: Binding<Bool> {
+        Binding(
+            get: { actionErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    actionErrorMessage = nil
+                }
+            }
+        )
+    }
+
+    private func restore(_ trashNote: TrashNote) {
+        Task {
+            do {
+                try await vaultStore.restoreTrashNote(trashNote)
+            } catch {
+                presentActionError(error)
+            }
+        }
+    }
+
+    private func permanentlyDelete(_ trashNote: TrashNote) {
+        Task {
+            do {
+                try await vaultStore.permanentlyDeleteTrashNote(trashNote)
+            } catch {
+                presentActionError(error)
+            }
+        }
+    }
+
+    private func emptyTrash() {
+        Task {
+            do {
+                try await vaultStore.emptyTrash()
+            } catch {
+                presentActionError(error)
+            }
+        }
+    }
+
+    private func presentActionError(_ error: Error) {
+        actionErrorMessage = error.localizedDescription
+        SyncStatusStore.shared.setFailed(message: error.localizedDescription)
     }
 }
 

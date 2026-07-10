@@ -28,6 +28,7 @@ final class MacNoteWindowStore: ObservableObject {
     private let defaults: UserDefaults
     private let windowStateKeyPrefix = "mac.windowState."
     private let lastWindowSizeKey = "mac.lastStickyNoteWindowSize"
+    private var pendingWindowStateSaveTasks: [String: Task<Void, Never>] = [:]
 
     private init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -61,6 +62,7 @@ final class MacNoteWindowStore: ObservableObject {
     }
 
     func closeWindow(for noteId: String) {
+        flushWindowState(for: noteId)
         openWindows.remove(noteId)
     }
 
@@ -78,17 +80,29 @@ final class MacNoteWindowStore: ObservableObject {
         saveWindowState(for: noteId)
     }
 
-    func updateFrame(for noteId: String, frame: MacWindowFrame, remembersAsNewNoteSize: Bool = false) {
+    func updateFrame(
+        for noteId: String,
+        frame: MacWindowFrame,
+        remembersAsNewNoteSize: Bool = false,
+        persistImmediately: Bool = false
+    ) {
         guard var state = windowStates[noteId] else { return }
         state.frame = frame
         windowStates[noteId] = state
         if remembersAsNewNoteSize {
             saveLastWindowSize(width: frame.width, height: frame.height)
         }
-        saveWindowState(for: noteId)
+        if persistImmediately {
+            flushWindowState(for: noteId)
+        } else {
+            scheduleWindowStateSave(for: noteId)
+        }
     }
 
     func closeAllWindows() {
+        for noteId in openWindows {
+            flushWindowState(for: noteId)
+        }
         openWindows.removeAll()
     }
 
@@ -129,6 +143,23 @@ final class MacNoteWindowStore: ObservableObject {
         if let data = try? JSONEncoder.encode(state) {
             defaults.set(data, forKey: windowStateKeyPrefix + noteId)
         }
+    }
+
+    private func scheduleWindowStateSave(for noteId: String) {
+        pendingWindowStateSaveTasks[noteId]?.cancel()
+        pendingWindowStateSaveTasks[noteId] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.flushWindowState(for: noteId)
+            }
+        }
+    }
+
+    private func flushWindowState(for noteId: String) {
+        pendingWindowStateSaveTasks[noteId]?.cancel()
+        pendingWindowStateSaveTasks[noteId] = nil
+        saveWindowState(for: noteId)
     }
 
     private func loadWindowStates() {

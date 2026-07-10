@@ -11,6 +11,7 @@ struct AllNotesView: View {
     @State private var renameErrorMessage: String?
     @State private var isRenamingNote = false
     @State private var isSearchBarVisible = false
+    @State private var actionErrorMessage: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -81,6 +82,13 @@ struct AllNotesView: View {
                 )
             }
         }
+        .alert("操作失败", isPresented: actionErrorBinding) {
+            Button("好") {
+                actionErrorMessage = nil
+            }
+        } message: {
+            Text(actionErrorMessage ?? "")
+        }
     }
 
     @ToolbarContentBuilder
@@ -116,8 +124,8 @@ struct AllNotesView: View {
             Text(noteCountText)
                 .font(DS.caption())
                 .foregroundColor(DS.textSubtle)
-            if !emptyNotes.isEmpty {
-                SWStatusBadge("\(emptyNotes.count) 条空笔记", systemImage: "exclamationmark.triangle", style: .warning)
+            if listSnapshot.emptyReadableCount > 0 {
+                SWStatusBadge("\(listSnapshot.emptyReadableCount) 条空笔记", systemImage: "exclamationmark.triangle", style: .warning)
             }
             Spacer(minLength: 0)
         }
@@ -133,17 +141,17 @@ struct AllNotesView: View {
                 SWFilterChip(title: "全部", isSelected: selectedTag == nil) {
                     selectedTag = nil
                 }
-                ForEach(visibleTagCounts) { tagCount in
+                ForEach(listSnapshot.visibleTagCounts) { tagCount in
                     SWFilterChip(title: tagCount.tag, isSelected: selectedTag == tagCount.tag) {
                         selectedTag = tagCount.tag
                     }
                 }
-                if let selectedTag, !visibleTagCounts.contains(where: { $0.tag == selectedTag }) {
+                if let selectedTag, !listSnapshot.visibleTagCounts.contains(where: { $0.tag == selectedTag }) {
                     SWFilterChip(title: selectedTag, isSelected: true) {}
                 }
-                if !overflowTagCounts.isEmpty {
+                if !listSnapshot.overflowTagCounts.isEmpty {
                     Menu {
-                        ForEach(overflowTagCounts) { tagCount in
+                        ForEach(listSnapshot.overflowTagCounts) { tagCount in
                             Button(tagCount.tag) {
                                 selectedTag = tagCount.tag
                             }
@@ -164,29 +172,17 @@ struct AllNotesView: View {
     }
 
     private var filteredNotes: [NoteListItem] {
-        var items = vaultStore.readableNotes
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        listSnapshot.items
+    }
 
-        if let tag = selectedTag {
-            items = items.filter { note in
-                TagParser.tags(in: note.body).contains(tag)
-            }
-        }
-
-        if !query.isEmpty {
-            items = items.filter { vaultStore.noteMatchesSearch($0, searchText: query) }
-        }
-
-        var result: [NoteListItem] = items.map { .readable($0) }
-
-        if selectedTag == nil {
-            let locked = query.isEmpty
-                ? vaultStore.lockedEncryptedNotes
-                : vaultStore.lockedEncryptedNotes.filter { vaultStore.lockedNoteMatchesSearch($0, searchText: query) }
-            result.append(contentsOf: locked.map { .locked($0) })
-        }
-
-        return result.sorted(by: NoteListOrdering.newestCreatedFirst)
+    private var listSnapshot: MacNoteListSnapshot {
+        MacNoteListSnapshotBuilder.make(
+            readableNotes: vaultStore.readableNotes,
+            lockedEncryptedNotes: vaultStore.lockedEncryptedNotes,
+            query: searchText,
+            selectedTag: selectedTag,
+            titleProvider: { vaultStore.displayTitle(for: $0, emptyTitle: "") }
+        )
     }
 
     private var isLoading: Bool {
@@ -196,28 +192,11 @@ struct AllNotesView: View {
 
     private var noteCountText: String {
         guard !isLoading else { return "全部笔记加载中" }
-        let encryptedCount = filteredNotes.filter { item in
-            switch item {
-            case .readable(let note): return note.isEncrypted
-            case .locked: return true
-            }
-        }.count
+        let encryptedCount = listSnapshot.encryptedCount
         if encryptedCount > 0 {
-            return "共 \(filteredNotes.count) 条笔记，加密笔记 \(encryptedCount) 条"
+            return "共 \(listSnapshot.totalCount) 条笔记，加密笔记 \(encryptedCount) 条"
         }
-        return "共 \(filteredNotes.count) 条笔记"
-    }
-
-    private var emptyNotes: [Note] {
-        vaultStore.readableNotes.filter { isEmptyNote($0) }
-    }
-
-    private var visibleTagCounts: [TagCount] {
-        Array(vaultStore.allTags.prefix(8))
-    }
-
-    private var overflowTagCounts: [TagCount] {
-        Array(vaultStore.allTags.dropFirst(8))
+        return "共 \(listSnapshot.totalCount) 条笔记"
     }
 
     private var emptyStateMessage: String {
@@ -284,8 +263,15 @@ struct AllNotesView: View {
         )
     }
 
-    private func isEmptyNote(_ note: Note) -> Bool {
-        note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private var actionErrorBinding: Binding<Bool> {
+        Binding(
+            get: { actionErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    actionErrorMessage = nil
+                }
+            }
+        )
     }
 
     private func timeString(from date: Date) -> String {
@@ -307,11 +293,16 @@ struct AllNotesView: View {
 
     private func deleteNote(_ item: NoteListItem) {
         Task {
-            switch item {
-            case .readable(let note):
-                try? await vaultStore.deleteNote(note)
-            case .locked(let info):
-                try? await vaultStore.deleteLockedNote(info)
+            do {
+                switch item {
+                case .readable(let note):
+                    try await vaultStore.deleteNote(note)
+                case .locked(let info):
+                    try await vaultStore.deleteLockedNote(info)
+                }
+            } catch {
+                actionErrorMessage = error.localizedDescription
+                SyncStatusStore.shared.setFailed(message: error.localizedDescription)
             }
         }
     }

@@ -181,6 +181,56 @@ final class MacMarkdownHighlighterTests: XCTestCase {
         XCTAssertEqual(style.minimumLineHeight, ceil(14 * 1.5))
         XCTAssertEqual(style.maximumLineHeight, ceil(14 * 1.5))
     }
+
+    func testLimitedHighlightMatchesFullHighlightForEditedLongPlainMarkdownLine() {
+        let prefix = Array(repeating: "ordinary text line", count: 260).joined(separator: "\n")
+        let editedLine = "A **bold** line with [link](https://example.com) and `code`"
+        let suffix = Array(repeating: "more ordinary text", count: 260).joined(separator: "\n")
+        let text = "\(prefix)\n\(editedLine)\n\(suffix)"
+        let nsText = text as NSString
+        let editedRange = nsText.range(of: editedLine)
+
+        let fullTextView = NSTextView()
+        fullTextView.string = text
+        fullTextView.font = MacMarkdownHighlighter.bodyFont(size: 14)
+        MacMarkdownHighlighter.applyMarkdownHighlighting(to: fullTextView, lineHeightMultiple: 1.25)
+
+        let limitedTextView = NSTextView()
+        limitedTextView.string = text
+        limitedTextView.font = MacMarkdownHighlighter.bodyFont(size: 14)
+        MacMarkdownHighlighter.applyMarkdownHighlighting(
+            to: limitedTextView,
+            lineHeightMultiple: 1.25,
+            limitedTo: editedRange
+        )
+
+        for offset in 0..<editedRange.length {
+            let index = editedRange.location + offset
+            assertHighlightAttributesMatch(fullTextView, limitedTextView, at: index)
+        }
+    }
+
+    private func assertHighlightAttributesMatch(_ lhs: NSTextView, _ rhs: NSTextView, at index: Int, file: StaticString = #filePath, line: UInt = #line) {
+        let keys: [NSAttributedString.Key] = [
+            .foregroundColor,
+            .backgroundColor,
+            .underlineStyle,
+            .strikethroughStyle,
+            .baselineOffset
+        ]
+        for key in keys {
+            XCTAssertEqual(
+                lhs.textStorage?.attribute(key, at: index, effectiveRange: nil) as? NSObject,
+                rhs.textStorage?.attribute(key, at: index, effectiveRange: nil) as? NSObject,
+                file: file,
+                line: line
+            )
+        }
+        let lhsFont = lhs.textStorage?.attribute(.font, at: index, effectiveRange: nil) as? NSFont
+        let rhsFont = rhs.textStorage?.attribute(.font, at: index, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(lhsFont?.fontName, rhsFont?.fontName, file: file, line: line)
+        XCTAssertEqual(lhsFont?.pointSize, rhsFont?.pointSize, file: file, line: line)
+    }
     #endif
 
     // MARK: - Lists

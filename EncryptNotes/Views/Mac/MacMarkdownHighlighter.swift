@@ -36,6 +36,20 @@ struct MarkdownHighlightSpan {
 }
 
 final class MacMarkdownHighlighter {
+    private enum RegexCache {
+        static let codeFence = try! NSRegularExpression(pattern: "^([ \\t]{0,3})(```|~~~)([^`~\\n]*)$", options: [.anchorsMatchLines])
+        static let heading = try! NSRegularExpression(pattern: "^(\\s{0,3})(#{1,6})(\\s+)(.*)$", options: [.anchorsMatchLines])
+        static let taskList = try! NSRegularExpression(pattern: "^(\\s*)([-*+])\\s+\\[([ xX])\\]\\s+", options: [.anchorsMatchLines])
+        static let unorderedList = try! NSRegularExpression(pattern: "^(\\s*)([-*+])\\s+", options: [.anchorsMatchLines])
+        static let orderedList = try! NSRegularExpression(pattern: "^(\\s*)(\\d+)([.)])\\s+", options: [.anchorsMatchLines])
+        static let quote = try! NSRegularExpression(pattern: "^(\\s*)(>+)\\s?", options: [.anchorsMatchLines])
+        static let htmlComment = try! NSRegularExpression(pattern: "^\\s*(<!--.*?-->)\\s*$")
+        static let image = try! NSRegularExpression(pattern: "(!)(\\[)([^\\]]*)(\\])(\\()([^)]*)(\\))")
+        static let link = try! NSRegularExpression(pattern: "(?<!!)(\\[)([^\\]]+)(\\])(\\()([^)]+)(\\))")
+        static let inlineCode = try! NSRegularExpression(pattern: "`([^`\\n]+?)`")
+        static let underline = try! NSRegularExpression(pattern: "(<u>)([^<]+)(</u>)", options: [.caseInsensitive])
+        static let boldRange = try! NSRegularExpression(pattern: "(\\*\\*[^*]+\\*\\*|__[^_]+__)")
+    }
 
     static func highlight(_ text: String) -> [MarkdownHighlightSpan] {
         guard !text.isEmpty else { return [] }
@@ -101,12 +115,7 @@ final class MacMarkdownHighlighter {
     private static func findCodeFenceRanges(in text: String, nsString: NSString) -> BlockRanges {
         var spans: [MarkdownHighlightSpan] = []
         var totalRanges: [NSRange] = []
-        let pattern = "^([ \\t]{0,3})(```|~~~)([^`~\\n]*)$"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]) else {
-            return BlockRanges(spans: spans, totalRanges: totalRanges)
-        }
-
-        let matches = regex.matches(in: text, options: [], range: fullRange(nsString))
+        let matches = RegexCache.codeFence.matches(in: text, options: [], range: fullRange(nsString))
         var fencePositions: [FencePosition] = []
 
         for match in matches {
@@ -248,10 +257,8 @@ final class MacMarkdownHighlighter {
     }
 
     private static func matchHeading(line: String, lineRange: NSRange) -> [MarkdownHighlightSpan]? {
-        let pattern = "^(\\s{0,3})(#{1,6})(\\s+)(.*)$"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]) else { return nil }
         let nsLine = line as NSString
-        guard let match = regex.firstMatch(in: line, options: [], range: NSRange(location: 0, length: nsLine.length)) else {
+        guard let match = RegexCache.heading.firstMatch(in: line, options: [], range: NSRange(location: 0, length: nsLine.length)) else {
             return nil
         }
 
@@ -281,9 +288,7 @@ final class MacMarkdownHighlighter {
         if inTable { return nil }
         let nsLine = line as NSString
 
-        let taskPattern = "^(\\s*)([-*+])\\s+\\[([ xX])\\]\\s+"
-        if let regex = try? NSRegularExpression(pattern: taskPattern, options: [.anchorsMatchLines]),
-           let match = regex.firstMatch(in: line, options: [], range: NSRange(location: 0, length: nsLine.length)) {
+        if let match = RegexCache.taskList.firstMatch(in: line, options: [], range: NSRange(location: 0, length: nsLine.length)) {
             var spans: [MarkdownHighlightSpan] = []
             let bulletRange = match.range(at: 2)
             let checkboxRange = NSRange(location: match.range(at: 3).location - 1, length: match.range(at: 3).length + 2)
@@ -299,9 +304,7 @@ final class MacMarkdownHighlighter {
             return spans
         }
 
-        let ulPattern = "^(\\s*)([-*+])\\s+"
-        if let regex = try? NSRegularExpression(pattern: ulPattern, options: [.anchorsMatchLines]),
-           let match = regex.firstMatch(in: line, options: [], range: NSRange(location: 0, length: nsLine.length)) {
+        if let match = RegexCache.unorderedList.firstMatch(in: line, options: [], range: NSRange(location: 0, length: nsLine.length)) {
             let bulletRange = match.range(at: 2)
             return [MarkdownHighlightSpan(
                 range: NSRange(location: lineRange.location + bulletRange.location, length: bulletRange.length),
@@ -309,9 +312,7 @@ final class MacMarkdownHighlighter {
             )]
         }
 
-        let olPattern = "^(\\s*)(\\d+)([.)])\\s+"
-        if let regex = try? NSRegularExpression(pattern: olPattern, options: [.anchorsMatchLines]),
-           let match = regex.firstMatch(in: line, options: [], range: NSRange(location: 0, length: nsLine.length)) {
+        if let match = RegexCache.orderedList.firstMatch(in: line, options: [], range: NSRange(location: 0, length: nsLine.length)) {
             let numRange = match.range(at: 2)
             let dotRange = match.range(at: 3)
             let markerRange = NSRange(
@@ -325,10 +326,8 @@ final class MacMarkdownHighlighter {
     }
 
     private static func matchQuote(line: String, lineRange: NSRange) -> [MarkdownHighlightSpan]? {
-        let pattern = "^(\\s*)(>+)\\s?"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]) else { return nil }
         let nsLine = line as NSString
-        guard let match = regex.firstMatch(in: line, options: [], range: NSRange(location: 0, length: nsLine.length)) else {
+        guard let match = RegexCache.quote.firstMatch(in: line, options: [], range: NSRange(location: 0, length: nsLine.length)) else {
             return nil
         }
         let markerRange = match.range(at: 2)
@@ -385,10 +384,8 @@ final class MacMarkdownHighlighter {
     }
 
     private static func matchHTMLComments(in line: String, lineRange: NSRange, excludedRanges: [NSRange]) -> [MarkdownHighlightSpan]? {
-        let pattern = "^\\s*(<!--.*?-->)\\s*$"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
         let nsLine = line as NSString
-        guard let match = regex.firstMatch(in: line, options: [], range: NSRange(location: 0, length: nsLine.length)) else {
+        guard let match = RegexCache.htmlComment.firstMatch(in: line, options: [], range: NSRange(location: 0, length: nsLine.length)) else {
             return nil
         }
         let commentRange = match.range(at: 1)
@@ -398,10 +395,8 @@ final class MacMarkdownHighlighter {
     }
 
     private static func matchImages(in line: String, lineRange: NSRange, excludedRanges: [NSRange]) -> [MarkdownHighlightSpan]? {
-        let pattern = "(!)(\\[)([^\\]]*)(\\])(\\()([^)]*)(\\))"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
         let nsLine = line as NSString
-        let matches = regex.matches(in: line, options: [], range: NSRange(location: 0, length: nsLine.length))
+        let matches = RegexCache.image.matches(in: line, options: [], range: NSRange(location: 0, length: nsLine.length))
         var spans: [MarkdownHighlightSpan] = []
 
         for match in matches {
@@ -455,10 +450,8 @@ final class MacMarkdownHighlighter {
     }
 
     private static func matchLinks(in line: String, lineRange: NSRange, excludedRanges: [NSRange]) -> [MarkdownHighlightSpan]? {
-        let pattern = "(?<!!)(\\[)([^\\]]+)(\\])(\\()([^)]+)(\\))"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
         let nsLine = line as NSString
-        let matches = regex.matches(in: line, options: [], range: NSRange(location: 0, length: nsLine.length))
+        let matches = RegexCache.link.matches(in: line, options: [], range: NSRange(location: 0, length: nsLine.length))
         var spans: [MarkdownHighlightSpan] = []
 
         for match in matches {
@@ -506,9 +499,7 @@ final class MacMarkdownHighlighter {
     }
 
     private static func matchInlineCode(in line: String, lineRange: NSRange, excludedRanges: [NSRange]) -> [MarkdownHighlightSpan]? {
-        let pattern = "`([^`\n]+?)`"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
-        let matches = regex.matches(in: line, options: [], range: NSRange(location: 0, length: (line as NSString).length))
+        let matches = RegexCache.inlineCode.matches(in: line, options: [], range: NSRange(location: 0, length: (line as NSString).length))
         var spans: [MarkdownHighlightSpan] = []
 
         for match in matches {
@@ -534,10 +525,8 @@ final class MacMarkdownHighlighter {
     }
 
     private static func matchUnderline(in line: String, lineRange: NSRange, excludedRanges: [NSRange]) -> [MarkdownHighlightSpan]? {
-        let pattern = "(<u>)([^<]+)(</u>)"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
         let nsLine = line as NSString
-        let matches = regex.matches(in: line, options: [], range: NSRange(location: 0, length: nsLine.length))
+        let matches = RegexCache.underline.matches(in: line, options: [], range: NSRange(location: 0, length: nsLine.length))
         var spans: [MarkdownHighlightSpan] = []
 
         for match in matches {
@@ -625,12 +614,8 @@ final class MacMarkdownHighlighter {
 
     private static func matchItalic(in line: String, lineRange: NSRange, excludedRanges: [NSRange]) -> [MarkdownHighlightSpan]? {
         var allSpans: [MarkdownHighlightSpan] = []
-        let boldPattern = "(\\*\\*[^*]+\\*\\*|__[^_]+__)"
-        var boldRanges: [NSRange] = []
-        if let regex = try? NSRegularExpression(pattern: boldPattern, options: []) {
-            let matches = regex.matches(in: line, options: [], range: NSRange(location: 0, length: (line as NSString).length))
-            boldRanges = matches.map { $0.range }
-        }
+        let matches = RegexCache.boldRange.matches(in: line, options: [], range: NSRange(location: 0, length: (line as NSString).length))
+        let boldRanges = matches.map { $0.range }
 
         let absoluteBoldRanges = boldRanges.map { NSRange(location: lineRange.location + $0.location, length: $0.length) }
 

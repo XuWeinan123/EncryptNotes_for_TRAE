@@ -1200,23 +1200,25 @@ final class StickyNoteEditorViewModel: ObservableObject {
         let bodyToEncrypt = text
         let noteToEncrypt = note
         let start = Date()
-        print("Seal Note encryption start note=\(noteToEncrypt.id) bytes=\(bodyToEncrypt.utf8.count)")
+        recordCryptoEvent("note_encryption_started", noteId: noteToEncrypt.id, start: start, fields: [
+            "body_bytes": bodyToEncrypt.utf8.count
+        ])
 
         Task { @MainActor [weak self] in
             guard let self else { return }
             defer { self.isEncryptionToggling = false }
             do {
                 let result = try await self.vaultStore.encryptNoteForEditing(noteToEncrypt, body: bodyToEncrypt)
-                let elapsed = Date().timeIntervalSince(start) * 1000
-                print("Seal Note encryption end note=\(noteToEncrypt.id) elapsed_ms=\(String(format: "%.2f", elapsed))")
+                self.recordCryptoEvent("note_encryption_finished", noteId: noteToEncrypt.id, start: start)
                 self.note = result.note
                 self.ciphertextPreview = result.ciphertext
                 self.text = bodyToEncrypt
                 self.isContentLocked = true
                 self.syncStore.setSaved()
             } catch {
-                let elapsed = Date().timeIntervalSince(start) * 1000
-                print("Seal Note encryption failed note=\(noteToEncrypt.id) elapsed_ms=\(String(format: "%.2f", elapsed)) error=\(error.localizedDescription)")
+                self.recordCryptoEvent("note_encryption_failed", noteId: noteToEncrypt.id, start: start, fields: [
+                    "error": error.localizedDescription
+                ])
                 if self.isKeyIssue(error) {
                     self.presentKeyIssue(error)
                     return
@@ -1238,15 +1240,14 @@ final class StickyNoteEditorViewModel: ObservableObject {
         let noteToDecrypt = note
         let start = Date()
         isEncryptionToggling = true
-        print("Seal Note decryption start note=\(noteToDecrypt.id)")
+        recordCryptoEvent("note_decryption_started", noteId: noteToDecrypt.id, start: start)
 
         Task { @MainActor [weak self] in
             guard let self else { return }
             defer { self.isEncryptionToggling = false }
             do {
                 let decrypted = try await self.vaultStore.decryptEncryptedNoteBody(noteToDecrypt)
-                let elapsed = Date().timeIntervalSince(start) * 1000
-                print("Seal Note decryption end note=\(noteToDecrypt.id) elapsed_ms=\(String(format: "%.2f", elapsed))")
+                self.recordCryptoEvent("note_decryption_finished", noteId: noteToDecrypt.id, start: start)
                 self.note = Note(
                     id: noteToDecrypt.id,
                     body: decrypted,
@@ -1259,8 +1260,9 @@ final class StickyNoteEditorViewModel: ObservableObject {
                 self.isContentLocked = false
                 self.syncStore.setSaved()
             } catch {
-                let elapsed = Date().timeIntervalSince(start) * 1000
-                print("Seal Note decryption failed note=\(noteToDecrypt.id) elapsed_ms=\(String(format: "%.2f", elapsed)) error=\(error.localizedDescription)")
+                self.recordCryptoEvent("note_decryption_failed", noteId: noteToDecrypt.id, start: start, fields: [
+                    "error": error.localizedDescription
+                ])
                 if self.isKeyIssue(error) {
                     self.presentKeyIssue(error)
                     return
@@ -1314,6 +1316,18 @@ final class StickyNoteEditorViewModel: ObservableObject {
         }
 
         return "请先前往密钥设置处理。"
+    }
+
+    private func recordCryptoEvent(
+        _ event: String,
+        noteId: String,
+        start: Date,
+        fields: [String: CustomStringConvertible?] = [:]
+    ) {
+        var payload = fields
+        payload["note_id"] = noteId
+        payload["elapsed_ms"] = String(format: "%.2f", Date().timeIntervalSince(start) * 1000)
+        MaintenanceLogStore.shared.record(event, fields: payload)
     }
 
     private func handleWindowWillClose() {
@@ -1858,7 +1872,11 @@ extension MacTextView {
             lastText = newText
             let scrollView = textView.enclosingScrollView as? ToolbarInsetScrollView
             let refreshEditorState = {
-                MacMarkdownHighlighter.applyMarkdownHighlighting(to: textView, lineHeightMultiple: self.parent.lineHeightMultiple)
+                MacMarkdownHighlighter.applyMarkdownHighlighting(
+                    to: textView,
+                    lineHeightMultiple: self.parent.lineHeightMultiple,
+                    limitedTo: textView.selectedRange()
+                )
                 self.markStyleRendered(fontSize: self.parent.fontSize, lineHeightMultiple: self.parent.lineHeightMultiple)
                 textView.typingAttributes = Self.typingAttributes(fontSize: self.parent.fontSize, lineHeightMultiple: self.parent.lineHeightMultiple)
                 self.parent.updatePlaceholderVisibility(textView)
@@ -2182,7 +2200,11 @@ final class PlaceholderLabel: NSTextField {
 }
 
 extension MacMarkdownHighlighter {
-    static func applyMarkdownHighlighting(to textView: NSTextView, lineHeightMultiple: CGFloat) {
+    static func applyMarkdownHighlighting(
+        to textView: NSTextView,
+        lineHeightMultiple: CGFloat,
+        limitedTo changedRange: NSRange? = nil
+    ) {
         guard let textStorage = textView.textStorage else { return }
         guard !textView.hasMarkedText() else { return }
 
@@ -2195,7 +2217,13 @@ extension MacMarkdownHighlighter {
         let paraStyle = paragraphStyle(size: fontSize, multiple: lineHeightMultiple)
         let baselineOff = baselineOffset(size: fontSize, font: bodyFont, multiple: lineHeightMultiple)
 
-        let fullRange = NSRange(location: 0, length: (text as NSString).length)
+        let nsText = text as NSString
+        let fullRange = NSRange(location: 0, length: nsText.length)
+        let targetRange = highlightTargetRange(
+            changedRange,
+            in: nsText,
+            fullRange: fullRange
+        )
         let undoManager = textView.undoManager
         let wasUndoRegistrationEnabled = undoManager?.isUndoRegistrationEnabled ?? false
         if wasUndoRegistrationEnabled {
@@ -2207,9 +2235,10 @@ extension MacMarkdownHighlighter {
             .foregroundColor: NSColor(DS.textBody),
             .paragraphStyle: paraStyle,
             .baselineOffset: baselineOff
-        ], range: fullRange)
+        ], range: targetRange)
 
-        let spans = highlight(text)
+        let targetText = nsText.substring(with: targetRange)
+        let spans = highlight(targetText)
         for span in spans {
             let attrs = attributes(for: span.role, fontSize: fontSize)
             var merged = attrs
@@ -2219,7 +2248,10 @@ extension MacMarkdownHighlighter {
             if merged[.baselineOffset] == nil {
                 merged[.baselineOffset] = baselineOff
             }
-            textStorage.addAttributes(merged, range: span.range)
+            textStorage.addAttributes(
+                merged,
+                range: NSRange(location: targetRange.location + span.range.location, length: span.range.length)
+            )
         }
 
         textStorage.endEditing()
@@ -2233,6 +2265,37 @@ extension MacMarkdownHighlighter {
             .paragraphStyle: paraStyle,
             .baselineOffset: baselineOff
         ]
+    }
+
+    private static func highlightTargetRange(
+        _ changedRange: NSRange?,
+        in nsText: NSString,
+        fullRange: NSRange
+    ) -> NSRange {
+        guard nsText.length > 4_000,
+              let changedRange,
+              nsText.range(of: "```").location == NSNotFound,
+              nsText.range(of: "~~~").location == NSNotFound else {
+            return fullRange
+        }
+
+        let safeLocation = min(max(changedRange.location, 0), nsText.length)
+        let safeLength = min(changedRange.length, max(0, nsText.length - safeLocation))
+        var range = nsText.lineRange(for: NSRange(location: safeLocation, length: safeLength))
+
+        if range.location > 0 {
+            let previousLocation = max(0, range.location - 1)
+            let previousLine = nsText.lineRange(for: NSRange(location: previousLocation, length: 0))
+            range = NSUnionRange(previousLine, range)
+        }
+
+        let rangeEnd = range.location + range.length
+        if rangeEnd < nsText.length {
+            let nextLine = nsText.lineRange(for: NSRange(location: rangeEnd, length: 0))
+            range = NSUnionRange(range, nextLine)
+        }
+
+        return NSIntersectionRange(range, fullRange)
     }
 }
 
