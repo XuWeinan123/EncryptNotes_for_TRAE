@@ -132,7 +132,7 @@ final class MacMarkdownFormatter {
 
         if selection.length == 0 {
             insertText = "[](" + url + ")"
-            newCursorStart = selection.location + 1
+            newCursorStart = url.isEmpty ? selection.location + 1 : selection.location + insertText.utf16.count
             newCursorLength = 0
         } else {
             insertText = "[" + selectedText + "](" + url + ")"

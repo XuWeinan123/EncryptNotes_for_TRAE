@@ -61,6 +61,17 @@ final class MacMarkdownFormatterTests: XCTestCase {
         XCTAssertEqual(result.selection, NSRange(location: 1, length: 0))
     }
 
+    func testLinkEmptySelectionWithCopiedURLPlacesCursorAfterClosingParenthesis() {
+        let result = MacMarkdownFormatter.apply(
+            command: .link,
+            to: "",
+            selection: .init(location: 0, length: 0),
+            linkURL: "https://example.com/docs"
+        )
+        XCTAssertEqual(result.text, "[](https://example.com/docs)")
+        XCTAssertEqual(result.selection, NSRange(location: 28, length: 0))
+    }
+
     // MARK: - With selection: wrap text
 
     func testBoldWrapsSelection() {
