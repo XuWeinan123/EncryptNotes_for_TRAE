@@ -147,35 +147,44 @@ struct TrashView: View {
             title: trashTitle(for: trashNote),
             subtitle: "删除于 \(timeString(from: trashNote.deletedAt))"
         ) {
-            HStack(spacing: DS.s2) {
-                if trashNote.isEncrypted {
-                    SWStatusBadge("加密", systemImage: "lock.fill", style: .neutral)
+            HStack(spacing: DS.s4) {
+                HStack(spacing: DS.s2) {
+                    if trashNote.isEncrypted {
+                        SWStatusBadge("加密", systemImage: "lock.fill", style: .neutral)
+                    }
+                    SWStatusBadge("剩 \(trashNote.remainingDays) 天", systemImage: "clock", style: .warning)
                 }
-                SWStatusBadge("剩 \(trashNote.remainingDays) 天", systemImage: "clock", style: .warning)
 
-                Button {
-                    restore(trashNote)
-                } label: {
-                    Label("恢复", systemImage: "arrow.uturn.backward")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help("恢复")
-
-                Menu {
-                    Button("恢复") {
+                HStack(spacing: DS.s1) {
+                    Button {
                         restore(trashNote)
+                    } label: {
+                        Text("恢复")
+                            .foregroundStyle(DS.textSecondary)
                     }
-                    Divider()
-                    Button("永久删除", role: .destructive) {
-                        permanentlyDelete(trashNote)
+                    .buttonStyle(.borderless)
+                    .controlSize(.regular)
+                    .help("恢复")
+
+                    Menu {
+                        Button("恢复") {
+                            restore(trashNote)
+                        }
+                        Divider()
+                        Button("永久删除", role: .destructive) {
+                            permanentlyDelete(trashNote)
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .foregroundStyle(DS.textSecondary)
                     }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
+                    .menuStyle(.borderlessButton)
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                    .tint(DS.textSecondary)
+                    .menuIndicator(.hidden)
+                    .help("更多操作")
                 }
-                .menuStyle(.borderlessButton)
-                .controlSize(.small)
-                .help("更多操作")
             }
         }
     }
@@ -247,7 +256,7 @@ struct TrashView: View {
     }
 }
 
-private struct TrashListRow<Trailing: View>: View {
+struct TrashListRow<Trailing: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
 

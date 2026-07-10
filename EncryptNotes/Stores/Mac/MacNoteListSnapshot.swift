@@ -27,6 +27,7 @@ nonisolated enum MacNoteListSnapshotBuilder {
         lockedEncryptedNotes: [EncryptedNoteInfo],
         query rawQuery: String = "",
         selectedTag: String? = nil,
+        excludingHexColorsFromTags: Bool = false,
         titleProvider: (Note) -> String
     ) -> MacNoteListSnapshot {
         let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -35,7 +36,7 @@ nonisolated enum MacNoteListSnapshotBuilder {
         var readableItems: [NoteListItem] = []
 
         for note in readableNotes {
-            let tags = TagParser.tags(in: note.body)
+            let tags = TagParser.tags(in: note.body, excludingHexColors: excludingHexColorsFromTags)
             for tag in tags {
                 tagCountsByName[tag, default: 0] += 1
             }

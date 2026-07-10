@@ -92,6 +92,7 @@ final class SettingsStoreTests: XCTestCase {
         let store = makeStore()
         XCTAssertFalse(store.copyAddsParagraphSpacing)
         XCTAssertTrue(store.autoDeleteEmptyNotes)
+        XCTAssertTrue(store.excludeHexColorsFromTags)
         XCTAssertEqual(store.macTheme, .pink)
         XCTAssertEqual(store.macRecentNotesLimit, 5)
     }
@@ -108,12 +109,14 @@ final class SettingsStoreTests: XCTestCase {
         store.preferredNoteMode = .encrypted
         store.hideContentOnBackground = false
         store.autoDeleteEmptyNotes = false
+        store.excludeHexColorsFromTags = false
         store.maintenanceLoggingEnabled = true
 
         let reloaded = makeStore()
         XCTAssertEqual(reloaded.preferredNoteMode, .encrypted)
         XCTAssertFalse(reloaded.hideContentOnBackground)
         XCTAssertFalse(reloaded.autoDeleteEmptyNotes)
+        XCTAssertFalse(reloaded.excludeHexColorsFromTags)
         XCTAssertTrue(reloaded.maintenanceLoggingEnabled)
     }
 

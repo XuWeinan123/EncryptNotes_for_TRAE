@@ -4,6 +4,7 @@ import AppKit
 
 struct AllNotesView: View {
     @ObservedObject private var vaultStore = VaultStore.shared
+    @ObservedObject private var settings = SettingsStore.shared
     @State private var searchText = ""
     @State private var selectedTag: String?
     @State private var renamingNote: Note?
@@ -162,7 +163,7 @@ struct AllNotesView: View {
                     }
                     .menuStyle(.button)
                     .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    .controlSize(.regular)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -181,6 +182,7 @@ struct AllNotesView: View {
             lockedEncryptedNotes: vaultStore.lockedEncryptedNotes,
             query: searchText,
             selectedTag: selectedTag,
+            excludingHexColorsFromTags: settings.excludeHexColorsFromTags,
             titleProvider: { vaultStore.displayTitle(for: $0, emptyTitle: "") }
         )
     }
@@ -342,7 +344,7 @@ struct AllNotesView: View {
 
 }
 
-private struct AllNotesListRow<MenuContent: View>: View {
+struct AllNotesListRow<MenuContent: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
 
@@ -373,25 +375,25 @@ private struct AllNotesListRow<MenuContent: View>: View {
 
             if isHovering {
                 HStack(spacing: DS.s1) {
-                    SWSettingsActionButton(.icon(systemImage: "arrow.up.right"), style: .light, action: onOpen)
-                        .help("打开")
+                    Button(action: onOpen) {
+                        Text("打开")
+                            .foregroundStyle(DS.textSecondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.regular)
+                    .help("打开")
 
                     Menu {
                         menu()
                     } label: {
                         Image(systemName: "ellipsis")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(DS.textSecondary)
-                            .frame(width: 28, height: 28)
-                            .background(DS.surfaceSunken)
-                            .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: DS.rSm, style: .continuous)
-                                    .stroke(DS.line, lineWidth: 0.5)
-                            )
+                            .foregroundStyle(DS.textSecondary)
                     }
                     .menuStyle(.borderlessButton)
-                    .buttonStyle(.plain)
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                    .tint(DS.textSecondary)
+                    .menuIndicator(.hidden)
                     .help("更多操作")
                 }
             } else {
@@ -429,7 +431,7 @@ private struct AllNotesListRow<MenuContent: View>: View {
     }
 }
 
-private struct AllNotesRenameSheet: View {
+struct AllNotesRenameSheet: View {
     @Binding var title: String
     let errorMessage: String?
     let isSaving: Bool

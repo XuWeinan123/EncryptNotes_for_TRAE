@@ -84,6 +84,28 @@ final class MacMarkdownFormatterTests: XCTestCase {
         XCTAssertEqual(result.selection, NSRange(location: 13, length: 0))
     }
 
+    func testLinkWrapsSelectionAndFillsCopiedURL() {
+        let result = MacMarkdownFormatter.apply(
+            command: .link,
+            to: "查看官网",
+            selection: NSRange(location: 2, length: 2),
+            linkURL: "https://example.com/docs"
+        )
+        XCTAssertEqual(result.text, "查看[官网](https://example.com/docs)")
+        XCTAssertEqual(result.selection, NSRange(location: 31, length: 0))
+    }
+
+    func testClipboardWebURLAcceptsHTTPAndHTTPSOnly() {
+        XCTAssertEqual(
+            MacMarkdownFormatter.webURL(fromClipboardString: "  https://example.com/path?q=1\n"),
+            "https://example.com/path?q=1"
+        )
+        XCTAssertEqual(MacMarkdownFormatter.webURL(fromClipboardString: "http://localhost:8080"), "http://localhost:8080")
+        XCTAssertNil(MacMarkdownFormatter.webURL(fromClipboardString: "example.com"))
+        XCTAssertNil(MacMarkdownFormatter.webURL(fromClipboardString: "file:///tmp/note"))
+        XCTAssertNil(MacMarkdownFormatter.webURL(fromClipboardString: "https://example.com copied"))
+    }
+
     // MARK: - Code fence completion
 
     func testCodeFenceCompletionRequiresInfoString() {
@@ -288,6 +310,34 @@ final class MacMarkdownFormatterTests: XCTestCase {
             selection: NSRange(location: (text as NSString).length, length: 0)
         )
         XCTAssertEqual(result?.text, "- hello\n- ")
+    }
+
+    func testTaskListReturnContinuesWithUncheckedMarker() {
+        let text = "- [ ] first task"
+        let result = MacMarkdownFormatter.continueListIfNeeded(
+            in: text,
+            selection: NSRange(location: (text as NSString).length, length: 0)
+        )
+        XCTAssertEqual(result?.text, "- [ ] first task\n- [ ] ")
+    }
+
+    func testCompletedTaskListReturnContinuesWithUncheckedMarker() {
+        let text = "- [x] finished task"
+        let result = MacMarkdownFormatter.continueListIfNeeded(
+            in: text,
+            selection: NSRange(location: (text as NSString).length, length: 0)
+        )
+        XCTAssertEqual(result?.text, "- [x] finished task\n- [ ] ")
+    }
+
+    func testEmptyGeneratedTaskListMarkerExitsList() {
+        let text = "- [ ] first task\n- [ ] "
+        let result = MacMarkdownFormatter.continueListIfNeeded(
+            in: text,
+            selection: NSRange(location: (text as NSString).length, length: 0)
+        )
+        XCTAssertEqual(result?.text, "- [ ] first task\n")
+        XCTAssertEqual(result?.selection, NSRange(location: 17, length: 0))
     }
 
     func testEmptyGeneratedListMarkerExitsList() {

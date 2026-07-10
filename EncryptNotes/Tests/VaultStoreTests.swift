@@ -480,6 +480,24 @@ final class VaultStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testTagParserExcludesSixAndEightDigitHexColorsWhenEnabled() {
+        let tags = TagParser.tags(
+            in: "颜色 #0B996E、#10151F0A，标签 #设计",
+            excludingHexColors: true
+        )
+        XCTAssertEqual(tags, ["#设计"])
+    }
+
+    @MainActor
+    func testTagParserKeepsHexColorsWhenExclusionIsDisabled() {
+        let tags = TagParser.tags(
+            in: "颜色 #0B996E、#10151F0A",
+            excludingHexColors: false
+        )
+        XCTAssertEqual(tags, ["#0B996E、", "#10151F0A"])
+    }
+
+    @MainActor
     func testTagsOnlyFromReadableNotes() {
         let store = VaultStore(storage: try? TemporaryStorage(baseURL: FileManager.default.temporaryDirectory))
         let plain = Note(id: "p1", body: "明文 #标签A", isEncrypted: false)

@@ -81,34 +81,27 @@ struct MacSettingsView: View {
 
     private var generalTab: some View {
         panelStack {
-            SWPageHeader(
-                title: "通用设置",
-                subtitle: "调整菜单栏、置顶、存储位置和主题",
-                systemImage: "gearshape",
-                tint: DS.primaryDeep
-            )
-
             macPanel("菜单栏") {
-                toggleRow("启动时打开菜单栏应用", subtitle: "登录 Mac 后自动启动应用，并显示在菜单栏中。", systemImage: "menubar.rectangle", isOn: launchAtLoginBinding)
+                toggleRow("启动时打开菜单栏应用", systemImage: "menubar.rectangle", isOn: launchAtLoginBinding)
 
                 SWRowDivider()
 
-                SWSettingsRow("最近笔记数量", subtitle: "控制菜单栏中显示的最近笔记数量", systemImage: "list.number") {
+                SWSettingsRow("最近笔记数量", systemImage: "list.number") {
                     Picker("最近笔记数量", selection: recentNotesLimitBinding) {
-                        ForEach(Array(SettingsStore.macRecentNotesLimitRange), id: \.self) { count in
+                        ForEach(SettingsStore.macRecentNotesLimitOptions, id: \.self) { count in
                             Text("\(count)").tag(count)
                         }
                     }
-                    .pickerStyle(.menu)
+                    .pickerStyle(.segmented)
                     .labelsHidden()
-                    .frame(width: 86)
+                    .tint(DS.primary)
                 }
             }
 
             macPanel("笔记") {
-                toggleRow("笔记默认置顶", subtitle: "新建笔记窗口默认保持在其他窗口上方。", systemImage: "pin.fill", isOn: $settings.pinNewNotesByDefault)
+                toggleRow("笔记默认置顶", systemImage: "pin.fill", isOn: $settings.pinNewNotesByDefault)
                 SWRowDivider()
-                toggleRow("新建笔记自动加密", subtitle: vaultStore.isKeyLoaded ? "从菜单栏新建的笔记会直接保存为加密笔记。" : "需要先在“密钥”中创建或加载密钥。", systemImage: "lock", isOn: newEncryptedNoteBinding)
+                toggleRow("新建笔记自动加密", subtitle: vaultStore.isKeyLoaded ? nil : "需要先在“密钥”中创建或加载密钥。", systemImage: "lock", isOn: newEncryptedNoteBinding)
                     .disabled(!vaultStore.isKeyLoaded)
             }
 
@@ -119,14 +112,16 @@ struct MacSettingsView: View {
                     systemImage: vaultStore.isUsingICloudStorage ? "icloud" : "folder",
                     tint: vaultStore.isUsingICloudStorage ? DS.primaryDeep : DS.pro
                 ) {
-                    SWSettingsActionButton(.text("打开…"), style: .light) {
+                    Button("打开") {
                         openStorageFolder()
                     }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
                 }
             }
 
             macPanel("主题") {
-                SWSettingsRow("主题色", subtitle: "影响按钮、选中态和强调色", systemImage: "paintpalette", tint: DS.primaryDeep) {
+                SWSettingsRow("主题色", systemImage: "paintpalette", tint: DS.primaryDeep) {
                     Picker("主题色", selection: $settings.macTheme) {
                         ForEach(MacTheme.allCases) { theme in
                             Text(theme.title).tag(theme)
@@ -134,7 +129,6 @@ struct MacSettingsView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
-                    .frame(width: 150)
                     .tint(DS.primary)
                 }
             }
@@ -144,82 +138,123 @@ struct MacSettingsView: View {
     private var aboutTab: some View {
         panelStack {
             SWSectionPanel {
-                VStack(spacing: DS.s6) {
-                    aboutLogo
-
-                    VStack(spacing: DS.s2) {
-                        Text("Seal Note")
-                            .font(.system(size: 34, weight: .semibold))
-                            .foregroundStyle(DS.textEmphasize)
-
-                        Text("v0.2")
-                            .font(DS.caption())
-                            .foregroundStyle(DS.textSubtle)
-
-                        Text("快速记录，不打断当前工作。")
-                            .font(.system(size: 16, weight: .regular))
-                            .foregroundStyle(DS.textSecondary)
+                VStack(spacing: DS.s8){
+                    VStack(spacing: DS.s6) {
+                        aboutLogo
+                        
+                        VStack(spacing: DS.s2) {
+                            Text("Seal Note")
+                                .font(.system(size: 34, weight: .semibold))
+                                .foregroundStyle(DS.textEmphasize)
+                            
+                            Text("v0.2")
+                                .font(DS.caption())
+                                .foregroundStyle(DS.textSubtle)
+                            
+                            Text("快速记录，不打断当前工作。")
+                                .font(.system(size: 16, weight: .regular))
+                                .foregroundStyle(DS.textSecondary)
+                        }
                     }
+                    .frame(maxWidth: .infinity)
+                    HStack(alignment: .top, spacing: DS.s6) {
+                        feature(
+                            systemImage: "menubar.rectangle",
+                            title: "快速捕捉",
+                            detail: "从菜单栏新建或打开最近笔记，不打断当前工作。"
+                        )
+                        
+                        feature(
+                            systemImage: "doc.plaintext",
+                            title: "自由迁移",
+                            detail: "以标准 Markdown 文件保存，方便同步、迁移和跨工具读取。"
+                        )
+                        
+                        feature(
+                            systemImage: "lock.shield",
+                            title: "安心加密",
+                            detail: "端侧加密，密钥文件由你保存和管理。"
+                        )
+                    }
+                    .padding(.horizontal, DS.s6)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, DS.s4)
-            }
-
-            macPanel("欢迎") {
-                SWSettingsRow("菜单栏便签", subtitle: "从右上角菜单快速新建、打开最近笔记。", systemImage: "menubar.rectangle") {
-                    EmptyView()
-                }
-                SWRowDivider()
-                SWSettingsRow("Markdown 文件", subtitle: "每条笔记都是可同步、可迁移的 Markdown 文件。", systemImage: "doc.plaintext") {
-                    EmptyView()
-                }
-                SWRowDivider()
-                SWSettingsRow("正文加密", subtitle: "加密笔记只加密正文，密钥来自你选择的密钥。", systemImage: "lock.shield") {
-                    EmptyView()
-                }
+                .padding(.vertical, DS.s8)
             }
 
             macPanel("组件") {
-                SWSettingsRow("查看组件", subtitle: "展示应用中使用的系统组件和自建组件。", systemImage: "square.grid.2x2") {
-                    SWSettingsActionButton(.iconText(systemImage: "arrow.up.right", title: "打开"), style: .light) {
+                SWSettingsRow("查看组件", systemImage: "square.grid.2x2") {
+                    Button {
                         MacMenuBarController.shared.openComponentCatalogWindow()
+                    } label: {
+                        Image(systemName: "arrow.up.right")
+                            .font(.body)
                     }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                    .help("打开组件目录")
                 }
             }
 
             macPanel("维护日志") {
-                SWSettingsRow("开启日志记录", subtitle: "记录保存、索引、冲突和文件操作元数据，不记录正文或密钥。", systemImage: "doc.text.magnifyingglass") {
+                SWSettingsRow("开启日志记录", subtitle: "记录保存、索引等元数据；不记录正文或密钥。", systemImage: "doc.text.magnifyingglass") {
                     if settings.maintenanceLoggingEnabled {
                         HStack(spacing: DS.s2) {
-                            SWSettingsActionButton(.iconText(systemImage: "folder", title: "打开文件夹"), style: .light) {
+                            Button {
                                 openMaintenanceLogFolder()
+                            } label: {
+                                Image(systemName: "folder")
                             }
+                            .buttonStyle(.bordered)
+                            .controlSize(.regular)
+                            .help("打开日志文件夹")
 
-                            SWSettingsActionButton(.text("关闭"), style: .light, role: .destructive) {
+                            Button("关闭", role: .destructive) {
                                 settings.maintenanceLoggingEnabled = false
                             }
+                            .buttonStyle(.bordered)
+                            .controlSize(.regular)
                         }
                     } else {
-                        SWSettingsActionButton(.text("开启"), style: .fill) {
+                        Button("开启") {
                             settings.maintenanceLoggingEnabled = true
                         }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.regular)
+                        .tint(DS.primary)
                     }
                 }
             }
+        
         }
+    }
+    
+    private func feature(systemImage: String, title: String, detail: String) -> some View {
+        VStack(spacing: DS.s2) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(DS.primaryDeep)
+                .frame(width: 32, height: 32)
+                .background(DS.primaryContainer)
+                .clipShape(Circle())
+
+            Text(title)
+                .font(DS.bodyLg().weight(.semibold))
+                .foregroundStyle(DS.textStrong)
+                .multilineTextAlignment(.center)
+
+            Text(detail)
+                .font(DS.caption())
+                .foregroundStyle(DS.textSubtle)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
     }
 
     private var editorTab: some View {
         panelStack {
-            SWPageHeader(
-                title: "编辑器",
-                subtitle: "调整便利贴正文输入和复制行为",
-                systemImage: "textformat",
-                tint: DS.primaryDeep
-            )
-
             macPanel("编辑体验") {
-                SWSettingsRow("编辑字号", subtitle: "仅影响 mac 便利贴编辑器。", systemImage: "textformat.size") {
+                SWSettingsRow("编辑字号", systemImage: "textformat.size") {
                     VStack(alignment: .trailing, spacing: DS.s1) {
                         Text(String(format: "%.0f", settings.macEditorFontSize))
                             .font(DS.caption())
@@ -237,7 +272,7 @@ struct MacSettingsView: View {
 
                 SWRowDivider()
 
-                SWSettingsRow("行高", subtitle: "控制编辑器正文的阅读密度。", systemImage: "line.3.horizontal.decrease") {
+                SWSettingsRow("行高", systemImage: "line.3.horizontal.decrease") {
                     VStack(alignment: .trailing, spacing: DS.s1) {
                         Text(String(format: "%.2fx", settings.macEditorLineHeightMultiple))
                             .font(DS.caption())
@@ -259,11 +294,15 @@ struct MacSettingsView: View {
 
                 SWRowDivider()
 
-                toggleRow("关闭空白笔记时自动丢弃", subtitle: "正文为空的便利贴关闭后直接移除。", systemImage: "trash", isOn: $settings.autoDeleteEmptyNotes)
+                toggleRow("关闭空白笔记时自动丢弃", systemImage: "trash", isOn: $settings.autoDeleteEmptyNotes)
 
                 SWRowDivider()
 
                 toggleRow("自动命名笔记", subtitle: "开启后每次自动保存都会按正文重新命名；关闭时仅保留手动标题和首次标题规则。", systemImage: "text.cursor", isOn: $settings.autoRenameNotesOnSave)
+
+                SWRowDivider()
+
+                toggleRow("不将 Hex 色值识别为标签", subtitle: "忽略 #RRGGBB 和含透明度的 #RRGGBBAA 色值。", systemImage: "paintpalette", isOn: $settings.excludeHexColorsFromTags)
             }
         }
     }
@@ -286,7 +325,7 @@ struct MacSettingsView: View {
             }
 
             macPanel("服务") {
-                SWSettingsRow("标题服务", subtitle: "选择关闭编辑器后调用的模型服务", systemImage: "server.rack", tint: DS.primaryDeep) {
+                SWSettingsRow("标题服务", systemImage: "server.rack", tint: DS.primaryDeep) {
                     Picker("标题服务", selection: $settings.macAITitleProvider) {
                         ForEach(MacAITitleProvider.allCases) { provider in
                             Text(provider.title).tag(provider)
@@ -294,7 +333,6 @@ struct MacSettingsView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
-                    .frame(width: 180)
                     .tint(DS.primary)
                 }
 
@@ -326,9 +364,11 @@ struct MacSettingsView: View {
                             .font(DS.body())
                             .foregroundColor(DS.textStrong)
                         Spacer()
-                        SWSettingsActionButton(.text("恢复默认"), style: .light) {
+                        Button("恢复默认") {
                             settings.resetMacAITitlePrompt()
                         }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
                     }
 
                     TextEditor(text: $settings.macAITitlePrompt)
@@ -351,13 +391,6 @@ struct MacSettingsView: View {
 
     private var shortcutTab: some View {
         panelStack {
-            SWPageHeader(
-                title: "快捷键",
-                subtitle: "录制 mac 菜单栏应用的常用操作组合键",
-                systemImage: "keyboard",
-                tint: DS.primaryDeep
-            )
-
             macPanel("常用操作") {
                 LazyVGrid(columns: shortcutGridColumns, alignment: .leading, spacing: DS.s2) {
                     shortcutTile(
@@ -406,10 +439,12 @@ struct MacSettingsView: View {
             HStack(spacing: DS.s2) {
                 helperText(recordingAction == nil ? "点击录制后按下新的组合键；Esc 取消。" : "正在录制：按下新的组合键，或按 Esc 取消。")
                 Spacer(minLength: DS.s3)
-                SWSettingsActionButton(.text("恢复默认快捷键"), style: .light) {
+                Button("恢复默认") {
                     shortcutStore.resetAllShortcuts()
                     recordingAction = nil
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
             }
         }
     }
@@ -417,13 +452,6 @@ struct MacSettingsView: View {
     private var keyTab: some View {
         panelStack {
             let keyStatus = vaultStore.macKeyStatus
-            SWPageHeader(
-                title: "密钥",
-                subtitle: keyStatusSubtitle(keyStatus),
-                systemImage: keyStatus == .available ? "checkmark.shield.fill" : "lock.shield",
-                tint: DS.primaryDeep
-            )
-
             macPanel("密钥状态") {
                 SWSettingsRow(
                     keyStatusTitle(keyStatus),
@@ -495,14 +523,17 @@ struct MacSettingsView: View {
 
     private func abbreviatedDisplayPath(_ path: String?) -> String? {
         guard let path else { return nil }
-        let cloudDocsPrefix = NSHomeDirectory() + "/Library/Mobile Documents/com~apple~CloudDocs"
-        if path == cloudDocsPrefix {
-            return "iCloud Drive"
+        let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
+        let cloudDocsPath = "/Library/Mobile Documents/com~apple~CloudDocs"
+        guard let cloudDocsRange = standardizedPath.range(of: cloudDocsPath) else {
+            return standardizedPath
         }
-        if path.hasPrefix(cloudDocsPrefix + "/") {
-            return "iCloud Drive/" + path.dropFirst(cloudDocsPrefix.count + 1)
+
+        let relativePath = standardizedPath[cloudDocsRange.upperBound...]
+        guard relativePath.isEmpty || relativePath.hasPrefix("/") else {
+            return standardizedPath
         }
-        return path
+        return "iCloud Drive" + relativePath
     }
 
     private func keyManagementIcon(for status: MacVaultKeyStatus) -> String {
@@ -533,44 +564,66 @@ struct MacSettingsView: View {
         case .noReference:
             if vaultStore.encryptedEntryCount > 0 {
                 HStack(spacing: DS.s2) {
-                    SWSettingsActionButton(.text("加载已有密钥"), style: .fill) {
+                    Button("加载已有密钥") {
                         loadKey()
                     }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+                    .tint(DS.primary)
 
-                    SWSettingsActionButton(.text("创建新密钥"), style: .light) {
+                    Button("创建新密钥") {
                         createNewKey()
                     }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
                 }
             } else {
                 HStack(spacing: DS.s2) {
-                    SWSettingsActionButton(.text("创建新密钥"), style: .fill) {
+                    Button("创建新密钥") {
                         createNewKey()
                     }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+                    .tint(DS.primary)
 
-                    SWSettingsActionButton(.text("加载已有密钥"), style: .light) {
+                    Button("加载已有密钥") {
                         loadKey()
                     }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
                 }
             }
         case .available:
             HStack(spacing: DS.s2) {
-                SWSettingsActionButton(.text("打开密钥位置"), style: .light) {
+                Button {
                     openKeyLocation()
+                } label: {
+                    Image(systemName: "folder")
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .help("打开密钥位置")
 
-                SWSettingsActionButton(.text("移除密钥引用"), style: .light, role: .destructive) {
+                Button("移除引用", role: .destructive) {
                     unloadKey()
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
             }
         case .invalid:
             HStack(spacing: DS.s2) {
-                SWSettingsActionButton(.text("重新定位密钥"), style: .fill) {
+                Button("重新定位密钥") {
                     loadKey()
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
+                .tint(DS.primary)
 
-                SWSettingsActionButton(.text("移除密钥引用"), style: .light, role: .destructive) {
+                Button("移除引用", role: .destructive) {
                     unloadKey()
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
             }
         }
     }
@@ -650,9 +703,11 @@ struct MacSettingsView: View {
                 SecureField(title, text: key)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 210)
-                SWSettingsActionButton(.text("保存"), style: .light) {
+                Button("保存") {
                     saveAIAPIKey(key.wrappedValue, provider: provider)
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
                 SWStatusBadge(key.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未保存" : "已填写", style: key.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .neutral : .success)
             }
         }
@@ -708,9 +763,15 @@ struct MacSettingsView: View {
                 .monospacedDigit()
                 .lineLimit(1)
 
-            SWSettingsActionButton(.icon(systemImage: isRecording ? "record.circle.fill" : "record.circle"), style: isRecording ? .fill : .ghost) {
+            Button {
                 onRecord()
+            } label: {
+                Label(isRecording ? "正在录制" : "录制快捷键", systemImage: isRecording ? "record.circle.fill" : "record.circle")
+                    .labelStyle(.iconOnly)
             }
+            .buttonStyle(.borderless)
+            .controlSize(.regular)
+            .tint(isRecording ? DS.primary : nil)
             .help(isRecording ? "正在录制" : "录制快捷键")
         }
         .padding(.horizontal, DS.s2)
@@ -741,20 +802,16 @@ struct MacSettingsView: View {
 
     @ViewBuilder
     private var aboutLogo: some View {
-        if let image = NSApp.applicationIconImage, image.isValid {
+        if let image = MacAppIconController.image(for: settings.macTheme) {
             Image(nsImage: image)
                 .resizable()
                 .frame(width: 82, height: 82)
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .shadow(color: DS.floatShadow.color, radius: DS.floatShadow.radius, x: DS.floatShadow.x, y: DS.floatShadow.y)
+                .id(settings.macTheme)
         } else {
-            Image(systemName: "pencil")
-                .font(.system(size: 40, weight: .semibold))
-                .foregroundStyle(DS.primaryDeep)
+            Color.clear
                 .frame(width: 82, height: 82)
-                .background(DS.primaryContainer)
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .shadow(color: DS.floatShadow.color, radius: DS.floatShadow.radius, x: DS.floatShadow.x, y: DS.floatShadow.y)
         }
     }
 
@@ -1042,6 +1099,10 @@ struct MacSettingsView: View {
 
 #Preview("设置 - 密钥") {
     MacSettingsView(selectedTab: .key)
+}
+
+#Preview("设置 - 关于") {
+    MacSettingsView(selectedTab: .about)
 }
 
 private enum MacShortcutRecordingAction: Equatable, Identifiable {

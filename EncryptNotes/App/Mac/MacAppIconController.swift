@@ -11,7 +11,7 @@ final class MacAppIconController {
         NSApp.applicationIconImage = image
     }
 
-    private static func image(for theme: MacTheme) -> NSImage? {
+    static func image(for theme: MacTheme) -> NSImage? {
         let resourceName = theme.macAppIconResourceName
         if let image = NSImage(named: NSImage.Name(resourceName)), image.isValid {
             return image

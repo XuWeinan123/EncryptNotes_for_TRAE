@@ -47,7 +47,6 @@
 				Tests/SettingsStoreTests.swift,
 				Tests/VaultStoreTests.swift,
 				Views/Mac/AllNotesWindow.swift,
-				Views/Mac/LockedStickyNoteView.swift,
 				Views/Mac/MacIntroView.swift,
 				Views/Mac/MacMenuBarController.swift,
 				Views/Mac/MacSettingsView.swift,
@@ -191,6 +190,7 @@
 				000000000000000520000000 /* Sources */,
 				000000000000000530000000 /* Frameworks */,
 				000000000000000540000000 /* Resources */,
+				000000000000000550000000 /* Compile Alternate App Icons */,
 			);
 			buildRules = (
 			);
@@ -278,6 +278,38 @@
 			);
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		000000000000000550000000 /* Compile Alternate App Icons */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/script/compile_alternate_icons.sh",
+				"$(SRCROOT)/EncryptNotes/Icon2.icon",
+				"$(SRCROOT)/EncryptNotes/Icon3.icon",
+			);
+			name = "Compile Alternate App Icons";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/SealNoteAlternateIcons/Icon2/Assets.car",
+				"$(DERIVED_FILE_DIR)/SealNoteAlternateIcons/Icon2/Icon2.icns",
+				"$(DERIVED_FILE_DIR)/SealNoteAlternateIcons/Icon2.plist",
+				"$(DERIVED_FILE_DIR)/SealNoteAlternateIcons/Icon3/Assets.car",
+				"$(DERIVED_FILE_DIR)/SealNoteAlternateIcons/Icon3/Icon3.icns",
+				"$(DERIVED_FILE_DIR)/SealNoteAlternateIcons/Icon3.plist",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Icon2.icns",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Icon3.icns",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/script/compile_alternate_icons.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		000000000000000120000000 /* Sources */ = {

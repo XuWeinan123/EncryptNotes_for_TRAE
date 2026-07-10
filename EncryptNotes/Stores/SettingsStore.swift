@@ -106,7 +106,7 @@ final class SettingsStore: ObservableObject {
     static let macEditorLineHeightRange: ClosedRange<Double> = 1.2...2.0
     static let defaultMacTheme: MacTheme = .pink
     static let macThemeDefaultsKey = "SNMacTheme"
-    static let macRecentNotesLimitRange: ClosedRange<Int> = 3...12
+    static let macRecentNotesLimitOptions = [5, 10, 15]
     static let defaultMacRecentNotesLimit = 5
     #if os(macOS)
     static let defaultLaunchAtLogin = false
@@ -172,6 +172,10 @@ final class SettingsStore: ObservableObject {
 
     @Published var autoRenameNotesOnSave: Bool {
         didSet { defaults.set(autoRenameNotesOnSave, forKey: Keys.autoRenameNotesOnSave) }
+    }
+
+    @Published var excludeHexColorsFromTags: Bool {
+        didSet { defaults.set(excludeHexColorsFromTags, forKey: Keys.excludeHexColorsFromTags) }
     }
 
     @Published var maintenanceLoggingEnabled: Bool {
@@ -288,6 +292,7 @@ final class SettingsStore: ObservableObject {
         self.copyAddsParagraphSpacing = defaults.object(forKey: Keys.copyAddsParagraphSpacing) as? Bool ?? false
         self.autoDeleteEmptyNotes = defaults.object(forKey: Keys.autoDeleteEmptyNotes) as? Bool ?? true
         self.autoRenameNotesOnSave = defaults.object(forKey: Keys.autoRenameNotesOnSave) as? Bool ?? false
+        self.excludeHexColorsFromTags = defaults.object(forKey: Keys.excludeHexColorsFromTags) as? Bool ?? true
         self.maintenanceLoggingEnabled = defaults.object(forKey: Keys.maintenanceLoggingEnabled) as? Bool ?? false
         self.macTheme = MacTheme(rawValue: defaults.string(forKey: Self.macThemeDefaultsKey) ?? "") ?? Self.defaultMacTheme
         let storedRecentNotesLimit = defaults.integer(forKey: Keys.macRecentNotesLimit)
@@ -327,6 +332,7 @@ final class SettingsStore: ObservableObject {
         copyAddsParagraphSpacing = false
         autoDeleteEmptyNotes = true
         autoRenameNotesOnSave = false
+        excludeHexColorsFromTags = true
         maintenanceLoggingEnabled = false
         macTheme = Self.defaultMacTheme
         macRecentNotesLimit = Self.defaultMacRecentNotesLimit
@@ -428,7 +434,8 @@ final class SettingsStore: ObservableObject {
     }
 
     static func clampedRecentNotesLimit(_ value: Int) -> Int {
-        min(max(value, macRecentNotesLimitRange.lowerBound), macRecentNotesLimitRange.upperBound)
+        macRecentNotesLimitOptions.min { abs($0 - value) < abs($1 - value) }
+            ?? defaultMacRecentNotesLimit
     }
 
     private enum Keys {
@@ -442,6 +449,7 @@ final class SettingsStore: ObservableObject {
         static let copyAddsParagraphSpacing = "SNCopyAddsParagraphSpacing"
         static let autoDeleteEmptyNotes = "SNAutoDeleteEmptyNotes"
         static let autoRenameNotesOnSave = "SNAutoRenameNotesOnSave"
+        static let excludeHexColorsFromTags = "SNExcludeHexColorsFromTags"
         static let maintenanceLoggingEnabled = "SNMaintenanceLoggingEnabled"
         static let macRecentNotesLimit = "SNMacRecentNotesLimit"
         static let iOSAppIconName = "SNIOSAppIconName"

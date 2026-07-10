@@ -258,7 +258,7 @@ final class VaultStore: ObservableObject {
 
         if let tag = selectedTag {
             readable = readable.filter { note in
-                TagParser.tags(in: note.body).contains(tag)
+                TagParser.tags(in: note.body, excludingHexColors: settings.excludeHexColorsFromTags).contains(tag)
             }
         }
 
@@ -281,7 +281,7 @@ final class VaultStore: ObservableObject {
     var allTags: [TagCount] {
         var counts: [String: Int] = [:]
         for note in readableNotes {
-            for tag in TagParser.tags(in: note.body) {
+            for tag in TagParser.tags(in: note.body, excludingHexColors: settings.excludeHexColorsFromTags) {
                 counts[tag, default: 0] += 1
             }
         }

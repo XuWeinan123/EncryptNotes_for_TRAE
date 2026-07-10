@@ -28,7 +28,26 @@ struct MacMarkdownCodeFenceCompletionResult: Equatable {
 
 final class MacMarkdownFormatter {
 
-    static func apply(command: MacMarkdownFormatCommand, to text: String, selection: NSRange) -> MacMarkdownFormatResult {
+    static func webURL(fromClipboardString value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) == nil,
+              let components = URLComponents(string: trimmed),
+              let scheme = components.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              components.host?.isEmpty == false else {
+            return nil
+        }
+        return trimmed
+    }
+
+    static func apply(
+        command: MacMarkdownFormatCommand,
+        to text: String,
+        selection: NSRange,
+        linkURL: String? = nil
+    ) -> MacMarkdownFormatResult {
         let nsText = text as NSString
         let safeRange = NSRange(
             location: max(0, min(selection.location, nsText.length)),
@@ -51,7 +70,7 @@ final class MacMarkdownFormatter {
         case .htmlComment:
             return applyWrapper(text: text, selection: safeRange, open: "<!--", close: "-->", placeholder: "待办", supportsToggle: true)
         case .link:
-            return applyLink(text: text, selection: safeRange)
+            return applyLink(text: text, selection: safeRange, linkURL: linkURL)
         }
     }
 
@@ -102,21 +121,22 @@ final class MacMarkdownFormatter {
         return MacMarkdownFormatResult(text: newText, selection: NSRange(location: newCursorStart, length: newCursorLength))
     }
 
-    private static func applyLink(text: String, selection: NSRange) -> MacMarkdownFormatResult {
+    private static func applyLink(text: String, selection: NSRange, linkURL: String?) -> MacMarkdownFormatResult {
         let nsText = text as NSString
         let selectedText = safeSubstring(nsText: nsText, range: selection)
+        let url = linkURL ?? ""
 
         let insertText: String
         let newCursorStart: Int
         let newCursorLength: Int
 
         if selection.length == 0 {
-            insertText = "[]()"
+            insertText = "[](" + url + ")"
             newCursorStart = selection.location + 1
             newCursorLength = 0
         } else {
-            insertText = "[" + selectedText + "]()"
-            newCursorStart = selection.location + selection.length + 3
+            insertText = "[" + selectedText + "](" + url + ")"
+            newCursorStart = selection.location + selection.length + 3 + url.utf16.count
             newCursorLength = 0
         }
 
@@ -465,6 +485,20 @@ final class MacMarkdownFormatter {
         let delimiter: String?
 
         init?(line: String) {
+            let taskPattern = #"^(\s*)([-+*])\s+(\[[ xX]\])\s+(.*)$"#
+            if let taskRegex = try? NSRegularExpression(pattern: taskPattern) {
+                let nsLine = line as NSString
+                if let match = taskRegex.firstMatch(in: line, range: NSRange(location: 0, length: nsLine.length)) {
+                    indent = nsLine.substring(with: match.range(at: 1))
+                    let bullet = nsLine.substring(with: match.range(at: 2))
+                    content = nsLine.substring(with: match.range(at: 4))
+                    number = nil
+                    delimiter = nil
+                    nextMarker = "\(bullet) [ ] "
+                    return
+                }
+            }
+
             let pattern = #"^(\s*)(?:(\d+)([\.\)])|([-+*]))\s+(.*)$"#
             guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
             let nsLine = line as NSString

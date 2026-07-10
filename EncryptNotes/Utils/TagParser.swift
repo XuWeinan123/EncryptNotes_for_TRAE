@@ -12,11 +12,25 @@ enum TagParser {
     static let pattern = #"#[^\s#]+"#
 
     /// 返回正文中出现的所有标签（含 `#` 前缀），按出现顺序排列。
-    static func tags(in body: String) -> [String] {
+    static func tags(in body: String, excludingHexColors: Bool = false) -> [String] {
+        matches(in: body, excludingHexColors: excludingHexColors).map { match in
+            (body as NSString).substring(with: match.range)
+        }
+    }
+
+    /// 返回正文中的标签匹配，供需要保留原始文本范围的界面使用。
+    static func matches(in body: String, excludingHexColors: Bool = false) -> [NSTextCheckingResult] {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let ns = body as NSString
         let matches = regex.matches(in: body, range: NSRange(location: 0, length: ns.length))
-        return matches.map { ns.substring(with: $0.range) }
+        guard excludingHexColors else { return matches }
+        return matches.filter { !isHexColor(ns.substring(with: $0.range)) }
+    }
+
+    /// 判断标签文本是否是六位 RGB 或八位 RGBA Hex 色值，可带结尾标点。
+    private static func isHexColor(_ tag: String) -> Bool {
+        let pattern = #"^#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?(?:[^\\p{L}\\p{N}_].*)?$"#
+        return tag.range(of: pattern, options: .regularExpression) != nil
     }
 }
 

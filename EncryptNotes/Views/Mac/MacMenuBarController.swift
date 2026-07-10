@@ -197,6 +197,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         let snapshot = MacNoteListSnapshotBuilder.make(
             readableNotes: vaultStore.readableNotes,
             lockedEncryptedNotes: vaultStore.lockedEncryptedNotes,
+            excludingHexColorsFromTags: settings.excludeHexColorsFromTags,
             titleProvider: { vaultStore.displayTitle(for: $0, emptyTitle: "") }
         )
         return snapshot.recentItems(limit: settings.macRecentNotesLimit).map { item in

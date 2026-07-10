@@ -30,6 +30,67 @@ private extension SwiftUI.EventModifiers {
     }
 }
 
+enum MacNoteModeConversionNotice: Equatable {
+    case encrypted
+    case plain
+
+    var title: String {
+        switch self {
+        case .encrypted: return "已转为加密笔记"
+        case .plain: return "已转为明文笔记"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .encrypted: return "正文已加密并上锁"
+        case .plain: return "正文现在以明文保存"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .encrypted: return "lock.fill"
+        case .plain: return "lock.open.fill"
+        }
+    }
+}
+
+private struct MacNoteModeConversionToast: View {
+    let notice: MacNoteModeConversionNotice
+
+    var body: some View {
+        HStack(spacing: DS.s3) {
+            Image(systemName: notice.systemImage)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(DS.primaryDeep)
+
+            VStack(alignment: .leading, spacing: DS.s1) {
+                Text(notice.title)
+                    .font(DS.title())
+                    .foregroundStyle(DS.textStrong)
+                Text(notice.message)
+                    .font(DS.caption())
+                    .foregroundStyle(DS.textSecondary)
+            }
+        }
+        .padding(.horizontal, DS.s4)
+        .padding(.vertical, DS.s3)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: DS.rLg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: DS.rLg, style: .continuous)
+                .stroke(DS.line, lineWidth: 0.5)
+        }
+        .shadow(
+            color: DS.popoverShadow.color,
+            radius: DS.popoverShadow.radius,
+            x: DS.popoverShadow.x,
+            y: DS.popoverShadow.y
+        )
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct StickyNoteEditorView: View {
     @ObservedObject private var settings = SettingsStore.shared
     @ObservedObject private var shortcutStore = ShortcutStore.shared
@@ -115,6 +176,15 @@ struct StickyNoteEditorView: View {
             }
         }
         .background(Color(nsColor: .textBackgroundColor))
+        .overlay(alignment: .top) {
+            if let notice = viewModel.modeConversionNotice {
+                MacNoteModeConversionToast(notice: notice)
+                    .padding(.top, MacStickyEditorLayout.toolbarHoverRegionHeight + DS.s3)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.snappy, value: viewModel.modeConversionNotice)
         // 内容延伸到工具栏下方供系统玻璃采样；首行留白由 MacTextView 计算。
         .ignoresSafeArea(edges: .top)
         .dsMacStickyToolbarScrollEdge()
@@ -432,7 +502,7 @@ enum MacStickyEditorLayout {
     }
 }
 
-private struct MacMarkdownPreview: View {
+struct MacMarkdownPreview: View {
     let text: String
     let fontSize: CGFloat
     let lineHeightMultiple: CGFloat
@@ -773,7 +843,7 @@ private final class MacMarkdownPreviewShortcutMonitorView: NSView {
     }
 }
 
-private struct MacToolbarHoverRegion: NSViewRepresentable {
+struct MacToolbarHoverRegion: NSViewRepresentable {
     let onHover: (Bool) -> Void
 
     func makeNSView(context: Context) -> ToolbarHoverTrackingView {
@@ -787,7 +857,7 @@ private struct MacToolbarHoverRegion: NSViewRepresentable {
     }
 }
 
-private final class ToolbarHoverTrackingView: NSView {
+final class ToolbarHoverTrackingView: NSView {
     var onHover: ((Bool) -> Void)?
     private var trackingAreaRef: NSTrackingArea?
     private var pendingHoverOn: DispatchWorkItem?
@@ -943,6 +1013,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
     @Published var isContentLocked = false
     @Published var ciphertextPreview = ""
     @Published var isEncryptionToggling = false
+    @Published var modeConversionNotice: MacNoteModeConversionNotice?
     @Published var showingKeyIssueAlert = false
     @Published var keyIssueMessage = "请前往密钥设置处理。"
 
@@ -954,6 +1025,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
     private let isPreview: Bool
     private var saveTask: Task<Void, Never>?
     private var copyResetTask: Task<Void, Never>?
+    private var modeConversionNoticeTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
     private var initialKeyIssue: Error?
     private var didGenerateLocalTitle = false
@@ -1104,6 +1176,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
                 self.text = updatedNote.body
                 self.isContentLocked = false
                 self.syncStore.setSaved()
+                self.showModeConversionNotice(.plain)
             } catch {
                 if self.isKeyIssue(error) {
                     self.presentKeyIssue(error)
@@ -1215,6 +1288,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
                 self.text = bodyToEncrypt
                 self.isContentLocked = true
                 self.syncStore.setSaved()
+                self.showModeConversionNotice(.encrypted)
             } catch {
                 self.recordCryptoEvent("note_encryption_failed", noteId: noteToEncrypt.id, start: start, fields: [
                     "error": error.localizedDescription
@@ -1276,6 +1350,16 @@ final class StickyNoteEditorViewModel: ObservableObject {
         keyIssueMessage = keyIssueMessage(for: error)
         showingKeyIssueAlert = true
         syncStore.setFailed(message: keyIssueMessage)
+    }
+
+    private func showModeConversionNotice(_ notice: MacNoteModeConversionNotice) {
+        modeConversionNoticeTask?.cancel()
+        modeConversionNotice = notice
+        modeConversionNoticeTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            self?.modeConversionNotice = nil
+        }
     }
 
     private func isKeyIssue(_ error: Error) -> Bool {
@@ -2066,7 +2150,20 @@ extension MacTextView {
 
         let currentText = self.string
         let selection = self.selectedRange()
-        let result = MacMarkdownFormatter.apply(command: command, to: currentText, selection: selection)
+        let linkURL: String?
+        if case .link = command {
+            let pasteboard = NSPasteboard.general
+            let clipboardString = pasteboard.string(forType: .URL) ?? pasteboard.string(forType: .string)
+            linkURL = MacMarkdownFormatter.webURL(fromClipboardString: clipboardString)
+        } else {
+            linkURL = nil
+        }
+        let result = MacMarkdownFormatter.apply(
+            command: command,
+            to: currentText,
+            selection: selection,
+            linkURL: linkURL
+        )
 
         applyTextResult(result.text, selection: result.selection)
     }
