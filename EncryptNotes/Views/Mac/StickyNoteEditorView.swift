@@ -99,6 +99,9 @@ struct StickyNoteEditorView: View {
     @State private var isToolbarHovering = false
     @State private var isFindBarVisible = false
     @State private var isMarkdownPreviewing = false
+    @State private var hasCreatedMarkdownPreview = false
+    @State private var markdownPreviewText = ""
+    @State private var isMarkdownPreviewSwitching = false
     @State private var editorScrollY: CGFloat = 0
 
     init(note: Note, isPreview: Bool = false, startsLocked: Bool = false, initialKeyIssue: Error? = nil) {
@@ -112,9 +115,38 @@ struct StickyNoteEditorView: View {
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            if isMarkdownPreviewing {
+            MacTextView(
+                text: $viewModel.text,
+                placeholder: "随便写点什么吧",
+                fontSize: CGFloat(settings.macEditorFontSize),
+                lineHeightMultiple: CGFloat(settings.macEditorLineHeightMultiple),
+                autoFocus: true,
+                isEditable: !viewModel.isContentLocked,
+                onChange: { viewModel.textDidChange($0) },
+                onSaveShortcut: { viewModel.saveImmediately() },
+                onApplyShortcut: { viewModel.saveImmediately() },
+                onFitToContent: { viewModel.fitWindowToContent() },
+                onCopyShortcut: { viewModel.copyNoteText() },
+                onFindShortcut: { toggleFindInterface() },
+                onToggleMarkdownPreview: { toggleMarkdownPreview() },
+                onIncreaseFontSize: { adjustFontSize(by: 1) },
+                onDecreaseFontSize: { adjustFontSize(by: -1) },
+                onFindVisibilityChange: { isVisible in
+                    isFindBarVisible = isVisible
+                    updateSystemToolbarBackground(
+                        isActive: isVisible || isToolbarHovering,
+                        showsSeparator: isVisible
+                    )
+                }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .opacity(isMarkdownPreviewing ? 0 : 1)
+            .allowsHitTesting(!isMarkdownPreviewing)
+            .accessibilityHidden(isMarkdownPreviewing)
+
+            if hasCreatedMarkdownPreview {
                 MacMarkdownPreview(
-                    text: viewModel.text,
+                    text: markdownPreviewText,
                     fontSize: CGFloat(settings.macEditorFontSize),
                     lineHeightMultiple: CGFloat(settings.macEditorLineHeightMultiple),
                     scrollY: $editorScrollY
@@ -122,35 +154,13 @@ struct StickyNoteEditorView: View {
                 .background(MacMarkdownPreviewShortcutMonitor(
                     noteId: viewModel.note.id,
                     onCopy: { viewModel.copyNoteText() },
-                    onTogglePreview: { toggleMarkdownPreview() }
+                    onTogglePreview: { toggleMarkdownPreview() },
+                    isActive: isMarkdownPreviewing
                 ))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                MacTextView(
-                    text: $viewModel.text,
-                    placeholder: "随便写点什么吧",
-                    fontSize: CGFloat(settings.macEditorFontSize),
-                    lineHeightMultiple: CGFloat(settings.macEditorLineHeightMultiple),
-                    autoFocus: true,
-                    isEditable: !viewModel.isContentLocked,
-                    onChange: { viewModel.textDidChange($0) },
-                    onSaveShortcut: { viewModel.saveImmediately() },
-                    onApplyShortcut: { viewModel.saveImmediately() },
-                    onFitToContent: { viewModel.fitWindowToContent() },
-                    onCopyShortcut: { viewModel.copyNoteText() },
-                    onFindShortcut: { toggleFindInterface() },
-                    onToggleMarkdownPreview: { toggleMarkdownPreview() },
-                    onIncreaseFontSize: { adjustFontSize(by: 1) },
-                    onDecreaseFontSize: { adjustFontSize(by: -1) },
-                    onFindVisibilityChange: { isVisible in
-                        isFindBarVisible = isVisible
-                        updateSystemToolbarBackground(
-                            isActive: isVisible || isToolbarHovering,
-                            showsSeparator: isVisible
-                        )
-                    }
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .opacity(isMarkdownPreviewing ? 1 : 0)
+                .allowsHitTesting(isMarkdownPreviewing)
+                .accessibilityHidden(!isMarkdownPreviewing)
             }
 
             VStack(spacing: 0) {
@@ -218,7 +228,11 @@ struct StickyNoteEditorView: View {
                     .labelStyle(.iconOnly)
                     .frame(width: DS.macToolbarIconWidth)
                 }
-                .disabled(viewModel.isContentLocked || viewModel.isEncryptionToggling)
+                .disabled(
+                    viewModel.isContentLocked
+                    || viewModel.isEncryptionToggling
+                    || isMarkdownPreviewSwitching
+                )
                 .macKeyboardShortcut(markdownPreviewShortcut)
                 .help(isMarkdownPreviewing ? "返回编辑" : "Markdown 预览")
             }
@@ -356,16 +370,25 @@ struct StickyNoteEditorView: View {
     }
 
     private func toggleMarkdownPreview() {
-        guard !viewModel.isContentLocked, !viewModel.isEncryptionToggling else { return }
+        guard !viewModel.isContentLocked,
+              !viewModel.isEncryptionToggling,
+              !isMarkdownPreviewSwitching else { return }
+        isMarkdownPreviewSwitching = true
+
         if isMarkdownPreviewing {
-            editorScrollY = currentEditorScrollY()
             isMarkdownPreviewing = false
             restoreEditorScrollYAfterLayout()
         } else {
             editorScrollY = currentEditorScrollY()
+            markdownPreviewText = viewModel.text
+            hasCreatedMarkdownPreview = true
             viewModel.saveImmediately()
             hideFindInterface()
             isMarkdownPreviewing = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            isMarkdownPreviewSwitching = false
         }
     }
 
@@ -387,6 +410,7 @@ struct StickyNoteEditorView: View {
             let maxY = max(0, (scrollView.documentView?.bounds.height ?? 0) - scrollView.contentView.bounds.height)
             scrollView.contentView.scroll(to: NSPoint(x: 0, y: min(max(0, targetY), maxY)))
             scrollView.reflectScrolledClipView(scrollView.contentView)
+            window.makeFirstResponder(textView)
         }
     }
 
@@ -503,6 +527,7 @@ enum MacStickyEditorLayout {
 }
 
 struct MacMarkdownPreview: View {
+    @ObservedObject private var settings = SettingsStore.shared
     let text: String
     let fontSize: CGFloat
     let lineHeightMultiple: CGFloat
@@ -539,7 +564,22 @@ struct MacMarkdownPreview: View {
                         .font(codeFont, for: .codeBlock)
                         .markdownComponentSpacing(verticalSpacing)
                         .markdownMathRenderingEnabled()
-                        .foregroundStyle(Color(nsColor: .textColor))
+                        .markdownCodeBlockStyle(MacMarkdownPreviewCodeBlockStyle(
+                            theme: settings.macTheme,
+                            font: codeFont
+                        ))
+                        .foregroundStyle(DS.textBody)
+                        .headingStyle(DS.textEmphasize, for: .h1)
+                        .headingStyle(DS.textEmphasize, for: .h2)
+                        .headingStyle(DS.textEmphasize, for: .h3)
+                        .headingStyle(DS.textEmphasize, for: .h4)
+                        .headingStyle(DS.textEmphasize, for: .h5)
+                        .headingStyle(DS.textEmphasize, for: .h6)
+                        .tint(DS.primaryDeep)
+                        .tint(DS.link, for: .link)
+                        .tint(DS.link, for: .blockQuote)
+                        .tint(DS.primaryDeep, for: .inlineCodeBlock)
+                        .id(settings.macTheme)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -550,6 +590,75 @@ struct MacMarkdownPreview: View {
         }
         .scrollIndicators(.hidden)
         .background(MacTitlebarHeightReader(height: $titlebarHeight))
+    }
+}
+
+private struct MacMarkdownPreviewCodeBlockStyle: MarkdownCodeBlockStyle {
+    let theme: MacTheme
+    let font: Font
+
+    func makeBody(configuration: Configuration) -> some View {
+        MacMarkdownPreviewCodeBlock(configuration: configuration, theme: theme, font: font)
+    }
+}
+
+private struct MacMarkdownPreviewCodeBlock: View {
+    let configuration: MarkdownCodeBlockStyleConfiguration
+    let theme: MacTheme
+    let font: Font
+    @State private var didCopy = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            codeBlockHeader
+
+            ScrollView(.horizontal) {
+                Text(verbatim: configuration.code)
+                    .font(font)
+                    .foregroundStyle(DS.textBody)
+                    .padding(DS.s3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .background(DS.surfaceSunken)
+        .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
+                .stroke(DS.primary.opacity(0.22), lineWidth: 0.5)
+        }
+        .id(theme)
+    }
+
+    private var codeBlockHeader: some View {
+        HStack(spacing: DS.s2) {
+            if let language = configuration.language {
+                Text(language.localizedLowercase)
+                    .foregroundStyle(DS.textSubtle)
+            }
+            Spacer(minLength: DS.s3)
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(configuration.code, forType: .string)
+                didCopy = true
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(2))
+                    didCopy = false
+                }
+            } label: {
+                Label(didCopy ? "已复制" : "复制", systemImage: didCopy ? "checkmark" : "square.on.square")
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(.accessoryBar)
+        }
+        .font(.callout.weight(.medium))
+        .padding(.horizontal, DS.s3)
+        .padding(.vertical, DS.s2)
+        .background(DS.primaryContainer.opacity(0.45))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(DS.line)
+                .frame(height: 0.5)
+        }
     }
 }
 
@@ -756,12 +865,14 @@ private struct MacMarkdownPreviewShortcutMonitor: NSViewRepresentable {
     let noteId: String
     let onCopy: () -> Void
     let onTogglePreview: () -> Void
+    let isActive: Bool
 
     func makeNSView(context: Context) -> MacMarkdownPreviewShortcutMonitorView {
         let view = MacMarkdownPreviewShortcutMonitorView()
         view.noteId = noteId
         view.onCopy = onCopy
         view.onTogglePreview = onTogglePreview
+        view.isActive = isActive
         return view
     }
 
@@ -769,6 +880,7 @@ private struct MacMarkdownPreviewShortcutMonitor: NSViewRepresentable {
         nsView.noteId = noteId
         nsView.onCopy = onCopy
         nsView.onTogglePreview = onTogglePreview
+        nsView.isActive = isActive
     }
 
     static func dismantleNSView(_ nsView: MacMarkdownPreviewShortcutMonitorView, coordinator: ()) {
@@ -780,6 +892,7 @@ private final class MacMarkdownPreviewShortcutMonitorView: NSView {
     var noteId = ""
     var onCopy: (() -> Void)?
     var onTogglePreview: (() -> Void)?
+    var isActive = false
     private var monitor: Any?
 
     override func viewDidMoveToWindow() {
@@ -811,6 +924,7 @@ private final class MacMarkdownPreviewShortcutMonitorView: NSView {
     }
 
     private func handle(_ event: NSEvent) -> NSEvent? {
+        guard isActive else { return event }
         guard isEventInCurrentNoteWindow(event) else { return event }
         guard let chars = event.charactersIgnoringModifiers, !chars.isEmpty else { return event }
 

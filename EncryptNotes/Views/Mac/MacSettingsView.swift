@@ -732,7 +732,12 @@ struct MacSettingsView: View {
     }
 
     private func toggleRow(_ title: String, subtitle: String? = nil, systemImage: String? = nil, isOn: Binding<Bool>) -> some View {
-        SWSettingsRow(title, subtitle: subtitle, systemImage: systemImage ?? (isOn.wrappedValue ? "checkmark.circle.fill" : "circle")) {
+        SWSettingsRow(
+            title,
+            subtitle: subtitle,
+            systemImage: systemImage ?? (isOn.wrappedValue ? "checkmark.circle.fill" : "circle"),
+            trailingMinWidth: 72
+        ) {
             Toggle("", isOn: isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)

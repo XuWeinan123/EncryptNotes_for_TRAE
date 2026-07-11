@@ -233,6 +233,7 @@ struct SWSettingsRow<Trailing: View>: View {
     let subtitle: String?
     let systemImage: String
     let tint: Color
+    let trailingMinWidth: CGFloat
     @ViewBuilder let trailing: () -> Trailing
 
     init(
@@ -240,12 +241,14 @@ struct SWSettingsRow<Trailing: View>: View {
         subtitle: String? = nil,
         systemImage: String,
         tint: Color = DS.primaryDeep,
+        trailingMinWidth: CGFloat = 150,
         @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() }
     ) {
         self.title = title
         self.subtitle = subtitle
         self.systemImage = systemImage
         self.tint = tint
+        self.trailingMinWidth = trailingMinWidth
         self.trailing = trailing
     }
 
@@ -275,7 +278,7 @@ struct SWSettingsRow<Trailing: View>: View {
 
             trailing()
                 .foregroundStyle(.primary)
-                .frame(minWidth: 150, alignment: .trailing)
+                .frame(minWidth: trailingMinWidth, alignment: .trailing)
         }
         .padding(.horizontal, DS.s3)
         .padding(.vertical, 10)

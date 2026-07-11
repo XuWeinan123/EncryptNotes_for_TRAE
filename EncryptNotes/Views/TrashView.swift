@@ -198,7 +198,7 @@ struct TrashView: View {
 
                 Spacer()
 
-                SWStatusBadge("剩 \(trashNote.remainingDays) 天", systemImage: "clock", style: .warning)
+                SWStatusBadge("\(trashNote.remainingDays) 天", systemImage: "clock", style: .warning)
             }
 
             if let body = trashNote.body {

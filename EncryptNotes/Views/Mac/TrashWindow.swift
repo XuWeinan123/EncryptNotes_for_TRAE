@@ -152,7 +152,7 @@ struct TrashView: View {
                     if trashNote.isEncrypted {
                         SWStatusBadge("加密", systemImage: "lock.fill", style: .neutral)
                     }
-                    SWStatusBadge("剩 \(trashNote.remainingDays) 天", systemImage: "clock", style: .warning)
+                    SWStatusBadge("\(trashNote.remainingDays) 天", systemImage: "clock", style: .warning)
                 }
 
                 HStack(spacing: DS.s1) {

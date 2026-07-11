@@ -533,7 +533,7 @@ private struct MacComponentPreviewView: View {
             HStack(spacing: DS.s2) {
                 SWStatusBadge("系统组件", style: .neutral)
                 SWStatusBadge("已启用", systemImage: "checkmark", style: .success)
-                SWStatusBadge("剩 30 天", systemImage: "clock", style: .warning)
+                SWStatusBadge("30 天", systemImage: "clock", style: .warning)
             }
         case "SWSectionPanel":
             SWSectionPanel("分组标题", footer: "这里是 footer 文案。") {
@@ -644,7 +644,7 @@ private struct MacComponentPreviewView: View {
             ) {
                 HStack(spacing: DS.s2) {
                     SWStatusBadge("加密", systemImage: "lock.fill", style: .neutral)
-                    SWStatusBadge("剩 29 天", systemImage: "clock", style: .warning)
+                    SWStatusBadge("29 天", systemImage: "clock", style: .warning)
                 }
             }
             .frame(width: 520)
