@@ -36,7 +36,11 @@ nonisolated enum MacNoteListSnapshotBuilder {
         var readableItems: [NoteListItem] = []
 
         for note in readableNotes {
-            let tags = TagParser.tags(in: note.body, excludingHexColors: excludingHexColorsFromTags)
+            // Tags in encrypted notes are intentionally private and must not
+            // contribute to the All Notes filter, even while a note is open.
+            let tags = note.isEncrypted
+                ? []
+                : TagParser.tags(in: note.body, excludingHexColors: excludingHexColorsFromTags)
             for tag in tags {
                 tagCountsByName[tag, default: 0] += 1
             }

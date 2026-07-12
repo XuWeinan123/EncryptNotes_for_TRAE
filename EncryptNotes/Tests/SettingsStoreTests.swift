@@ -92,6 +92,7 @@ final class SettingsStoreTests: XCTestCase {
         let store = makeStore()
         XCTAssertFalse(store.copyAddsParagraphSpacing)
         XCTAssertTrue(store.autoDeleteEmptyNotes)
+        XCTAssertFalse(store.autoRenameNotesOnSave)
         XCTAssertTrue(store.excludeHexColorsFromTags)
         XCTAssertEqual(store.macTheme, .pink)
         XCTAssertEqual(store.macRecentNotesLimit, 5)
@@ -108,14 +109,18 @@ final class SettingsStoreTests: XCTestCase {
         let store = makeStore()
         store.preferredNoteMode = .encrypted
         store.hideContentOnBackground = false
+        store.copyAddsParagraphSpacing = true
         store.autoDeleteEmptyNotes = false
+        store.autoRenameNotesOnSave = true
         store.excludeHexColorsFromTags = false
         store.maintenanceLoggingEnabled = true
 
         let reloaded = makeStore()
         XCTAssertEqual(reloaded.preferredNoteMode, .encrypted)
         XCTAssertFalse(reloaded.hideContentOnBackground)
+        XCTAssertTrue(reloaded.copyAddsParagraphSpacing)
         XCTAssertFalse(reloaded.autoDeleteEmptyNotes)
+        XCTAssertTrue(reloaded.autoRenameNotesOnSave)
         XCTAssertFalse(reloaded.excludeHexColorsFromTags)
         XCTAssertTrue(reloaded.maintenanceLoggingEnabled)
     }
@@ -147,42 +152,12 @@ final class SettingsStoreTests: XCTestCase {
     }
 
     #if os(macOS)
-    func testMacAITitleDefaults() {
-        let store = makeStore()
-        XCTAssertFalse(store.macAITitleEnabled)
-        XCTAssertEqual(store.macAITitleProvider, .deepSeek)
-        XCTAssertEqual(store.macAITitlePrompt, SettingsStore.defaultMacAITitlePrompt)
-        XCTAssertFalse(store.macAITitleSkipsMarkdownHeading)
-        XCTAssertFalse(store.hideMacIntroOnLaunch)
-    }
-
-    func testMacAITitlePreferencesPersist() {
-        let store = makeStore()
-        store.macAITitleEnabled = true
-        store.macAITitleProvider = .gemini
-        store.macAITitlePrompt = "Return a short title."
-        store.macAITitleSkipsMarkdownHeading = true
-
-        let reloaded = makeStore()
-        XCTAssertTrue(reloaded.macAITitleEnabled)
-        XCTAssertEqual(reloaded.macAITitleProvider, .gemini)
-        XCTAssertEqual(reloaded.macAITitlePrompt, "Return a short title.")
-        XCTAssertTrue(reloaded.macAITitleSkipsMarkdownHeading)
-    }
-
     func testMacIntroPreferencePersists() {
         let store = makeStore()
         store.hideMacIntroOnLaunch = true
 
         let reloaded = makeStore()
         XCTAssertTrue(reloaded.hideMacIntroOnLaunch)
-    }
-
-    func testResetMacAITitlePromptRestoresDefault() {
-        let store = makeStore()
-        store.macAITitlePrompt = "Custom prompt"
-        store.resetMacAITitlePrompt()
-        XCTAssertEqual(store.macAITitlePrompt, SettingsStore.defaultMacAITitlePrompt)
     }
 
     func testResetForTestingRestoresMacIntroPreference() {

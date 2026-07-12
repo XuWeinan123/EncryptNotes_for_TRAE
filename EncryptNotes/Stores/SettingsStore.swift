@@ -70,26 +70,6 @@ struct VaultKeyFileReference: Codable, Equatable {
     }
 }
 
-enum MacAITitleProvider: String, CaseIterable, Identifiable, Codable {
-    case deepSeek
-    case gemini
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .deepSeek: return "DeepSeek"
-        case .gemini: return "Gemini"
-        }
-    }
-
-    var keychainAccount: String {
-        switch self {
-        case .deepSeek: return "mac.aiTitle.deepSeek"
-        case .gemini: return "mac.aiTitle.gemini"
-        }
-    }
-}
 #endif
 
 /// 用户偏好与隐私设置，基于 UserDefaults 持久化。
@@ -113,8 +93,6 @@ final class SettingsStore: ObservableObject {
     static let defaultPinNewNotes = true
     static let defaultLockEncryptedNotesOnSleep = true
     static let defaultLockUnpinnedEncryptedNotesOnBackground = true
-    static let defaultMacAITitleProvider: MacAITitleProvider = .deepSeek
-    static let defaultMacAITitlePrompt = "请为以下笔记生成一个简洁标题，最多 20 个中文字符或 8 个英文单词。只返回标题，不要解释、不要引号、不要 Markdown。"
     #endif
 
     private let defaults: UserDefaults
@@ -245,22 +223,6 @@ final class SettingsStore: ObservableObject {
         }
     }
 
-    @Published var macAITitleEnabled: Bool {
-        didSet { defaults.set(macAITitleEnabled, forKey: Keys.macAITitleEnabled) }
-    }
-
-    @Published var macAITitleProvider: MacAITitleProvider {
-        didSet { defaults.set(macAITitleProvider.rawValue, forKey: Keys.macAITitleProvider) }
-    }
-
-    @Published var macAITitlePrompt: String {
-        didSet { defaults.set(macAITitlePrompt, forKey: Keys.macAITitlePrompt) }
-    }
-
-    @Published var macAITitleSkipsMarkdownHeading: Bool {
-        didSet { defaults.set(macAITitleSkipsMarkdownHeading, forKey: Keys.macAITitleSkipsMarkdownHeading) }
-    }
-
     @Published var hideMacIntroOnLaunch: Bool {
         didSet { defaults.set(hideMacIntroOnLaunch, forKey: Keys.hideMacIntroOnLaunch) }
     }
@@ -311,11 +273,6 @@ final class SettingsStore: ObservableObject {
         } else {
             self.vaultKeyFileReference = nil
         }
-        self.macAITitleEnabled = defaults.object(forKey: Keys.macAITitleEnabled) as? Bool ?? false
-        self.macAITitleProvider = MacAITitleProvider(rawValue: defaults.string(forKey: Keys.macAITitleProvider) ?? "") ?? Self.defaultMacAITitleProvider
-        let storedPrompt = defaults.string(forKey: Keys.macAITitlePrompt) ?? ""
-        self.macAITitlePrompt = storedPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Self.defaultMacAITitlePrompt : storedPrompt
-        self.macAITitleSkipsMarkdownHeading = defaults.object(forKey: Keys.macAITitleSkipsMarkdownHeading) as? Bool ?? false
         self.hideMacIntroOnLaunch = defaults.object(forKey: Keys.hideMacIntroOnLaunch) as? Bool ?? false
         #endif
     }
@@ -343,13 +300,36 @@ final class SettingsStore: ObservableObject {
         lockEncryptedNotesOnSleep = Self.defaultLockEncryptedNotesOnSleep
         lockUnpinnedEncryptedNotesOnBackground = Self.defaultLockUnpinnedEncryptedNotesOnBackground
         clearVaultKeyFileReference()
-        macAITitleEnabled = false
-        macAITitleProvider = Self.defaultMacAITitleProvider
-        macAITitlePrompt = Self.defaultMacAITitlePrompt
-        macAITitleSkipsMarkdownHeading = false
         hideMacIntroOnLaunch = false
         #endif
     }
+
+    #if os(macOS)
+    /// 恢复用户可配置偏好与首次使用提示；不改动笔记、密钥或密钥文件关联。
+    func restoreAllDefaults() throws {
+        if launchAtLogin {
+            try setLaunchAtLogin(Self.defaultLaunchAtLogin)
+        }
+
+        preferredNoteMode = .plain
+        hideContentOnBackground = true
+        autoUnloadKeyOnForeground = false
+        hasSeenFirstKeyPrompt = false
+        macEditorFontSize = Self.defaultMacEditorFontSize
+        macEditorLineHeightMultiple = Self.defaultMacEditorLineHeightMultiple
+        copyAddsParagraphSpacing = false
+        autoDeleteEmptyNotes = true
+        autoRenameNotesOnSave = false
+        excludeHexColorsFromTags = true
+        maintenanceLoggingEnabled = false
+        macTheme = Self.defaultMacTheme
+        macRecentNotesLimit = Self.defaultMacRecentNotesLimit
+        pinNewNotesByDefault = Self.defaultPinNewNotes
+        lockEncryptedNotesOnSleep = Self.defaultLockEncryptedNotesOnSleep
+        lockUnpinnedEncryptedNotesOnBackground = Self.defaultLockUnpinnedEncryptedNotesOnBackground
+        hideMacIntroOnLaunch = false
+    }
+    #endif
 
     #if os(macOS)
     func setLaunchAtLogin(_ isEnabled: Bool) throws {
@@ -367,10 +347,6 @@ final class SettingsStore: ObservableObject {
         } catch {
             throw error
         }
-    }
-
-    func resetMacAITitlePrompt() {
-        macAITitlePrompt = Self.defaultMacAITitlePrompt
     }
 
     func saveVaultKeyFileReference(for url: URL, keyId: String? = nil, keyFingerprint: String? = nil) throws {
@@ -406,23 +382,6 @@ final class SettingsStore: ObservableObject {
         vaultKeyFileReference = nil
     }
 
-    func saveMacAITitleAPIKey(_ key: String, for provider: MacAITitleProvider) throws {
-        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            try keychainStore.deleteString(account: provider.keychainAccount)
-        } else {
-            try keychainStore.saveString(trimmed, account: provider.keychainAccount)
-        }
-        objectWillChange.send()
-    }
-
-    func loadMacAITitleAPIKey(for provider: MacAITitleProvider) -> String {
-        (try? keychainStore.loadString(account: provider.keychainAccount)) ?? ""
-    }
-
-    func hasMacAITitleAPIKey(for provider: MacAITitleProvider) -> Bool {
-        keychainStore.hasString(account: provider.keychainAccount)
-    }
     #endif
 
     static func clampedFontSize(_ value: Double) -> Double {
@@ -459,10 +418,6 @@ final class SettingsStore: ObservableObject {
         static let lockEncryptedNotesOnSleep = "SNLockEncryptedNotesOnSleep"
         static let lockUnpinnedEncryptedNotesOnBackground = "SNLockUnpinnedEncryptedNotesOnBackground"
         static let vaultKeyFileReference = "SNVaultKeyFileReference"
-        static let macAITitleEnabled = "SNMacAITitleEnabled"
-        static let macAITitleProvider = "SNMacAITitleProvider"
-        static let macAITitlePrompt = "SNMacAITitlePrompt"
-        static let macAITitleSkipsMarkdownHeading = "SNMacAITitleSkipsMarkdownHeading"
         static let hideMacIntroOnLaunch = "SNHideMacIntroOnLaunch"
         #endif
     }

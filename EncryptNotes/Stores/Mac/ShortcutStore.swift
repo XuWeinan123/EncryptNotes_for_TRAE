@@ -24,7 +24,7 @@ enum MarkdownShortcutAction: String, CaseIterable, Identifiable, Codable {
         case .inlineCode: return "行内代码"
         case .inlineMath: return "行内公式"
         case .strike: return "删除线"
-        case .htmlComment: return "待办注释"
+        case .htmlComment: return "注释"
         case .link: return "链接"
         }
     }
@@ -246,7 +246,7 @@ final class ShortcutStore: ObservableObject {
     }
 
     private static var defaultNewNoteShortcut: (keyCode: UInt32, modifiers: UInt32) {
-        (keyCode: 6, modifiers: UInt32(controlKey | cmdKey))
+        (keyCode: 1, modifiers: UInt32(controlKey | cmdKey))
     }
 
     static func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
@@ -315,7 +315,7 @@ final class ShortcutStore: ObservableObject {
     }
 
     private func registerHotKey(id: UInt32, keyCode: UInt32, modifiers: UInt32) {
-        var hotKeyID = EventHotKeyID(signature: OSType(0x424B5730), id: id)
+        let hotKeyID = EventHotKeyID(signature: OSType(0x424B5730), id: id)
         var ref: EventHotKeyRef?
         let status = RegisterEventHotKey(
             keyCode,

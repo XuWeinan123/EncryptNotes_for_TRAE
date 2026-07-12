@@ -258,7 +258,11 @@ final class VaultStore: ObservableObject {
 
         if let tag = selectedTag {
             readable = readable.filter { note in
-                TagParser.tags(in: note.body, excludingHexColors: settings.excludeHexColorsFromTags).contains(tag)
+                !note.isEncrypted
+                    && TagParser.tags(
+                        in: note.body,
+                        excludingHexColors: settings.excludeHexColorsFromTags
+                    ).contains(tag)
             }
         }
 
@@ -280,7 +284,9 @@ final class VaultStore: ObservableObject {
 
     var allTags: [TagCount] {
         var counts: [String: Int] = [:]
-        for note in readableNotes {
+        // Encrypted-note tags remain private even while the note is open and
+        // decrypted in this process. They must not leak into global filters.
+        for note in readableNotes where !note.isEncrypted {
             for tag in TagParser.tags(in: note.body, excludingHexColors: settings.excludeHexColorsFromTags) {
                 counts[tag, default: 0] += 1
             }
@@ -364,6 +370,8 @@ final class VaultStore: ObservableObject {
         var survivingEntries: [NoteIndexEntry] = []
         var changed = false
         let preservesTemporarilyMissingFiles = storage is ICloudVaultStorage
+        var seenFileKeys = Set<String>()
+        var seenNoteIds = Set<String>()
 
         for entry in index.entries {
             guard let url = urlForEntry(entry, storage: storage) else {
@@ -372,10 +380,20 @@ final class VaultStore: ObservableObject {
                 continue
             }
 
+            let currentFileKey = fileKey(fileName: entry.fileName, location: entry.location)
+            guard seenFileKeys.insert(currentFileKey).inserted else {
+                changed = true
+                continue
+            }
+
             guard FileManager.default.fileExists(atPath: url.path) else {
                 if preservesTemporarilyMissingFiles {
-                    pendingDownloadKeys.insert(fileKey(fileName: entry.fileName, location: entry.location))
-                    survivingEntries.append(entry)
+                    pendingDownloadKeys.insert(currentFileKey)
+                    if seenNoteIds.insert(entry.noteId).inserted {
+                        survivingEntries.append(entry)
+                    } else {
+                        changed = true
+                    }
                     continue
                 }
                 missingFiles.append(entry.fileName)
@@ -386,28 +404,40 @@ final class VaultStore: ObservableObject {
             do {
                 let mdFile = try storage.loadMarkdownFile(at: url)
                 let actualMode: NoteFileMode = mdFile.isEncrypted ? .encrypted : .plain
-                if actualMode != entry.mode {
-                    survivingEntries.append(NoteIndexEntry(
-                        noteId: entry.noteId,
-                        fileName: entry.fileName,
-                        mode: actualMode,
-                        location: entry.location,
-                        deletedAt: entry.deletedAt,
-                        purgeAfter: entry.purgeAfter,
-                        originalLocation: entry.originalLocation
-                    ))
+                guard seenNoteIds.insert(mdFile.noteId).inserted else {
                     changed = true
-                } else {
-                    survivingEntries.append(entry)
+                    continue
+                }
+
+                let normalizedEntry = NoteIndexEntry(
+                    noteId: mdFile.noteId,
+                    fileName: entry.fileName,
+                    mode: actualMode,
+                    location: entry.location,
+                    deletedAt: entry.deletedAt,
+                    purgeAfter: entry.purgeAfter,
+                    originalLocation: entry.originalLocation
+                )
+                survivingEntries.append(normalizedEntry)
+                if mdFile.noteId != entry.noteId || actualMode != entry.mode {
+                    changed = true
                 }
             } catch StorageError.iCloudDownloadPending {
-                pendingDownloadKeys.insert(fileKey(fileName: entry.fileName, location: entry.location))
-                survivingEntries.append(entry)
+                pendingDownloadKeys.insert(currentFileKey)
+                if seenNoteIds.insert(entry.noteId).inserted {
+                    survivingEntries.append(entry)
+                } else {
+                    changed = true
+                }
                 continue
             } catch {
                 if preservesTemporarilyMissingFiles {
-                    pendingDownloadKeys.insert(fileKey(fileName: entry.fileName, location: entry.location))
-                    survivingEntries.append(entry)
+                    pendingDownloadKeys.insert(currentFileKey)
+                    if seenNoteIds.insert(entry.noteId).inserted {
+                        survivingEntries.append(entry)
+                    } else {
+                        changed = true
+                    }
                     continue
                 }
                 missingFiles.append(entry.fileName)
@@ -1531,7 +1561,28 @@ final class VaultStore: ObservableObject {
 
     func refreshFromStorage() async {
         SyncStatusStore.shared.setSyncing()
+        #if os(macOS)
+        let decryptedNoteIDs = Set(decryptedNotes.map(\.id))
+        #endif
         await reloadAllNotes()
+
+        #if os(macOS)
+        // A local save also reaches the external-change monitor. Keep notes that
+        // are already open in this session decrypted across that disk refresh;
+        // otherwise their body (and therefore their tags) disappears moments
+        // after a successful save.
+        let notesToRestore = lockedEncryptedNotes.filter { decryptedNoteIDs.contains($0.id) }
+        for info in notesToRestore {
+            do {
+                _ = try await openEncryptedNote(info)
+            } catch {
+                MaintenanceLogStore.shared.record("decrypted_note_restore_failed", fields: [
+                    "note_id": info.id,
+                    "error": error.localizedDescription
+                ])
+            }
+        }
+        #endif
 
         if case .error(let message) = state {
             SyncStatusStore.shared.setFailed(message: message)
@@ -2142,7 +2193,10 @@ final class VaultStore: ObservableObject {
             switch item {
             case .readable(let note):
                 if !note.isEncrypted {
-                    plainBodies.append(note.body)
+                    let copiedBody = settings.copyAddsParagraphSpacing
+                        ? MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: note.body)
+                        : note.body
+                    plainBodies.append(copiedBody)
                 } else {
                     skipped += 1
                 }

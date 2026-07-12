@@ -7,7 +7,6 @@ struct MacSettingsView: View {
     enum Tab: Hashable {
         case general
         case editor
-        case aiTitle
         case shortcuts
         case key
         case about
@@ -19,12 +18,12 @@ struct MacSettingsView: View {
     @State private var selectedTab: Tab
     @State private var recordingAction: MacShortcutRecordingAction?
     @State private var settingsErrorMessage: String?
-    @State private var deepSeekAPIKey = ""
-    @State private var geminiAPIKey = ""
-    @State private var apiKeyStatusMessage: String?
+    #if DEBUG
+    @State private var isShowingRestoreDefaultsConfirmation = false
+    #endif
 
     init(selectedTab: Tab = .general) {
-        _selectedTab = State(initialValue: selectedTab == .aiTitle ? .general : selectedTab)
+        _selectedTab = State(initialValue: selectedTab)
     }
 
     var body: some View {
@@ -71,12 +70,24 @@ struct MacSettingsView: View {
         )
         .background(DS.bg)
         .background(shortcutRecorder)
-        .onAppear(perform: loadAIAPIKeys)
         .alert("设置失败", isPresented: settingsErrorBinding) {
             Button("确定", role: .cancel) {}
         } message: {
             Text(settingsErrorMessage ?? "无法保存这个设置。")
         }
+        #if DEBUG
+        .confirmationDialog(
+            "恢复所有默认设置？",
+            isPresented: $isShowingRestoreDefaultsConfirmation
+        ) {
+            Button("恢复所有默认", role: .destructive) {
+                restoreAllDefaults()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("将恢复所有设置、快捷键和启动时的功能介绍，不会删除笔记或密钥。")
+        }
+        #endif
     }
 
     private var generalTab: some View {
@@ -147,7 +158,7 @@ struct MacSettingsView: View {
                                 .font(.system(size: 34, weight: .semibold))
                                 .foregroundStyle(DS.textEmphasize)
                             
-                            Text("v0.2")
+                            Text("v\(appVersion)")
                                 .font(DS.caption())
                                 .foregroundStyle(DS.textSubtle)
                             
@@ -224,9 +235,43 @@ struct MacSettingsView: View {
                     }
                 }
             }
+
+            HStack(spacing: DS.s3) {
+                Link("隐私政策", destination: privacyPolicyURL)
+                #if DEBUG
+                Text("·")
+                    .foregroundStyle(DS.textSubtle)
+                Button("恢复所有默认") {
+                    isShowingRestoreDefaultsConfirmation = true
+                }
+                .buttonStyle(.link)
+                #endif
+            }
+            .font(DS.caption())
+            .frame(maxWidth: .infinity, alignment: .center)
         
         }
     }
+
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+    }
+
+    private var privacyPolicyURL: URL {
+        URL(string: "https://github.com/XuWeinan123/EncryptNotes_for_TRAE/blob/main/PRIVACY.md")!
+    }
+
+    #if DEBUG
+    private func restoreAllDefaults() {
+        do {
+            try settings.restoreAllDefaults()
+            shortcutStore.resetAllShortcuts()
+            MacMenuBarController.shared.restoreDefaultWindowSizes()
+        } catch {
+            settingsErrorMessage = "无法恢复所有默认设置：\(error.localizedDescription)"
+        }
+    }
+    #endif
     
     private func feature(systemImage: String, title: String, detail: String) -> some View {
         VStack(spacing: DS.s2) {
@@ -307,87 +352,6 @@ struct MacSettingsView: View {
         }
     }
 
-    private var aiTitleTab: some View {
-        panelStack {
-            SWPageHeader(
-                title: "AI",
-                subtitle: "关闭便利贴后为菜单栏和 iCloud 文件名生成标题",
-                systemImage: "sparkles",
-                tint: DS.primaryDeep
-            )
-
-            macPanel("开关") {
-                toggleRow("开启 AI 标题", subtitle: "关闭编辑器后发送正文给所选服务生成标题；不会改写正文。", systemImage: "sparkles", isOn: $settings.macAITitleEnabled)
-
-                SWRowDivider()
-
-                toggleRow("标题例外", subtitle: "如果第一行已经是 # 标题，则跳过 AI 标题。", systemImage: "number", isOn: $settings.macAITitleSkipsMarkdownHeading)
-            }
-
-            macPanel("服务") {
-                SWSettingsRow("标题服务", systemImage: "server.rack", tint: DS.primaryDeep) {
-                    Picker("标题服务", selection: $settings.macAITitleProvider) {
-                        ForEach(MacAITitleProvider.allCases) { provider in
-                            Text(provider.title).tag(provider)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .tint(DS.primary)
-                }
-
-                SWRowDivider()
-
-                apiKeyRow(
-                    title: "DeepSeek API Key",
-                    provider: .deepSeek,
-                    key: $deepSeekAPIKey
-                )
-
-                SWRowDivider()
-
-                apiKeyRow(
-                    title: "Gemini API Key",
-                    provider: .gemini,
-                    key: $geminiAPIKey
-                )
-
-                if let apiKeyStatusMessage {
-                    helperText(apiKeyStatusMessage)
-                }
-            }
-
-            macPanel("Prompt") {
-                VStack(alignment: .leading, spacing: DS.s2) {
-                    HStack {
-                        Label("自定义 Prompt", systemImage: "text.quote")
-                            .font(DS.body())
-                            .foregroundColor(DS.textStrong)
-                        Spacer()
-                        Button("恢复默认") {
-                            settings.resetMacAITitlePrompt()
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.regular)
-                    }
-
-                    TextEditor(text: $settings.macAITitlePrompt)
-                        .font(.system(size: 13, design: .monospaced))
-                        .scrollContentBackground(.hidden)
-                        .padding(DS.s2)
-                        .frame(height: 96)
-                        .background(DS.surfaceSunken)
-                        .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
-                                .stroke(DS.line, lineWidth: 0.5)
-                        )
-
-                    helperText("正文会发送给当前选择的服务商；加密笔记在已解锁编辑时也会参与生成。")
-                }
-            }
-        }
-    }
 
     private var shortcutTab: some View {
         panelStack {
@@ -697,22 +661,6 @@ struct MacSettingsView: View {
         ]
     }
 
-    private func apiKeyRow(title: String, provider: MacAITitleProvider, key: Binding<String>) -> some View {
-        SWSettingsRow(title, subtitle: provider == settings.macAITitleProvider ? "当前服务" : nil, systemImage: "key.viewfinder", tint: provider == settings.macAITitleProvider ? DS.primaryDeep : DS.textSubtle) {
-            HStack(spacing: DS.s2) {
-                SecureField(title, text: key)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 210)
-                Button("保存") {
-                    saveAIAPIKey(key.wrappedValue, provider: provider)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-                SWStatusBadge(key.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未保存" : "已填写", style: key.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .neutral : .success)
-            }
-        }
-    }
-
     private func panelStack<Content: View>(@ViewBuilder content: @escaping () -> Content) -> some View {
         MacSettingsPage(content: content)
     }
@@ -817,22 +765,6 @@ struct MacSettingsView: View {
         } else {
             Color.clear
                 .frame(width: 82, height: 82)
-        }
-    }
-
-    private func loadAIAPIKeys() {
-        deepSeekAPIKey = settings.loadMacAITitleAPIKey(for: .deepSeek)
-        geminiAPIKey = settings.loadMacAITitleAPIKey(for: .gemini)
-    }
-
-    private func saveAIAPIKey(_ key: String, provider: MacAITitleProvider) {
-        do {
-            try settings.saveMacAITitleAPIKey(key, for: provider)
-            apiKeyStatusMessage = key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? "\(provider.title) API Key 已移除。"
-                : "\(provider.title) API Key 已保存到本机钥匙串。"
-        } catch {
-            settingsErrorMessage = "无法保存 \(provider.title) API Key：\(error.localizedDescription)"
         }
     }
 

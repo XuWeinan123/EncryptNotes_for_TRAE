@@ -56,8 +56,9 @@ final class StickyNoteWindowManager: NSObject {
         let editorView = StickyNoteEditorView(note: note)
         let hostingView = NSHostingView(rootView: editorView)
 
+        let frameRect = NSRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height)
         let window = StickyNoteWindow(
-            contentRect: NSRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height),
+            contentRect: NSWindow.contentRect(forFrameRect: frameRect, styleMask: Self.windowStyleMask),
             styleMask: Self.windowStyleMask,
             backing: .buffered,
             defer: false
@@ -138,8 +139,9 @@ final class StickyNoteWindowManager: NSObject {
         let editorView = StickyNoteEditorView(note: lockedNote, startsLocked: true, initialKeyIssue: keyIssue)
         let hostingView = NSHostingView(rootView: editorView)
 
+        let frameRect = NSRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height)
         let window = StickyNoteWindow(
-            contentRect: NSRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height),
+            contentRect: NSWindow.contentRect(forFrameRect: frameRect, styleMask: Self.windowStyleMask),
             styleMask: Self.windowStyleMask,
             backing: .buffered,
             defer: false
@@ -176,6 +178,16 @@ final class StickyNoteWindowManager: NSObject {
         MacNoteWindowStore.shared.closeAllWindows()
     }
 
+    func restoreDefaultWindowSizes() {
+        let size = MacNoteWindowStore.defaultWindowSize
+        for (noteId, window) in noteWindows {
+            var frame = window.frame
+            frame.size = size
+            window.setFrame(frame, display: true, animate: true)
+            saveWindowFrame(window, noteId: noteId, persistImmediately: true)
+        }
+    }
+
     func temporarilyLockAllEncryptedNoteWindows() {
         NotificationCenter.default.post(name: .sealNoteLockEncryptedNote, object: nil)
     }
@@ -184,14 +196,14 @@ final class StickyNoteWindowManager: NSObject {
         guard let window = noteWindows[noteId] else { return }
         let textContainerInset = MacStickyEditorLayout.textContainerInset(fontSize: fontSize)
         let horizontalPadding = MacStickyEditorLayout.horizontalPadding(textContainerInsetWidth: textContainerInset.width)
-        let targetWidth = fontSize * MacStickyEditorLayout.widthMultiplier + horizontalPadding
+        let targetWidth = MacStickyEditorLayout.fittedWindowWidth(fontSize: fontSize)
 
         let textWidth = max(10, targetWidth - horizontalPadding)
         let measuredHeight = measureTextHeight(text: text, width: textWidth, fontSize: fontSize)
         let verticalPadding = textContainerInset.height * 2 + DS.s4 + MacStickyEditorLayout.editorBottomInset
         let contentHeight = measuredHeight + verticalPadding
 
-        var targetHeight = max(targetWidth * 0.75, contentHeight)
+        var targetHeight = max(MacStickyEditorLayout.minimumFittedWindowHeight(fontSize: fontSize), contentHeight)
         targetHeight = min(targetWidth * 4 / 3, targetHeight)
 
         let finalWidth = max(Self.minimumContentSize.width, targetWidth)

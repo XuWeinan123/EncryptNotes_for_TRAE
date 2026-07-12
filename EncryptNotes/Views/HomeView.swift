@@ -4,6 +4,7 @@ struct HomeView: View {
     @StateObject private var vaultStore = VaultStore.shared
     @StateObject private var appLockStore = AppLockStore.shared
     @StateObject private var syncStore = SyncStatusStore.shared
+    @StateObject private var settings = SettingsStore.shared
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var showSettings = false
@@ -12,6 +13,8 @@ struct HomeView: View {
     @State private var selectedNote: Note?
     @State private var noteToDelete: NoteListItem?
     @State private var showDeleteConfirmation = false
+    @State private var noteToRename: Note?
+    @State private var renameTitle = ""
     @FocusState private var searchFocused: Bool
 
     @State private var isSelecting = false
@@ -25,6 +28,7 @@ struct HomeView: View {
     @State private var showShareSheet = false
     @State private var settingsInitialRoute: SettingsRoute?
     @State private var showKeyIssueAlert = false
+    @State private var isStorageRefreshInProgress = false
 
     private var filteredItems: [NoteListItem] {
         vaultStore.filteredNotes
@@ -60,6 +64,17 @@ struct HomeView: View {
         .onChange(of: scenePhase) { _, newPhase in
             appLockStore.handleScenePhaseChange(newPhase)
             refreshNotesWhenAppBecomesActive(newPhase)
+        }
+        .onChange(of: syncStore.isNetworkAvailable) { wasAvailable, isAvailable in
+            if !wasAvailable && isAvailable {
+                requestStorageRefresh()
+            }
+        }
+        .onChange(of: vaultStore.allTags) { _, _ in
+            clearInvalidTagSelectionIfNeeded()
+        }
+        .onChange(of: settings.excludeHexColorsFromTags) { _, _ in
+            clearInvalidTagSelectionIfNeeded()
         }
         .sheet(isPresented: $showNewNoteEditor) {
             NoteEditorView(mode: .create) { body, isEncrypted in
@@ -122,6 +137,17 @@ struct HomeView: View {
         } message: {
             Text("选中的笔记将移动至回收站，30 天后自动永久删除。")
         }
+        .alert("重命名笔记", isPresented: Binding(
+            get: { noteToRename != nil },
+            set: { if !$0 { noteToRename = nil } }
+        )) {
+            TextField("标题", text: $renameTitle)
+            Button("取消", role: .cancel) { noteToRename = nil }
+            Button("保存") { renameSelectedNote() }
+                .disabled(renameTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } message: {
+            Text("标题只影响列表和文件名，不会改写正文。")
+        }
         .alert("操作结果", isPresented: $showBatchResult) {
             Button("确定") { batchResultMessage = nil }
         } message: {
@@ -151,8 +177,23 @@ struct HomeView: View {
     private func refreshNotesWhenAppBecomesActive(_ phase: ScenePhase) {
         guard phase == .active else { return }
         guard case .ready = vaultStore.state else { return }
+        requestStorageRefresh()
+    }
+
+    private func requestStorageRefresh() {
+        guard !isStorageRefreshInProgress else { return }
+        guard case .ready = vaultStore.state else { return }
+        isStorageRefreshInProgress = true
         Task {
             await vaultStore.refreshFromStorage()
+            isStorageRefreshInProgress = false
+        }
+    }
+
+    private func clearInvalidTagSelectionIfNeeded() {
+        guard let selectedTag = vaultStore.selectedTag else { return }
+        if !vaultStore.allTags.contains(where: { $0.tag == selectedTag }) {
+            vaultStore.selectedTag = nil
         }
     }
 
@@ -395,6 +436,8 @@ struct HomeView: View {
             VStack(spacing: DS.memoGap) {
                 if case .failed(let message) = syncStore.status {
                     syncErrorBanner(message)
+                } else if case .pendingDownloads(let count) = syncStore.status {
+                    pendingDownloadsBanner(count)
                 }
 
                 if !vaultStore.isKeyLoaded && vaultStore.lockedNoteCount > 0 {
@@ -402,6 +445,10 @@ struct HomeView: View {
                 }
 
                 tagChips
+
+                if !filteredItems.isEmpty {
+                    listSummary
+                }
 
                 if filteredItems.isEmpty {
                     emptyState
@@ -420,7 +467,10 @@ struct HomeView: View {
             .frame(maxWidth: .infinity)
         }
         .refreshable {
+            guard !isStorageRefreshInProgress else { return }
+            isStorageRefreshInProgress = true
             await vaultStore.refreshFromStorage()
+            isStorageRefreshInProgress = false
         }
         .animation(.easeInOut(duration: 0.2), value: filteredItems.count)
         .animation(.easeInOut(duration: 0.2), value: isSelecting)
@@ -520,6 +570,52 @@ struct HomeView: View {
         .dsCardSurface(cornerRadius: DS.rMd, shadow: false)
     }
 
+    private func pendingDownloadsBanner(_ count: Int) -> some View {
+        HStack(spacing: DS.s3) {
+            ProgressView()
+                .controlSize(.small)
+                .tint(DS.primaryDeep)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("正在下载笔记")
+                    .font(DS.body())
+                    .foregroundColor(DS.textEmphasize)
+                Text("还有 \(count) 篇笔记在从 iCloud 下载，完成后会自动显示。")
+                    .font(DS.caption())
+                    .foregroundColor(DS.textSecondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(DS.cardPadding)
+        .dsCardSurface(cornerRadius: DS.rMd, shadow: false)
+    }
+
+    private var listSummary: some View {
+        HStack(spacing: DS.s2) {
+            Spacer(minLength: 0)
+
+            Text("共 \(filteredItems.count) 条笔记")
+                .font(DS.caption())
+                .foregroundColor(DS.textSubtle)
+
+            let emptyCount = vaultStore.readableNotes.filter {
+                !$0.isEncrypted && $0.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }.count
+            if emptyCount > 0 {
+                SWStatusBadge(
+                    "\(emptyCount) 条空笔记",
+                    systemImage: "exclamationmark.triangle",
+                    style: .warning
+                )
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, DS.s2)
+    }
+
     private var bottomSearchBar: some View {
         HStack(spacing: DS.s2) {
             HStack(spacing: DS.s2) {
@@ -578,10 +674,15 @@ struct HomeView: View {
         case .readable(let note):
             NoteCardView(
                 note: note,
+                displayTitle: vaultStore.displayTitle(for: note),
+                excludesHexColorsFromTags: settings.excludeHexColorsFromTags,
                 isSelected: isItemSelected,
                 isSelecting: isSelecting,
                 onTap: {
                     withAnimation(.easeInOut(duration: 0.2)) { selectedNote = note }
+                },
+                onRename: note.isEncrypted ? nil : {
+                    beginRenaming(note)
                 },
                 onEdit: {
                     withAnimation(.easeInOut(duration: 0.2)) { selectedNote = note }
@@ -665,6 +766,26 @@ struct HomeView: View {
             selectedIDs.remove(id)
         } else {
             selectedIDs.insert(id)
+        }
+    }
+
+    private func beginRenaming(_ note: Note) {
+        renameTitle = vaultStore.displayTitle(for: note, emptyTitle: "")
+        noteToRename = note
+    }
+
+    private func renameSelectedNote() {
+        guard let note = noteToRename else { return }
+        let title = renameTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        noteToRename = nil
+
+        Task {
+            do {
+                try await vaultStore.renameNote(note, title: title)
+            } catch {
+                vaultStore.lastError = "重命名失败：\(error.localizedDescription)"
+            }
         }
     }
 

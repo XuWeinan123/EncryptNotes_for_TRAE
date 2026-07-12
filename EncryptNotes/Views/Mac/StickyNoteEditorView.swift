@@ -517,6 +517,15 @@ enum MacStickyEditorLayout {
         textContainerInsetWidth * 2 + 8
     }
 
+    static func fittedWindowWidth(fontSize: CGFloat) -> CGFloat {
+        let inset = textContainerInset(fontSize: fontSize)
+        return fontSize * widthMultiplier + horizontalPadding(textContainerInsetWidth: inset.width)
+    }
+
+    static func minimumFittedWindowHeight(fontSize: CGFloat) -> CGFloat {
+        fittedWindowWidth(fontSize: fontSize) * 0.75
+    }
+
     static func textContainerInset(fontSize: CGFloat) -> NSSize {
         let baseInset = MacMarkdownHighlighter.textContainerInset(size: fontSize)
         return NSSize(
@@ -1135,7 +1144,6 @@ final class StickyNoteEditorViewModel: ObservableObject {
     private let windowStore = MacNoteWindowStore.shared
     private let settings = SettingsStore.shared
     private let syncStore = SyncStatusStore.shared
-    private let aiTitleService = MacAITitleService()
     private let isPreview: Bool
     private var saveTask: Task<Void, Never>?
     private var copyResetTask: Task<Void, Never>?
@@ -1542,14 +1550,14 @@ final class StickyNoteEditorViewModel: ObservableObject {
         }
 
         guard settings.autoDeleteEmptyNotes && snapshot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            saveAndGenerateTitleOnClose(snapshot: snapshot, canGenerateTitle: !vaultStore.hasStableTitle(for: note))
+            saveAndGenerateLocalTitleOnClose(snapshot: snapshot)
             return
         }
 
         discardEmptyNote(body: snapshot)
     }
 
-    private func saveAndGenerateTitleOnClose(snapshot: String, canGenerateTitle: Bool) {
+    private func saveAndGenerateLocalTitleOnClose(snapshot: String) {
         let noteToUpdate = note
         syncStore.setSyncing()
 
@@ -1571,9 +1579,6 @@ final class StickyNoteEditorViewModel: ObservableObject {
                 body: snapshot,
                 requiresCompletedFirstLine: false
             )
-            if canGenerateTitle, !vaultStore.hasStableTitle(for: savedNote) {
-                await generateAITitleIfNeeded(for: savedNote, body: snapshot)
-            }
         }
     }
 
@@ -1632,32 +1637,6 @@ final class StickyNoteEditorViewModel: ObservableObject {
         }
 
         return nil
-    }
-
-    private func generateAITitleIfNeeded(for savedNote: Note, body: String) async {
-        guard settings.macAITitleEnabled else { return }
-        guard syncStore.isNetworkAvailable else { return }
-        guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        if settings.macAITitleSkipsMarkdownHeading,
-           NoteTitleFormatter.firstNonEmptyLineIsMarkdownHeading(in: body) {
-            return
-        }
-
-        let provider = settings.macAITitleProvider
-        let apiKey = settings.loadMacAITitleAPIKey(for: provider)
-        guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-
-        do {
-            let title = try await aiTitleService.generateTitle(
-                for: body,
-                provider: provider,
-                apiKey: apiKey,
-                prompt: settings.macAITitlePrompt
-            )
-            try await vaultStore.renameNote(savedNote, title: title)
-        } catch {
-            // Title generation is opportunistic; note saving must remain the source of truth.
-        }
     }
 
     private func discardEmptyNoteAndClose(body: String) {

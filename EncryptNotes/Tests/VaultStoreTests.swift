@@ -84,27 +84,27 @@ final class VaultStoreTests: XCTestCase {
 
     @MainActor
     func testRenameNoteChangesFileNameButLeavesMarkdownContentUntouched() async throws {
-        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_ai_title_rename_\(UUID().uuidString)")
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_title_rename_\(UUID().uuidString)")
         let storage = try TemporaryStorage(baseURL: tmpDir)
         let store = VaultStore(storage: storage)
-        store.configureForTesting(vaultId: "test-vault-ai-title")
+        store.configureForTesting(vaultId: "test-vault-title-rename")
 
         let originalBody = "第一行正文\n\n更多内容"
         let note = try await store.createNote(body: originalBody, isEncrypted: false)
         let oldURL = try savedNoteURL(in: tmpDir, noteId: note.id)
         let oldFile = try storage.loadMarkdownFile(at: oldURL)
 
-        try await store.renameNote(note, title: "AI 总结/标题?")
+        try await store.renameNote(note, title: "会议/记录?")
 
         let newURL = try savedNoteURL(in: tmpDir, noteId: note.id)
         XCTAssertNotEqual(oldURL.lastPathComponent, newURL.lastPathComponent)
-        XCTAssertEqual(newURL.lastPathComponent, "AI 总结-标题.md")
+        XCTAssertEqual(newURL.lastPathComponent, "会议-记录.md")
         XCTAssertFalse(FileManager.default.fileExists(atPath: oldURL.path))
 
         let newFile = try storage.loadMarkdownFile(at: newURL)
         XCTAssertEqual(newFile.body, oldFile.body)
         XCTAssertEqual(newFile.body, originalBody)
-        XCTAssertEqual(store.displayTitle(for: note), "AI 总结-标题")
+        XCTAssertEqual(store.displayTitle(for: note), "会议-记录")
 
         try? FileManager.default.removeItem(at: tmpDir)
     }
@@ -357,6 +357,43 @@ final class VaultStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testRefreshFromStorageRepairsDuplicateIndexEntriesForSameFile() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_duplicate_index_file_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        try await storage.initializeVault()
+
+        let actualNoteId = UUID().uuidString
+        let staleNoteId = UUID().uuidString
+        let fileName = "重复索引笔记.md"
+        let timestamp = Date(timeIntervalSince1970: 1_800_000_000)
+        try storage.saveMarkdownFile(
+            MarkdownNoteFile(
+                noteId: actualNoteId,
+                createdAt: timestamp,
+                updatedAt: timestamp,
+                title: "重复索引笔记",
+                body: "只应加载一次"
+            ),
+            at: tmpDir.appendingPathComponent(fileName)
+        )
+        try storage.saveIndex(NoteIndex(entries: [
+            NoteIndexEntry(noteId: staleNoteId, fileName: fileName, mode: .plain, location: .notes),
+            NoteIndexEntry(noteId: actualNoteId, fileName: fileName, mode: .plain, location: .notes)
+        ]))
+
+        let store = VaultStore(storage: storage)
+        store.configureForTesting(vaultId: "test-vault-duplicate-index-file")
+        await store.refreshFromStorage()
+
+        XCTAssertEqual(store.plainNotes.filter { $0.id == actualNoteId }.count, 1)
+        let repairedEntries = try XCTUnwrap(storage.loadIndex()).entries.filter { $0.fileName == fileName }
+        XCTAssertEqual(repairedEntries.count, 1)
+        XCTAssertEqual(repairedEntries.first?.noteId, actualNoteId)
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
     func testRefreshFromStorageIndexesUnindexedEncryptedMarkdownFileAsLocked() async throws {
         let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_unindexed_encrypted_\(UUID().uuidString)")
         let storage = try TemporaryStorage(baseURL: tmpDir)
@@ -498,7 +535,7 @@ final class VaultStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testTagsOnlyFromReadableNotes() {
+    func testTagsExcludeEncryptedNotesEvenWhenDecrypted() {
         let store = VaultStore(storage: try? TemporaryStorage(baseURL: FileManager.default.temporaryDirectory))
         let plain = Note(id: "p1", body: "明文 #标签A", isEncrypted: false)
         let encrypted = Note(id: "e1", body: "加密 #标签B", isEncrypted: true)
@@ -506,7 +543,19 @@ final class VaultStoreTests: XCTestCase {
 
         let tags = store.allTags
         XCTAssertTrue(tags.contains { $0.tag == "#标签A" })
-        XCTAssertTrue(tags.contains { $0.tag == "#标签B" })
+        XCTAssertFalse(tags.contains { $0.tag == "#标签B" })
+    }
+
+    @MainActor
+    func testTagFilterDoesNotMatchDecryptedEncryptedNoteBody() {
+        let store = VaultStore(storage: try? TemporaryStorage(baseURL: FileManager.default.temporaryDirectory))
+        let plain = Note(id: "p1", body: "明文 #公开", isEncrypted: false)
+        let encrypted = Note(id: "e1", body: "加密 #私密", isEncrypted: true)
+        store.configureForTesting(vaultId: "v", decryptedNotes: [encrypted], plainNotes: [plain])
+
+        store.selectedTag = "#私密"
+
+        XCTAssertTrue(store.filteredNotes.isEmpty)
     }
 
     @MainActor

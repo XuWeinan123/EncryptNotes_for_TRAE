@@ -43,44 +43,27 @@ struct MacComponentCatalogView: View {
         ComponentEntry(name: "NSStatusItem", description: "macOS 菜单栏入口。", source: "AppKit", kind: .system),
         ComponentEntry(name: "NSTextView / NSScrollView", description: "macOS 便签编辑器和 Markdown 高亮编辑体验。", source: "AppKit", kind: .system),
         ComponentEntry(name: "NSWindow", description: "便签、全部笔记、回收站、设置和组件目录窗口。", source: "AppKit", kind: .system),
-        ComponentEntry(name: "NavigationStack", description: "iOS 页面导航。", source: "SwiftUI", kind: .system),
         ComponentEntry(name: "Picker", description: "设置页分段选项和模式选择。", source: "SwiftUI", kind: .system),
         ComponentEntry(name: "ProgressView", description: "导入、导出、加载等等待状态。", source: "SwiftUI", kind: .system),
         ComponentEntry(name: "ScrollView", description: "设置页、关于页和组件目录滚动容器。", source: "SwiftUI", kind: .system),
         ComponentEntry(name: "SecureField", description: "密钥与敏感字段输入。", source: "SwiftUI", kind: .system),
         ComponentEntry(name: "Slider", description: "编辑器字号、行高和透明度设置。", source: "SwiftUI", kind: .system),
         ComponentEntry(name: "TabView", description: "设置页分栏。", source: "SwiftUI", kind: .system),
-        ComponentEntry(name: "TextEditor", description: "iOS 笔记正文编辑。", source: "SwiftUI", kind: .system),
         ComponentEntry(name: "TextField", description: "搜索、标题、路径和 API Key 输入。", source: "SwiftUI", kind: .system),
         ComponentEntry(name: "Toggle", description: "设置页开关项。", source: "SwiftUI", kind: .system)
     ]
 
     private static let customComponents: [ComponentEntry] = [
-        ComponentEntry(name: "SWShimmer", description: "加载占位的扫光效果。", source: "Views/Components/SWComponents.swift", kind: .custom),
         ComponentEntry(name: "SWStatusBadge", description: "状态胶囊标签。", source: "Views/Components/SWComponents.swift", kind: .custom),
         ComponentEntry(name: "SWSectionPanel", description: "设置页和信息页的分组面板。", source: "Views/Components/SWComponents.swift", kind: .custom),
-        ComponentEntry(name: "SWPanelStack", description: "设置内容的统一竖向容器。", source: "Views/Components/SWComponents.swift", kind: .custom),
-        ComponentEntry(name: "SWPageHeader", description: "页面标题区域。", source: "Views/Components/SWComponents.swift", kind: .custom),
         ComponentEntry(name: "SWSettingsRow", description: "设置页列表行。", source: "Views/Components/SWComponents.swift", kind: .custom),
         ComponentEntry(name: "SWRowDivider", description: "设置列表行分割线。", source: "Views/Components/SWComponents.swift", kind: .custom),
         ComponentEntry(name: "SWEmptyState", description: "空状态展示。", source: "Views/Components/SWComponents.swift", kind: .custom),
         ComponentEntry(name: "SWFilterChip", description: "标签和过滤条件胶囊。", source: "Views/Components/SWComponents.swift", kind: .custom),
-        ComponentEntry(name: "NoteCardView", description: "明文笔记卡片。", source: "Views/Components/NoteCardView.swift", kind: .custom),
-        ComponentEntry(name: "EncryptedCardView", description: "加密笔记卡片。", source: "Views/Components/EncryptedCardView.swift", kind: .custom),
-        ComponentEntry(name: "AllNotesView", description: "macOS 全部笔记窗口。", source: "Views/Mac/AllNotesWindow.swift", kind: .custom),
         ComponentEntry(name: "AllNotesListRow", description: "全部笔记窗口的自定义列表项。", source: "Views/Mac/AllNotesWindow.swift", kind: .custom),
-        ComponentEntry(name: "AllNotesRenameSheet", description: "全部笔记中的重命名弹窗。", source: "Views/Mac/AllNotesWindow.swift", kind: .custom),
         ComponentEntry(name: "MacListSearchBar", description: "macOS 列表窗口搜索栏。", source: "Views/Mac/AllNotesWindow.swift", kind: .custom),
-        ComponentEntry(name: "MacListSearchToolbarAppearance", description: "macOS 搜索工具栏外观桥接。", source: "Views/Mac/AllNotesWindow.swift", kind: .custom),
-        ComponentEntry(name: "TrashView", description: "macOS 回收站窗口。", source: "Views/Mac/TrashWindow.swift", kind: .custom),
         ComponentEntry(name: "TrashListRow", description: "回收站窗口的自定义列表项。", source: "Views/Mac/TrashWindow.swift", kind: .custom),
-        ComponentEntry(name: "MacSettingsView", description: "macOS 设置窗口。", source: "Views/Mac/MacSettingsView.swift", kind: .custom),
-        ComponentEntry(name: "MacComponentCatalogView", description: "当前组件目录窗口。", source: "Views/Mac/MacComponentCatalogView.swift", kind: .custom),
-        ComponentEntry(name: "MacIntroView", description: "macOS 首次启动介绍页。", source: "Views/Mac/MacIntroView.swift", kind: .custom),
-        ComponentEntry(name: "StickyNoteEditorView", description: "macOS 悬浮便签编辑器。", source: "Views/Mac/StickyNoteEditorView.swift", kind: .custom),
-        ComponentEntry(name: "MacTextView", description: "AppKit 桥接的 macOS Markdown 编辑器。", source: "Views/Mac/StickyNoteEditorView.swift", kind: .custom),
-        ComponentEntry(name: "MacMarkdownPreview", description: "macOS Markdown 预览视图。", source: "Views/Mac/StickyNoteEditorView.swift", kind: .custom),
-        ComponentEntry(name: "MacToolbarHoverRegion", description: "悬浮便签工具栏 hover 区域。", source: "Views/Mac/StickyNoteEditorView.swift", kind: .custom)
+        ComponentEntry(name: "MacMarkdownPreview", description: "macOS Markdown 预览视图。", source: "Views/Mac/StickyNoteEditorView.swift", kind: .custom)
     ]
 
     var body: some View {
@@ -180,6 +163,12 @@ struct MacComponentCatalogView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button("复制名称", systemImage: "doc.on.doc") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(entry.name, forType: .string)
+            }
+        }
         .help("查看 \(entry.name)")
     }
 }
@@ -232,7 +221,6 @@ private struct MacComponentPreviewView: View {
     @State private var secureValue = "seal-note-key"
     @State private var draft = "快速记录一条 #想法"
     @State private var pickerValue = "明文"
-    @State private var renameTitle = "Seal Note 迭代记录"
     @State private var markdownScrollY: CGFloat = 0
     @State private var isToolbarHovered = false
     @State private var isAlertPresented = false
@@ -614,14 +602,6 @@ private struct MacComponentPreviewView: View {
                 Button("删除", role: .destructive) {}
             }
             .frame(width: 520)
-        case "AllNotesRenameSheet":
-            AllNotesRenameSheet(
-                title: $renameTitle,
-                errorMessage: nil,
-                isSaving: false,
-                onCancel: {},
-                onSave: {}
-            )
         case "MacListSearchBar":
             MacListSearchBar(placeholder: "搜索笔记...", text: $textValue, onClose: {})
                 .frame(width: 380)

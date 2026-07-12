@@ -46,18 +46,18 @@ final class MacNoteListSnapshotTests: XCTestCase {
         XCTAssertEqual(all.encryptedCount, 2)
         XCTAssertEqual(all.totalCount, 4)
         XCTAssertEqual(all.recentItems(limit: 2).map(\.id), ["encrypted-new", "locked"])
-        XCTAssertEqual(all.tagCounts.first, TagCount(tag: "work", count: 2))
+        XCTAssertEqual(all.tagCounts, [TagCount(tag: "work", count: 1)])
 
         let filtered = MacNoteListSnapshotBuilder.make(
             readableNotes: [olderPlain, newestEncrypted, emptyNote],
             lockedEncryptedNotes: [locked],
-            query: "secret",
+            query: "alpha",
             selectedTag: "work",
             titleProvider: { NoteTitleFormatter.displayTitle(from: $0.body, emptyTitle: "") }
         )
 
-        XCTAssertEqual(filtered.items.map(\.id), ["encrypted-new"])
-        XCTAssertEqual(filtered.encryptedCount, 1)
+        XCTAssertEqual(filtered.items.map(\.id), ["plain-old"])
+        XCTAssertEqual(filtered.encryptedCount, 0)
     }
 }
 #endif

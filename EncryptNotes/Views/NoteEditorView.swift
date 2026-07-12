@@ -2,6 +2,7 @@ import SwiftUI
 
 #if os(iOS)
 import UIKit
+import MarkdownView
 #endif
 
 enum NoteEditorMode {
@@ -17,7 +18,7 @@ struct NoteEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var vaultStore = VaultStore.shared
-    private let settings = SettingsStore.shared
+    @StateObject private var settings = SettingsStore.shared
 
     @State private var noteBody: String = ""
     @State private var isEncrypted: Bool = false
@@ -30,6 +31,9 @@ struct NoteEditorView: View {
     @State private var lastSavedBody = ""
     @State private var lastSavedEncrypted = false
     @State private var didConfigureInitialState = false
+    @State private var didDiscardEmptyNote = false
+    @State private var shouldSkipDisappearPersistence = false
+    @State private var isMarkdownPreviewing = false
 
     @State private var showFirstKeyPrompt = false
     @State private var showKeySettings = false
@@ -66,10 +70,20 @@ struct NoteEditorView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                #if os(iOS)
+                if isMarkdownPreviewing {
+                    markdownPreview
+                } else {
+                    editorBody
+                }
+                #else
                 editorBody
+                #endif
 
                 #if os(iOS)
-                markdownFormatBar
+                if !isMarkdownPreviewing {
+                    markdownFormatBar
+                }
                 #endif
             }
             .dsCanvasBackground()
@@ -84,6 +98,17 @@ struct NoteEditorView: View {
                     .disabled(isSaving)
                 }
                 ToolbarItemGroup(placement: .confirmationAction) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            isMarkdownPreviewing.toggle()
+                        }
+                    } label: {
+                        Image(systemName: isMarkdownPreviewing ? "pencil" : "eye")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .accessibilityLabel(isMarkdownPreviewing ? "返回编辑" : "Markdown 预览")
+                    .disabled(isSaving)
+
                     Menu {
                         Button {
                             copyNoteText()
@@ -143,7 +168,7 @@ struct NoteEditorView: View {
                 persistBeforeViewDisappears()
             }
             .onChange(of: scenePhase) { _, newPhase in
-                if newPhase != .active {
+                if newPhase != .active && !shouldSkipDisappearPersistence {
                     persistCurrentSnapshot()
                 }
             }
@@ -174,6 +199,14 @@ struct NoteEditorView: View {
                 )
             }
         }
+        .interactiveDismissDisabled(
+            isSaving || hasUnsavedChanges || shouldCreateInitialNote || shouldDiscardEmptyExistingNote
+        )
+        .sheet(isPresented: $showTrashFromKeySettings) {
+            TrashView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
     }
 
     @ViewBuilder
@@ -181,7 +214,13 @@ struct NoteEditorView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 #if os(iOS)
-                NoteTextView(text: $noteBody, selectedRange: $editorSelection, placeholder: "写下想法，支持 Markdown 和 #标签")
+                NoteTextView(
+                    text: $noteBody,
+                    selectedRange: $editorSelection,
+                    placeholder: "写下想法，支持 Markdown 和 #标签",
+                    fontSize: CGFloat(settings.macEditorFontSize),
+                    lineHeightMultiple: CGFloat(settings.macEditorLineHeightMultiple)
+                )
                     .frame(maxWidth: .infinity, minHeight: 400, alignment: .topLeading)
                 #else
                 ZStack(alignment: .topLeading) {
@@ -208,6 +247,48 @@ struct NoteEditorView: View {
     }
 
     #if os(iOS)
+    private var markdownPreview: some View {
+        ScrollView {
+            Group {
+                if noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("随便写点什么吧")
+                        .font(.system(size: CGFloat(settings.macEditorFontSize)))
+                        .foregroundColor(DS.textSubtle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    MarkdownView(noteBody)
+                        .font(.system(size: CGFloat(settings.macEditorFontSize)), for: .body)
+                        .font(
+                            .system(size: max(11, CGFloat(settings.macEditorFontSize) - 1), design: .monospaced),
+                            for: .codeBlock
+                        )
+                        .markdownComponentSpacing(
+                            max(8, CGFloat(settings.macEditorFontSize) * (CGFloat(settings.macEditorLineHeightMultiple) - 0.7))
+                        )
+                        .markdownMathRenderingEnabled()
+                        .foregroundStyle(DS.textBody)
+                        .headingStyle(DS.textEmphasize, for: .h1)
+                        .headingStyle(DS.textEmphasize, for: .h2)
+                        .headingStyle(DS.textEmphasize, for: .h3)
+                        .headingStyle(DS.textEmphasize, for: .h4)
+                        .headingStyle(DS.textEmphasize, for: .h5)
+                        .headingStyle(DS.textEmphasize, for: .h6)
+                        .tint(DS.primaryDeep)
+                        .tint(DS.link, for: .link)
+                        .tint(DS.link, for: .blockQuote)
+                        .tint(DS.primaryDeep, for: .inlineCodeBlock)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(DS.cardPadding * 2)
+            .frame(maxWidth: DS.contentMax, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .scrollIndicators(.hidden)
+    }
+    #endif
+
+    #if os(iOS)
     private var markdownFormatBar: some View {
         VStack(spacing: 0) {
             Rectangle()
@@ -218,7 +299,9 @@ struct NoteEditorView: View {
                 HStack(spacing: DS.s2) {
                     formatButton("bold", title: "粗体", command: .bold)
                     formatButton("italic", title: "斜体", command: .italic)
+                    formatButton("underline", title: "下划线", command: .underline)
                     formatButton("curlybraces", title: "代码", command: .inlineCode)
+                    formatButton("function", title: "行内公式", command: .inlineMath)
                     formatButton("link", title: "链接", command: .link)
                     formatButton("strikethrough", title: "删除线", command: .strike)
                     formatButton("chevron.left.forwardslash.chevron.right", title: "注释", command: .htmlComment)
@@ -252,27 +335,67 @@ struct NoteEditorView: View {
     #endif
 
     private func closeEditor() {
-        persistCurrentSnapshot(dismissAfterSave: true)
+        persistCurrentSnapshot(dismissAfterSave: true, discardEmptyIfNeeded: true)
     }
 
     private func persistBeforeViewDisappears() {
         guard didConfigureInitialState else { return }
-        guard hasUnsavedChanges || shouldCreateInitialNote else { return }
-        persistCurrentSnapshot()
+        guard !shouldSkipDisappearPersistence else { return }
+        if showKeySettings {
+            if hasUnsavedChanges || shouldCreateInitialNote {
+                persistCurrentSnapshot()
+            }
+            return
+        }
+        guard hasUnsavedChanges || shouldCreateInitialNote || shouldDiscardEmptyExistingNote else { return }
+        persistCurrentSnapshot(discardEmptyIfNeeded: true)
     }
 
-    private func persistCurrentSnapshot(dismissAfterSave: Bool = false) {
-        Task { await saveCurrentSnapshot(dismissAfterSave: dismissAfterSave) }
+    private func persistCurrentSnapshot(
+        dismissAfterSave: Bool = false,
+        discardEmptyIfNeeded: Bool = false
+    ) {
+        Task {
+            await saveCurrentSnapshot(
+                dismissAfterSave: dismissAfterSave,
+                discardEmptyIfNeeded: discardEmptyIfNeeded
+            )
+        }
     }
 
     @MainActor
-    private func saveCurrentSnapshot(dismissAfterSave: Bool = false) async {
+    private func saveCurrentSnapshot(
+        dismissAfterSave: Bool = false,
+        discardEmptyIfNeeded: Bool = false
+    ) async {
         guard didConfigureInitialState else {
             if dismissAfterSave { dismiss() }
             return
         }
 
         guard !isSaving else { return }
+
+        if discardEmptyIfNeeded,
+           shouldDiscardEmptyExistingNote,
+           let noteToDiscard = currentPersistedNote {
+            isSaving = true
+            do {
+                try await vaultStore.discardEmptyNote(noteToDiscard, body: noteBody)
+                didDiscardEmptyNote = true
+                shouldSkipDisappearPersistence = true
+                lastSavedBody = noteBody
+                lastSavedEncrypted = isEncrypted
+                isSaving = false
+                if dismissAfterSave {
+                    dismiss()
+                }
+            } catch {
+                isSaving = false
+                errorMessage = "丢弃空白笔记失败：\(error.localizedDescription)"
+                showError = true
+            }
+            return
+        }
 
         let bodySnapshot = noteBody
         let encryptedSnapshot = isEncrypted
@@ -321,13 +444,26 @@ struct NoteEditorView: View {
 
     private func copyNoteText() {
         #if os(iOS)
-        UIPasteboard.general.string = noteBody
+        UIPasteboard.general.string = settings.copyAddsParagraphSpacing
+            ? MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: noteBody)
+            : noteBody
         #endif
     }
 
     private func applyMarkdown(_ command: MacMarkdownFormatCommand) {
         #if os(iOS)
-        let result = MacMarkdownFormatter.apply(command: command, to: noteBody, selection: editorSelection)
+        let linkURL: String?
+        if case .link = command {
+            linkURL = MacMarkdownFormatter.webURL(fromClipboardString: UIPasteboard.general.string)
+        } else {
+            linkURL = nil
+        }
+        let result = MacMarkdownFormatter.apply(
+            command: command,
+            to: noteBody,
+            selection: editorSelection,
+            linkURL: linkURL
+        )
         noteBody = result.text
         editorSelection = result.selection
         #endif
@@ -361,6 +497,7 @@ struct NoteEditorView: View {
         Task {
             do {
                 try await vaultStore.deleteNote(note)
+                shouldSkipDisappearPersistence = true
                 dismiss()
             } catch {
                 errorMessage = "删除失败：\(error.localizedDescription)"
@@ -408,6 +545,13 @@ struct NoteEditorView: View {
         currentPersistedNote == nil && !noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var shouldDiscardEmptyExistingNote: Bool {
+        settings.autoDeleteEmptyNotes
+            && !didDiscardEmptyNote
+            && currentPersistedNote != nil
+            && noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var keyPromptTitle: String {
         #if os(iOS)
         if case .invalid = vaultStore.iosKeyStatus {
@@ -434,6 +578,8 @@ private class PlaceholderTextView: UITextView {
         didSet { placeholderLabel.text = placeholder }
     }
     private let placeholderLabel = UILabel()
+    private(set) var editorFontSize: CGFloat = 15
+    private(set) var editorLineHeightMultiple: CGFloat = 1.3
 
     override init(frame: CGRect, textContainer: NSTextContainer?) {
         super.init(frame: frame, textContainer: textContainer)
@@ -461,9 +607,12 @@ private class PlaceholderTextView: UITextView {
         setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        let font = UIFont.systemFont(ofSize: 15)
+        let font = UIFont.systemFont(ofSize: editorFontSize)
         self.font = font
-        typingAttributes = MacMarkdownHighlighter.iosTypingAttributes(fontSize: 15)
+        typingAttributes = MacMarkdownHighlighter.iosTypingAttributes(
+            fontSize: editorFontSize,
+            lineHeightMultiple: editorLineHeightMultiple
+        )
 
         textContainer.lineFragmentPadding = 0
         textContainer.lineBreakMode = .byWordWrapping
@@ -489,12 +638,41 @@ private class PlaceholderTextView: UITextView {
         updatePlaceholderVisibility()
     }
 
-    func applyMarkdownHighlighting(text newText: String, selectedRange range: NSRange) {
-        let attributed = MacMarkdownHighlighter.makeIOSHighlightedAttributedString(text: newText, fontSize: 15)
-        attributedText = attributed
-        typingAttributes = MacMarkdownHighlighter.iosTypingAttributes(fontSize: 15)
+    func applyMarkdownHighlighting(
+        text newText: String,
+        selectedRange range: NSRange,
+        fontSize: CGFloat,
+        lineHeightMultiple: CGFloat
+    ) {
+        editorFontSize = fontSize
+        editorLineHeightMultiple = lineHeightMultiple
+        placeholderLabel.font = UIFont.systemFont(ofSize: fontSize)
+        let attributed = MacMarkdownHighlighter.makeIOSHighlightedAttributedString(
+            text: newText,
+            fontSize: fontSize,
+            lineHeightMultiple: lineHeightMultiple
+        )
+        let preservedContentOffset = contentOffset
+        let undoManager = undoManager
+        let shouldRestoreUndoRegistration = undoManager?.isUndoRegistrationEnabled == true
+        if shouldRestoreUndoRegistration {
+            undoManager?.disableUndoRegistration()
+        }
+        textStorage.setAttributedString(attributed)
+        if shouldRestoreUndoRegistration {
+            undoManager?.enableUndoRegistration()
+        }
+        typingAttributes = MacMarkdownHighlighter.iosTypingAttributes(
+            fontSize: fontSize,
+            lineHeightMultiple: lineHeightMultiple
+        )
         selectedRange = safeRange(range, in: newText)
+        setContentOffset(preservedContentOffset, animated: false)
         updatePlaceholderVisibility()
+    }
+
+    func usesStyle(fontSize: CGFloat, lineHeightMultiple: CGFloat) -> Bool {
+        editorFontSize == fontSize && editorLineHeightMultiple == lineHeightMultiple
     }
 
     func updatePlaceholderVisibility() {
@@ -513,6 +691,8 @@ private struct NoteTextView: UIViewRepresentable {
     @Binding var text: String
     @Binding var selectedRange: NSRange
     var placeholder: String
+    var fontSize: CGFloat
+    var lineHeightMultiple: CGFloat
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text, selectedRange: $selectedRange)
@@ -522,7 +702,12 @@ private struct NoteTextView: UIViewRepresentable {
         let textView = PlaceholderTextView()
         textView.placeholder = placeholder
         textView.delegate = context.coordinator
-        textView.applyMarkdownHighlighting(text: text, selectedRange: selectedRange)
+        textView.applyMarkdownHighlighting(
+            text: text,
+            selectedRange: selectedRange,
+            fontSize: fontSize,
+            lineHeightMultiple: lineHeightMultiple
+        )
         textView.selectedRange = selectedRange
         context.coordinator.textView = textView
         textView.backgroundColor = UIColor(DS.surfaceCard)
@@ -538,13 +723,24 @@ private struct NoteTextView: UIViewRepresentable {
 
     func updateUIView(_ uiView: PlaceholderTextView, context: Context) {
         uiView.placeholder = placeholder
-        if uiView.text != text && !context.coordinator.isUpdating {
+        let styleChanged = !uiView.usesStyle(
+            fontSize: fontSize,
+            lineHeightMultiple: lineHeightMultiple
+        )
+        if (uiView.text != text || styleChanged) && !context.coordinator.isUpdating {
             context.coordinator.isUpdating = true
-            uiView.applyMarkdownHighlighting(text: text, selectedRange: selectedRange)
+            uiView.applyMarkdownHighlighting(
+                text: text,
+                selectedRange: selectedRange,
+                fontSize: fontSize,
+                lineHeightMultiple: lineHeightMultiple
+            )
             context.coordinator.isUpdating = false
         }
         if uiView.selectedRange != selectedRange {
+            context.coordinator.isUpdating = true
             uiView.selectedRange = selectedRange
+            context.coordinator.isUpdating = false
         }
         uiView.updatePlaceholderVisibility()
     }
@@ -567,12 +763,73 @@ private struct NoteTextView: UIViewRepresentable {
             let newSelection = textView.selectedRange
             text.wrappedValue = newText
             selectedRange.wrappedValue = newSelection
-            (textView as? PlaceholderTextView)?.applyMarkdownHighlighting(text: newText, selectedRange: newSelection)
+            if textView.markedTextRange != nil {
+                (textView as? PlaceholderTextView)?.updatePlaceholderVisibility()
+                isUpdating = false
+                return
+            }
+            if let textView = textView as? PlaceholderTextView {
+                textView.applyMarkdownHighlighting(
+                    text: newText,
+                    selectedRange: newSelection,
+                    fontSize: textView.editorFontSize,
+                    lineHeightMultiple: textView.editorLineHeightMultiple
+                )
+            }
             (textView as? PlaceholderTextView)?.updatePlaceholderVisibility()
             isUpdating = false
         }
 
+        func textView(
+            _ textView: UITextView,
+            shouldChangeTextIn range: NSRange,
+            replacementText replacement: String
+        ) -> Bool {
+            guard replacement == "\n", range.length == 0,
+                  textView.markedTextRange == nil,
+                  let textView = textView as? PlaceholderTextView else {
+                return true
+            }
+
+            let currentText = textView.text ?? ""
+            let currentSelection = NSRange(location: range.location, length: 0)
+            let result: MacMarkdownFormatResult?
+            if let completion = MacMarkdownFormatter.completeCodeFenceIfNeeded(
+                in: currentText,
+                selection: currentSelection
+            ) {
+                result = MacMarkdownFormatResult(
+                    text: completion.text,
+                    selection: completion.selection
+                )
+            } else if let continuation = MacMarkdownFormatter.continueListIfNeeded(
+                in: currentText,
+                selection: currentSelection
+            ) {
+                result = MacMarkdownFormatResult(
+                    text: continuation.text,
+                    selection: continuation.selection
+                )
+            } else {
+                result = nil
+            }
+
+            guard let result else { return true }
+            isUpdating = true
+            text.wrappedValue = result.text
+            selectedRange.wrappedValue = result.selection
+            textView.applyMarkdownHighlighting(
+                text: result.text,
+                selectedRange: result.selection,
+                fontSize: textView.editorFontSize,
+                lineHeightMultiple: textView.editorLineHeightMultiple
+            )
+            isUpdating = false
+            return false
+        }
+
         func textViewDidChangeSelection(_ textView: UITextView) {
+            guard !isUpdating else { return }
             selectedRange.wrappedValue = textView.selectedRange
         }
     }

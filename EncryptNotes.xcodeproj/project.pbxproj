@@ -39,7 +39,6 @@
 				Stores/Mac/MacNoteWindowStore.swift,
 				Stores/Mac/ShortcutStore.swift,
 				Tests/CryptoServiceTests.swift,
-				Tests/MacAITitleServiceTests.swift,
 				Tests/MacMarkdownFormatterTests.swift,
 				Tests/MacMarkdownHighlighterTests.swift,
 				Tests/MacNoteListSnapshotTests.swift,
@@ -66,7 +65,6 @@
 				"Info-iOS.plist",
 				"Info-Mac.plist",
 				Tests/CryptoServiceTests.swift,
-				Tests/MacAITitleServiceTests.swift,
 				Tests/MacMarkdownFormatterTests.swift,
 				Tests/MacMarkdownHighlighterTests.swift,
 				Tests/MacNoteListSnapshotTests.swift,
@@ -284,11 +282,6 @@
 /* Begin PBXShellScriptBuildPhase section */
 		000000000000000550000000 /* Compile Alternate App Icons */ = {
 			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
 			inputPaths = (
 				"$(SRCROOT)/script/compile_alternate_icons.sh",
 				"$(SRCROOT)/EncryptNotes/Icon2.icon",
@@ -299,8 +292,6 @@
 				"$(SRCROOT)/EncryptNotes/Icon3.icon/Assets/Green 1.png",
 			);
 			name = "Compile Alternate App Icons";
-			outputFileListPaths = (
-			);
 			outputPaths = (
 				"$(DERIVED_FILE_DIR)/SealNoteAlternateIcons/Icon2",
 				"$(DERIVED_FILE_DIR)/SealNoteAlternateIcons/Icon2/Assets.car",
@@ -313,9 +304,11 @@
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Icon2.icns",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Icon3.icns",
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${SRCROOT}/script/compile_alternate_icons.sh\"\n";
+			shellScript = (
+				"\"${SRCROOT}/script/compile_alternate_icons.sh\"",
+				"",
+			);
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -627,19 +620,20 @@
 				CODE_SIGN_ENTITLEMENTS = EncryptNotes/EncryptNotesMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = BPP589VP97;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readwrite;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				ENABLE_USER_SELECTED_FILES = readwrite;
 				INFOPLIST_FILE = "EncryptNotes/Info-Mac.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Seal Note";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 0.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xuweinan.sealnote;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Seal Note";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -659,19 +653,20 @@
 				CODE_SIGN_ENTITLEMENTS = EncryptNotes/EncryptNotesMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = BPP589VP97;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readwrite;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				ENABLE_USER_SELECTED_FILES = readwrite;
 				INFOPLIST_FILE = "EncryptNotes/Info-Mac.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Seal Note";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 0.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xuweinan.sealnote;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Seal Note";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;

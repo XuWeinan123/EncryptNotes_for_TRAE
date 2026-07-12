@@ -7,13 +7,15 @@ struct TrashView: View {
     @State private var noteToRestore: TrashNote?
     @State private var noteToPurge: TrashNote?
     @State private var showEmptyConfirmation = false
+    @State private var searchText = ""
+    @State private var actionErrorMessage: String?
 
     var body: some View {
         NavigationStack {
             ZStack {
                 DS.bg.ignoresSafeArea()
 
-                if vaultStore.trashNotes.isEmpty {
+                if filteredTrashNotes.isEmpty {
                     emptyState
                 } else {
                     trashList
@@ -22,6 +24,8 @@ struct TrashView: View {
             .navigationTitle("回收站")
             .navigationBarTitleDisplayMode(.inline)
             .dsLiquidGlassToolbar()
+            .searchable(text: $searchText, prompt: "搜索回收站")
+            .autocorrectionDisabled()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
@@ -48,7 +52,7 @@ struct TrashView: View {
                             do {
                                 try await vaultStore.restoreTrashNote(note)
                             } catch {
-                                vaultStore.lastError = "恢复失败：\(error.localizedDescription)"
+                                actionErrorMessage = "恢复失败：\(error.localizedDescription)"
                             }
                         }
                     }
@@ -68,7 +72,7 @@ struct TrashView: View {
                             do {
                                 try await vaultStore.permanentlyDeleteTrashNote(note)
                             } catch {
-                                vaultStore.lastError = "删除失败：\(error.localizedDescription)"
+                                actionErrorMessage = "删除失败：\(error.localizedDescription)"
                             }
                         }
                     }
@@ -84,12 +88,20 @@ struct TrashView: View {
                         do {
                             try await vaultStore.emptyTrash()
                         } catch {
-                            vaultStore.lastError = "清空失败：\(error.localizedDescription)"
+                            actionErrorMessage = "清空失败：\(error.localizedDescription)"
                         }
                     }
                 }
             } message: {
                 Text("将永久删除回收站中的所有笔记，无法恢复。")
+            }
+            .alert("操作失败", isPresented: Binding(
+                get: { actionErrorMessage != nil },
+                set: { if !$0 { actionErrorMessage = nil } }
+            )) {
+                Button("确定") { actionErrorMessage = nil }
+            } message: {
+                Text(actionErrorMessage ?? "")
             }
             .task {
                 await vaultStore.purgeExpiredTrash()
@@ -101,9 +113,11 @@ struct TrashView: View {
         VStack {
             Spacer()
             SWEmptyState(
-                title: "回收站为空",
-                message: "删除的笔记会在这里保留 30 天",
-                systemImage: "trash"
+                title: vaultStore.trashNotes.isEmpty ? "回收站为空" : "没有匹配的笔记",
+                message: vaultStore.trashNotes.isEmpty
+                    ? "删除的笔记会在这里保留 30 天"
+                    : "换个关键词试试，或清空搜索内容。",
+                systemImage: vaultStore.trashNotes.isEmpty ? "trash" : "magnifyingglass"
             )
             Spacer()
         }
@@ -113,7 +127,17 @@ struct TrashView: View {
 
     private var trashList: some View {
         List {
-            ForEach(vaultStore.trashNotes) { trashNote in
+            HStack {
+                Spacer(minLength: 0)
+                Text("回收站 \(filteredTrashNotes.count) 条笔记")
+                    .font(DS.caption())
+                    .foregroundColor(DS.textSubtle)
+                Spacer(minLength: 0)
+            }
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+
+            ForEach(filteredTrashNotes) { trashNote in
                 trashCard(trashNote)
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
@@ -156,6 +180,15 @@ struct TrashView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .padding(.top, DS.s2)
+    }
+
+    private var filteredTrashNotes: [TrashNote] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return vaultStore.trashNotes }
+        return vaultStore.trashNotes.filter { note in
+            note.title.localizedCaseInsensitiveContains(query)
+                || (!note.isEncrypted && note.body?.localizedCaseInsensitiveContains(query) == true)
+        }
     }
 
     private func trashCard(_ trashNote: TrashNote) -> some View {
@@ -201,7 +234,12 @@ struct TrashView: View {
                 SWStatusBadge("\(trashNote.remainingDays) 天", systemImage: "clock", style: .warning)
             }
 
-            if let body = trashNote.body {
+            if trashNote.isEncrypted {
+                Text(trashNote.title)
+                    .font(DS.body().weight(.semibold))
+                    .foregroundStyle(DS.textBody)
+                    .lineLimit(2)
+            } else if let body = trashNote.body {
                 Text(body)
                     .font(DS.body())
                     .foregroundStyle(DS.textBody)

@@ -20,7 +20,13 @@ struct MacNoteWindowState: Codable, Equatable {
 @MainActor
 final class MacNoteWindowStore: ObservableObject {
     static let shared = MacNoteWindowStore()
-    static let defaultWindowSize = CGSize(width: 400, height: 250)
+    static var defaultWindowSize: CGSize {
+        let fontSize = CGFloat(SettingsStore.defaultMacEditorFontSize)
+        return CGSize(
+            width: MacStickyEditorLayout.fittedWindowWidth(fontSize: fontSize),
+            height: MacStickyEditorLayout.minimumFittedWindowHeight(fontSize: fontSize)
+        )
+    }
 
     @Published private(set) var openWindows: Set<String> = []
     @Published private(set) var windowStates: [String: MacNoteWindowState] = [:]
@@ -104,6 +110,18 @@ final class MacNoteWindowStore: ObservableObject {
             flushWindowState(for: noteId)
         }
         openWindows.removeAll()
+    }
+
+    func restoreDefaultWindowSizes() {
+        pendingWindowStateSaveTasks.values.forEach { $0.cancel() }
+        pendingWindowStateSaveTasks.removeAll()
+        defaults.removeObject(forKey: lastWindowSizeKey)
+
+        for noteId in Array(windowStates.keys) {
+            windowStates[noteId]?.frame.width = Double(Self.defaultWindowSize.width)
+            windowStates[noteId]?.frame.height = Double(Self.defaultWindowSize.height)
+            saveWindowState(for: noteId)
+        }
     }
 
     private func defaultWindowFrame() -> MacWindowFrame {

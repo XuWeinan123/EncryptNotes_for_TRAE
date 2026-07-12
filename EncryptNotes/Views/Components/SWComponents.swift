@@ -301,6 +301,19 @@ struct SWEmptyState: View {
     let systemImage: String
 
     var body: some View {
+        #if os(macOS)
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(DS.s6)
+        #else
+        content
+            .frame(maxWidth: .infinity)
+            .padding(DS.s6)
+            .dsCardSurface(shadow: false)
+        #endif
+    }
+
+    private var content: some View {
         VStack(spacing: DS.s3) {
             Image(systemName: systemImage)
                 .font(.system(size: 34, weight: .regular))
@@ -319,9 +332,6 @@ struct SWEmptyState: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity)
-        .padding(DS.s6)
-        .dsCardSurface(shadow: false)
     }
 }
 
@@ -332,21 +342,104 @@ struct SWFilterChip: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .font(DS.caption())
-                .foregroundColor(isSelected ? DS.primaryDeep : DS.textSecondary)
-                .padding(.horizontal, DS.s3)
-                .padding(.vertical, DS.s2)
-                .background(isSelected ? DS.primaryContainer : DS.surfaceCard)
-                .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
-                        .stroke(isSelected ? DS.primary.opacity(0.28) : DS.line, lineWidth: 0.5)
-                )
+            SWFilterChipLabel(title: title, isSelected: isSelected)
         }
         .buttonStyle(.plain)
     }
 }
+
+struct SWFilterChipLabel: View {
+    let title: String
+    let isSelected: Bool
+
+    var body: some View {
+        Text(title)
+            .font(DS.caption())
+            .foregroundColor(isSelected ? DS.primaryDeep : DS.textSecondary)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, DS.s3)
+            .padding(.vertical, DS.s2)
+            .background(isSelected ? DS.primaryContainer : DS.surfaceCard)
+            .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
+                    .stroke(isSelected ? DS.primary.opacity(0.28) : DS.line, lineWidth: 0.5)
+            )
+    }
+}
+
+#if os(macOS)
+struct SWFilterChipMenu: View {
+    let title: String
+    let items: [String]
+    let onSelect: (String) -> Void
+
+    @State private var presenter = SWFilterChipMenuPresenter()
+
+    var body: some View {
+        SWFilterChip(title: title, isSelected: false) {
+            presenter.present(items: items, onSelect: onSelect)
+        }
+        .background(SWFilterChipMenuAnchor(presenter: presenter))
+    }
+}
+
+@MainActor
+private final class SWFilterChipMenuPresenter: NSObject {
+    weak var anchorView: NSView?
+    private var onSelect: ((String) -> Void)?
+
+    func present(items: [String], onSelect: @escaping (String) -> Void) {
+        guard let anchorView, !items.isEmpty else { return }
+        self.onSelect = onSelect
+
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        for title in items {
+            let item = NSMenuItem(title: title, action: #selector(selectItem(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = title
+            menu.addItem(item)
+        }
+
+        menu.popUp(
+            positioning: nil,
+            at: NSPoint(x: 0, y: anchorView.bounds.minY),
+            in: anchorView
+        )
+    }
+
+    @objc private func selectItem(_ sender: NSMenuItem) {
+        guard let title = sender.representedObject as? String else { return }
+        onSelect?(title)
+    }
+}
+
+private struct SWFilterChipMenuAnchor: NSViewRepresentable {
+    let presenter: SWFilterChipMenuPresenter
+
+    func makeNSView(context: Context) -> NSView {
+        let view = PassthroughMenuAnchorView()
+        presenter.anchorView = view
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        presenter.anchorView = nsView
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: ()) {
+        // The presenter owns no AppKit view; its weak reference clears naturally.
+    }
+}
+
+private final class PassthroughMenuAnchorView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+}
+#endif
 
 #if os(iOS)
 struct ShareSheet: UIViewControllerRepresentable {

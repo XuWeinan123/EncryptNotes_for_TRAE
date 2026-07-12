@@ -7,6 +7,9 @@ import UniformTypeIdentifiers
 final class MacMenuBarController: NSObject, NSMenuDelegate {
     static let shared = MacMenuBarController()
 
+    private static let allNotesFrameAutosaveName = "SealNote.AllNotesWindow"
+    private static let trashFrameAutosaveName = "SealNote.TrashWindow"
+
     var statusItem: NSStatusItem?
     private let vaultStore = VaultStore.shared
     private let windowStore = MacNoteWindowStore.shared
@@ -274,11 +277,18 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
             )
             window.title = "全部笔记"
             window.contentView = hostingView
-            window.center()
+            if !window.setFrameUsingName(Self.allNotesFrameAutosaveName) {
+                window.center()
+            }
+            constrainToVisibleScreen(window)
+            _ = window.setFrameAutosaveName(Self.allNotesFrameAutosaveName)
             window.isReleasedWhenClosed = false
             window.delegate = self
             configureListWindowChrome(window)
             allNotesWindow = window
+        }
+        if let allNotesWindow {
+            constrainToVisibleScreen(allNotesWindow)
         }
         allNotesWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -299,7 +309,10 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
             )
             window.title = "回收站"
             window.contentView = hostingView
-            window.center()
+            if !window.setFrameUsingName(Self.trashFrameAutosaveName) {
+                window.center()
+            }
+            _ = window.setFrameAutosaveName(Self.trashFrameAutosaveName)
             window.isReleasedWhenClosed = false
             window.delegate = self
             configureListWindowChrome(window)
@@ -360,6 +373,18 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    func restoreDefaultWindowSizes() {
+        NSWindow.removeFrame(usingName: Self.allNotesFrameAutosaveName)
+        NSWindow.removeFrame(usingName: Self.trashFrameAutosaveName)
+
+        allNotesWindow?.setContentSize(NSSize(width: 640, height: 720))
+        trashWindow?.setContentSize(NSSize(width: 640, height: 720))
+        componentCatalogWindow?.setContentSize(NSSize(width: 760, height: 720))
+
+        windowStore.restoreDefaultWindowSizes()
+        StickyNoteWindowManager.shared.restoreDefaultWindowSizes()
+    }
+
     private func configureListWindowChrome(_ window: NSWindow) {
         window.isMovableByWindowBackground = true
         window.tabbingMode = .disallowed
@@ -372,6 +397,21 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         window.standardWindowButton(.miniaturizeButton)?.isEnabled = false
         window.standardWindowButton(.zoomButton)?.isHidden = true
         window.standardWindowButton(.zoomButton)?.isEnabled = false
+    }
+
+    private func constrainToVisibleScreen(_ window: NSWindow) {
+        let screen = window.screen
+            ?? NSScreen.screens.first(where: { $0.frame.intersects(window.frame) })
+            ?? NSScreen.main
+        guard let screen else { return }
+
+        let visibleFrame = screen.visibleFrame.insetBy(dx: DS.s2, dy: DS.s2)
+        var frame = window.frame
+        frame.size.width = min(frame.width, visibleFrame.width)
+        frame.size.height = min(frame.height, visibleFrame.height)
+        frame.origin.x = min(max(frame.minX, visibleFrame.minX), visibleFrame.maxX - frame.width)
+        frame.origin.y = min(max(frame.minY, visibleFrame.minY), visibleFrame.maxY - frame.height)
+        window.setFrame(frame, display: false)
     }
 
     func openIntroWindowIfNeeded() {

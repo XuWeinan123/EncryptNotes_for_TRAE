@@ -109,7 +109,12 @@ private struct NotesSettingsView: View {
     var body: some View {
         SWPanelStack {
             SWSectionPanel("新建笔记", footer: "当前没有密钥时，新建笔记会保持为明文。") {
-                SWSettingsRow("默认创建加密笔记", subtitle: vaultStore.isKeyLoaded ? "新建笔记会默认打开加密" : "需要先在密钥设置中创建或加载密钥", systemImage: "lock") {
+                SWSettingsRow(
+                    "默认创建加密笔记",
+                    subtitle: vaultStore.isKeyLoaded ? "新建笔记会默认打开加密" : "需要先在密钥设置中创建或加载密钥",
+                    systemImage: "lock",
+                    trailingMinWidth: 52
+                ) {
                     Toggle("", isOn: defaultEncryptedBinding)
                         .labelsHidden()
                         .tint(DS.primary)
@@ -117,8 +122,88 @@ private struct NotesSettingsView: View {
                 }
             }
 
+            SWSectionPanel("编辑外观") {
+                SWSettingsRow("编辑字号", systemImage: "textformat.size") {
+                    VStack(alignment: .trailing, spacing: DS.s1) {
+                        Text(String(format: "%.0f", settings.macEditorFontSize))
+                            .font(DS.caption())
+                            .foregroundColor(DS.textSecondary)
+                            .monospacedDigit()
+                        Slider(
+                            value: $settings.macEditorFontSize,
+                            in: SettingsStore.macEditorFontSizeRange,
+                            step: SettingsStore.macEditorFontSizeStep
+                        )
+                        .frame(width: 132)
+                        .tint(DS.primary)
+                    }
+                }
+
+                SWRowDivider()
+
+                SWSettingsRow("行高", systemImage: "line.3.horizontal.decrease") {
+                    VStack(alignment: .trailing, spacing: DS.s1) {
+                        Text(String(format: "%.2fx", settings.macEditorLineHeightMultiple))
+                            .font(DS.caption())
+                            .foregroundColor(DS.textSecondary)
+                            .monospacedDigit()
+                        Slider(
+                            value: $settings.macEditorLineHeightMultiple,
+                            in: SettingsStore.macEditorLineHeightRange,
+                            step: 0.05
+                        )
+                        .frame(width: 132)
+                        .tint(DS.primary)
+                    }
+                }
+            }
+
+            SWSectionPanel("编辑行为") {
+                SWSettingsRow(
+                    "复制为宽松 Markdown 段落",
+                    subtitle: "复制时自动补充段落空行，便于粘贴到其他 Markdown 编辑器。",
+                    systemImage: "doc.on.clipboard",
+                    trailingMinWidth: 52
+                ) {
+                    settingsToggle($settings.copyAddsParagraphSpacing)
+                }
+
+                SWRowDivider()
+
+                SWSettingsRow(
+                    "关闭空白笔记时自动丢弃",
+                    subtitle: "仅在关闭编辑器时生效，不会进入回收站。",
+                    systemImage: "trash",
+                    trailingMinWidth: 52
+                ) {
+                    settingsToggle($settings.autoDeleteEmptyNotes)
+                }
+
+                SWRowDivider()
+
+                SWSettingsRow(
+                    "自动命名笔记",
+                    subtitle: "保存时按正文更新标题；关闭后保留首次生成或手动设置的标题。",
+                    systemImage: "text.cursor",
+                    trailingMinWidth: 52
+                ) {
+                    settingsToggle($settings.autoRenameNotesOnSave)
+                }
+
+                SWRowDivider()
+
+                SWSettingsRow(
+                    "不将 Hex 色值识别为标签",
+                    subtitle: "忽略 #RRGGBB 和 #RRGGBBAA 色值。",
+                    systemImage: "paintpalette",
+                    trailingMinWidth: 52
+                ) {
+                    settingsToggle($settings.excludeHexColorsFromTags)
+                }
+            }
+
             SWSectionPanel("Markdown") {
-                SWSettingsRow("编辑器格式工具栏", subtitle: "可快速插入粗体、斜体、代码和链接", systemImage: "character.cursor.ibeam") {
+                SWSettingsRow("编辑器格式工具栏", subtitle: "可快速插入常用行内格式", systemImage: "character.cursor.ibeam") {
                     SWStatusBadge("已开启", style: .success)
                 }
                 SWRowDivider()
@@ -136,6 +221,12 @@ private struct NotesSettingsView: View {
             get: { settings.preferredNoteMode == .encrypted },
             set: { settings.preferredNoteMode = $0 && vaultStore.isKeyLoaded ? .encrypted : .plain }
         )
+    }
+
+    private func settingsToggle(_ binding: Binding<Bool>) -> some View {
+        Toggle("", isOn: binding)
+            .labelsHidden()
+            .tint(DS.primary)
     }
 }
 
@@ -1022,7 +1113,7 @@ private struct AboutView: View {
                 }
                 SWRowDivider()
                 SWSettingsRow("当前版本", systemImage: "number") {
-                    Text("v0.2")
+                    Text("v\(appVersion)")
                 }
             }
 
@@ -1035,8 +1126,27 @@ private struct AboutView: View {
                     EmptyView()
                 }
             }
+
+            Link(destination: privacyPolicyURL) {
+                SWSectionPanel {
+                    SWSettingsRow("隐私政策", subtitle: "查看 Seal Note 如何处理数据", systemImage: "hand.raised") {
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(DS.textSubtle)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
         }
         .navigationTitle("关于")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+    }
+
+    private var privacyPolicyURL: URL {
+        URL(string: "https://github.com/XuWeinan123/EncryptNotes_for_TRAE/blob/main/PRIVACY.md")!
     }
 }

@@ -18,37 +18,34 @@ struct TrashView: View {
                 )
             }
 
-            List {
-                listSummary
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(DS.bg)
+            if filteredTrashNotes.isEmpty {
+                emptyRow
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        listSummary
 
-                if filteredTrashNotes.isEmpty {
-                    emptyRow
-                        .listRowInsets(EdgeInsets(top: DS.s3, leading: DS.s3, bottom: DS.s3, trailing: DS.s3))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(DS.bg)
-                } else {
-                    ForEach(filteredTrashNotes) { trashNote in
-                        trashRow(for: trashNote)
-                            .contextMenu {
-                                Button("恢复") {
-                                    restore(trashNote)
+                        ForEach(filteredTrashNotes) { trashNote in
+                            trashRow(for: trashNote)
+                                .padding(.horizontal, DS.s3)
+                                .padding(.vertical, DS.s1)
+                                .contextMenu {
+                                    Button("恢复") {
+                                        restore(trashNote)
+                                    }
+                                    Button("永久删除", role: .destructive) {
+                                        permanentlyDelete(trashNote)
+                                    }
                                 }
-                                Button("永久删除", role: .destructive) {
-                                    permanentlyDelete(trashNote)
-                                }
-                            }
-                            .listRowInsets(EdgeInsets(top: DS.s1, leading: DS.s3, bottom: DS.s1, trailing: DS.s3))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(DS.bg)
+                        }
+
+                        Color.clear
+                            .frame(height: DS.s3)
+                            .accessibilityHidden(true)
                     }
                 }
+                .background(DS.bg)
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .background(DS.bg)
         }
         .background(DS.bg)
         .dsLiquidGlassToolbar()
@@ -120,8 +117,9 @@ struct TrashView: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, DS.s3)
-        .padding(.top, DS.s3)
+        .padding(.top, DS.s3 - DS.s4)
         .padding(.bottom, DS.s2)
+        .padding(.top, 8)
     }
 
     private var filteredTrashNotes: [TrashNote] {
@@ -145,46 +143,40 @@ struct TrashView: View {
     private func trashRow(for trashNote: TrashNote) -> some View {
         TrashListRow(
             title: trashTitle(for: trashNote),
-            subtitle: "删除于 \(timeString(from: trashNote.deletedAt))"
+            subtitle: trashNote.isEncrypted ? "" : trashNote.body.map(notePreview) ?? ""
         ) {
             HStack(spacing: DS.s4) {
                 HStack(spacing: DS.s2) {
                     if trashNote.isEncrypted {
-                        SWStatusBadge("加密", systemImage: "lock.fill", style: .neutral)
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(DS.textSecondary)
+                            .frame(width: 22, height: 22)
+                            .background(DS.surfaceSunken)
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(DS.line, lineWidth: 0.5))
                     }
                     SWStatusBadge("\(trashNote.remainingDays) 天", systemImage: "clock", style: .warning)
                 }
 
-                HStack(spacing: DS.s1) {
-                    Button {
+                Menu {
+                    Button("恢复") {
                         restore(trashNote)
-                    } label: {
-                        Text("恢复")
-                            .foregroundStyle(DS.textSecondary)
                     }
-                    .buttonStyle(.borderless)
-                    .controlSize(.regular)
-                    .help("恢复")
-
-                    Menu {
-                        Button("恢复") {
-                            restore(trashNote)
-                        }
-                        Divider()
-                        Button("永久删除", role: .destructive) {
-                            permanentlyDelete(trashNote)
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .foregroundStyle(DS.textSecondary)
+                    Divider()
+                    Button("永久删除", role: .destructive) {
+                        permanentlyDelete(trashNote)
                     }
-                    .menuStyle(.borderlessButton)
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
-                    .tint(DS.textSecondary)
-                    .menuIndicator(.hidden)
-                    .help("更多操作")
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .foregroundStyle(DS.textSecondary)
                 }
+                .menuStyle(.borderlessButton)
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .tint(DS.textSecondary)
+                .menuIndicator(.hidden)
+                .help("更多操作")
             }
         }
     }
@@ -197,6 +189,10 @@ struct TrashView: View {
         } else {
             return "(无内容)"
         }
+    }
+
+    private func notePreview(_ body: String) -> String {
+        NoteTitleFormatter.displayTitle(from: body, emptyTitle: "")
     }
 
     private func firstLine(of body: String) -> String {
@@ -272,10 +268,12 @@ struct TrashListRow<Trailing: View>: View {
                     .foregroundColor(DS.textStrong)
                     .lineLimit(1)
 
-                Text(subtitle)
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSubtle)
-                    .lineLimit(1)
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(DS.caption())
+                        .foregroundColor(DS.textSubtle)
+                        .lineLimit(1)
+                }
             }
 
             Spacer(minLength: DS.s3)
@@ -284,6 +282,7 @@ struct TrashListRow<Trailing: View>: View {
         }
         .padding(.horizontal, DS.s3)
         .padding(.vertical, 10)
+        .frame(minHeight: 58)
         .background(isHovering ? DS.primaryContainer.opacity(0.42) : DS.surfaceCard.opacity(0.72))
         .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
         .overlay(

@@ -7,10 +7,6 @@ struct AllNotesView: View {
     @ObservedObject private var settings = SettingsStore.shared
     @State private var searchText = ""
     @State private var selectedTag: String?
-    @State private var renamingNote: Note?
-    @State private var renameTitle = ""
-    @State private var renameErrorMessage: String?
-    @State private var isRenamingNote = false
     @State private var isSearchBarVisible = false
     @State private var actionErrorMessage: String?
 
@@ -26,61 +22,54 @@ struct AllNotesView: View {
 
             tagFilters
 
-            List {
-                listSummary
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(DS.bg)
+            if isLoading {
+                SWEmptyState(
+                    title: "正在加载笔记",
+                    message: "笔记会在同步和索引读取完成后显示。",
+                    systemImage: "tray.full"
+                )
+            } else if filteredNotes.isEmpty {
+                SWEmptyState(
+                    title: "没有匹配的笔记",
+                    message: emptyStateMessage,
+                    systemImage: "magnifyingglass"
+                )
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        listSummary
 
-                if isLoading {
-                    SWEmptyState(
-                        title: "正在加载笔记",
-                        message: "笔记会在同步和索引读取完成后显示。",
-                        systemImage: "tray.full"
-                    )
-                    .listRowInsets(EdgeInsets(top: DS.s3, leading: DS.s3, bottom: DS.s3, trailing: DS.s3))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(DS.bg)
-                } else if filteredNotes.isEmpty {
-                    SWEmptyState(
-                        title: "没有匹配的笔记",
-                        message: emptyStateMessage,
-                        systemImage: "magnifyingglass"
-                    )
-                    .listRowInsets(EdgeInsets(top: DS.s3, leading: DS.s3, bottom: DS.s3, trailing: DS.s3))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(DS.bg)
-                } else {
-                    ForEach(filteredNotes) { item in
-                        noteRow(for: item)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                openNote(item)
-                            }
-                            .contextMenu {
-                                noteContextMenu(for: item)
-                            }
+                        ForEach(filteredNotes) { item in
+                            noteRow(for: item)
+                                .padding(.horizontal, DS.s3)
+                                .padding(.vertical, DS.s1)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    openNote(item)
+                                }
+                                .contextMenu {
+                                    noteContextMenu(for: item)
+                                }
+                        }
+
+                        Color.clear
+                            .frame(height: DS.s3)
+                            .accessibilityHidden(true)
                     }
                 }
+                .background(DS.bg)
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .background(DS.bg)
         }
+        .safeAreaPadding(.top, DS.s2)
         .background(DS.bg)
         .dsLiquidGlassToolbar()
         .navigationTitle("全部笔记")
         .toolbar { allNotesToolbar }
         .background(MacListSearchToolbarAppearance(isActive: isSearchBarVisible))
-        .sheet(isPresented: renameSheetBinding) {
-            if let note = renamingNote {
-                AllNotesRenameSheet(
-                    title: $renameTitle,
-                    errorMessage: renameErrorMessage,
-                    isSaving: isRenamingNote,
-                    onCancel: { finishRenaming() },
-                    onSave: { renameNote(note) }
-                )
+        .onChange(of: listSnapshot.tagCounts) { _, tagCounts in
+            guard let selectedTag else { return }
+            if !tagCounts.contains(where: { $0.tag == selectedTag }) {
+                self.selectedTag = nil
             }
         }
         .alert("操作失败", isPresented: actionErrorBinding) {
@@ -125,51 +114,61 @@ struct AllNotesView: View {
             Text(noteCountText)
                 .font(DS.caption())
                 .foregroundColor(DS.textSubtle)
-            if listSnapshot.emptyReadableCount > 0 {
-                SWStatusBadge("\(listSnapshot.emptyReadableCount) 条空笔记", systemImage: "exclamationmark.triangle", style: .warning)
-            }
+                .padding(.top, 8)
+//            if listSnapshot.emptyReadableCount > 0 {
+//                SWStatusBadge("\(listSnapshot.emptyReadableCount) 条空笔记", systemImage: "exclamationmark.triangle", style: .warning)
+//            }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, DS.s3)
-        .padding(.top, DS.s3)
+        .padding(.top, DS.s3 - DS.s4)
         .padding(.bottom, DS.s2)
     }
 
     @ViewBuilder
     private var tagFilters: some View {
-        if !vaultStore.allTags.isEmpty || selectedTag != nil {
-            HStack(spacing: DS.s1) {
-                SWFilterChip(title: "全部", isSelected: selectedTag == nil) {
-                    selectedTag = nil
-                }
-                ForEach(listSnapshot.visibleTagCounts) { tagCount in
-                    SWFilterChip(title: tagCount.tag, isSelected: selectedTag == tagCount.tag) {
-                        selectedTag = tagCount.tag
-                    }
-                }
-                if let selectedTag, !listSnapshot.visibleTagCounts.contains(where: { $0.tag == selectedTag }) {
-                    SWFilterChip(title: selectedTag, isSelected: true) {}
-                }
-                if !listSnapshot.overflowTagCounts.isEmpty {
-                    Menu {
-                        ForEach(listSnapshot.overflowTagCounts) { tagCount in
-                            Button(tagCount.tag) {
-                                selectedTag = tagCount.tag
-                            }
-                        }
-                    } label: {
-                        Label("更多", systemImage: "ellipsis")
-                            .font(DS.caption())
-                    }
-                    .menuStyle(.button)
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
-                }
+        let tagCounts = listSnapshot.tagCounts
+        if !tagCounts.isEmpty || selectedTag != nil {
+            ViewThatFits(in: .horizontal) {
+                tagFilterRow(tagCounts: tagCounts, visibleCount: 8)
+                tagFilterRow(tagCounts: tagCounts, visibleCount: 7)
+                tagFilterRow(tagCounts: tagCounts, visibleCount: 6)
+                tagFilterRow(tagCounts: tagCounts, visibleCount: 5)
+                tagFilterRow(tagCounts: tagCounts, visibleCount: 4)
+                tagFilterRow(tagCounts: tagCounts, visibleCount: 3)
+                tagFilterRow(tagCounts: tagCounts, visibleCount: 2)
+                tagFilterRow(tagCounts: tagCounts, visibleCount: 1)
+                tagFilterRow(tagCounts: tagCounts, visibleCount: 0)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, DS.s3)
             .padding(.bottom, DS.s2)
         }
+    }
+
+    private func tagFilterRow(tagCounts: [TagCount], visibleCount: Int) -> some View {
+        let visibleTags = Array(tagCounts.prefix(visibleCount))
+        let overflowTags = Array(tagCounts.dropFirst(visibleCount))
+
+        return HStack(spacing: DS.s1) {
+            SWFilterChip(title: "全部", isSelected: selectedTag == nil) {
+                selectedTag = nil
+            }
+            ForEach(visibleTags) { tagCount in
+                SWFilterChip(title: tagCount.tag, isSelected: selectedTag == tagCount.tag) {
+                    selectedTag = tagCount.tag
+                }
+            }
+            if let selectedTag, !visibleTags.contains(where: { $0.tag == selectedTag }) {
+                SWFilterChip(title: selectedTag, isSelected: true) {}
+            }
+            if !overflowTags.isEmpty {
+                SWFilterChipMenu(title: "…", items: overflowTags.map(\.tag)) { tag in
+                    selectedTag = tag
+                }
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private var filteredNotes: [NoteListItem] {
@@ -223,9 +222,6 @@ struct AllNotesView: View {
                 onOpen: { openNote(item) },
                 menu: { noteContextMenu(for: item) }
             )
-            .listRowInsets(EdgeInsets(top: DS.s1, leading: DS.s3, bottom: DS.s1, trailing: DS.s3))
-            .listRowSeparator(.hidden)
-            .listRowBackground(DS.bg)
 
         case .locked(let info):
             AllNotesListRow(
@@ -236,33 +232,34 @@ struct AllNotesView: View {
                 onOpen: { openNote(item) },
                 menu: { noteContextMenu(for: item) }
             )
-            .listRowInsets(EdgeInsets(top: DS.s1, leading: DS.s3, bottom: DS.s1, trailing: DS.s3))
-            .listRowSeparator(.hidden)
-            .listRowBackground(DS.bg)
         }
     }
 
     @ViewBuilder
     private func noteContextMenu(for item: NoteListItem) -> some View {
-        Button("打开") { openNote(item) }
-        if case .readable(let note) = item {
+        switch item {
+        case .readable(let note):
             Button("重命名...") { beginRenaming(note) }
+                .disabled(note.isEncrypted)
+        case .locked:
+            Button("重命名...") {}
+                .disabled(true)
+        }
+        Divider()
+        switch item {
+        case .readable(let note):
+            if note.isEncrypted {
+                Button("转为明文笔记") { convertToPlain(item) }
+            } else {
+                Button("转为加密笔记") { convertToEncrypted(note) }
+            }
+        case .locked:
+            Button("转为明文笔记") { convertToPlain(item) }
         }
         Divider()
         Button("移到回收站", role: .destructive) {
             deleteNote(item)
         }
-    }
-
-    private var renameSheetBinding: Binding<Bool> {
-        Binding(
-            get: { renamingNote != nil },
-            set: { isPresented in
-                if !isPresented {
-                    finishRenaming()
-                }
-            }
-        )
     }
 
     private var actionErrorBinding: Binding<Bool> {
@@ -309,36 +306,75 @@ struct AllNotesView: View {
         }
     }
 
+    private func convertToEncrypted(_ note: Note) {
+        Task {
+            SyncStatusStore.shared.setSyncing()
+            do {
+                _ = try await vaultStore.encryptNoteForEditing(note, body: note.body)
+                SyncStatusStore.shared.setSaved()
+            } catch {
+                actionErrorMessage = "转为加密笔记失败：\(error.localizedDescription)"
+                SyncStatusStore.shared.setFailed(message: error.localizedDescription)
+            }
+        }
+    }
+
+    private func convertToPlain(_ item: NoteListItem) {
+        Task {
+            SyncStatusStore.shared.setSyncing()
+            do {
+                let encryptedNote: Note
+                switch item {
+                case .readable(let note):
+                    encryptedNote = note
+                case .locked(let info):
+                    encryptedNote = try await vaultStore.openEncryptedNote(info)
+                }
+                _ = try await vaultStore.decryptNotePermanently(encryptedNote)
+                SyncStatusStore.shared.setSaved()
+            } catch {
+                actionErrorMessage = "转为明文笔记失败：\(error.localizedDescription)"
+                SyncStatusStore.shared.setFailed(message: error.localizedDescription)
+            }
+        }
+    }
+
     private func beginRenaming(_ note: Note) {
-        renamingNote = note
-        renameTitle = vaultStore.displayTitle(for: note, emptyTitle: "")
-        renameErrorMessage = nil
-        isRenamingNote = false
-    }
+        let alert = NSAlert()
+        alert.messageText = "重命名笔记"
+        alert.informativeText = "标题只影响列表、菜单和文件名，不会改写正文。"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "保存")
+        alert.addButton(withTitle: "取消")
 
-    private func finishRenaming() {
-        renamingNote = nil
-        renameTitle = ""
-        renameErrorMessage = nil
-        isRenamingNote = false
-    }
+        let titleField = NSTextField(
+            string: vaultStore.displayTitle(for: note, emptyTitle: "")
+        )
+        titleField.placeholderString = "标题"
+        titleField.frame = NSRect(x: 0, y: 0, width: 320, height: 24)
+        titleField.selectText(nil)
+        alert.accessoryView = titleField
 
-    private func renameNote(_ note: Note) {
-        guard let cleanedTitle = NoteTitleFormatter.sanitizedGeneratedTitle(renameTitle) else {
-            renameErrorMessage = "请输入有效标题。"
-            return
+        let handleResponse: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .alertFirstButtonReturn else { return }
+            guard let cleanedTitle = NoteTitleFormatter.sanitizedGeneratedTitle(titleField.stringValue) else {
+                actionErrorMessage = "请输入有效标题。"
+                return
+            }
+
+            Task {
+                do {
+                    try await vaultStore.renameNote(note, title: cleanedTitle)
+                } catch {
+                    actionErrorMessage = "重命名失败：\(error.localizedDescription)"
+                }
+            }
         }
 
-        isRenamingNote = true
-        renameErrorMessage = nil
-        Task {
-            do {
-                try await vaultStore.renameNote(note, title: cleanedTitle)
-                finishRenaming()
-            } catch {
-                renameErrorMessage = "重命名失败：\(error.localizedDescription)"
-                isRenamingNote = false
-            }
+        if let window = NSApp.keyWindow {
+            alert.beginSheetModal(for: window, completionHandler: handleResponse)
+        } else {
+            handleResponse(alert.runModal())
         }
     }
 
@@ -431,48 +467,6 @@ struct AllNotesListRow<MenuContent: View>: View {
     }
 }
 
-struct AllNotesRenameSheet: View {
-    @Binding var title: String
-    let errorMessage: String?
-    let isSaving: Bool
-    let onCancel: () -> Void
-    let onSave: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: DS.s3) {
-            SWPageHeader(
-                title: "重命名笔记",
-                subtitle: "标题只影响列表、菜单和文件名，不会改写正文。",
-                systemImage: "pencil",
-                tint: DS.primaryDeep
-            )
-
-            TextField("标题", text: $title)
-                .textFieldStyle(.roundedBorder)
-                .font(DS.body())
-                .onSubmit(onSave)
-
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(DS.caption())
-                    .foregroundColor(DS.destructive)
-            }
-
-            HStack {
-                Spacer()
-                Button("取消", action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                Button(isSaving ? "保存中..." : "保存", action: onSave)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(isSaving)
-            }
-        }
-        .padding(DS.s4)
-        .frame(width: 420)
-        .background(DS.bg)
-    }
-}
-
 struct MacListSearchBar: View {
     let placeholder: String
     @Binding var text: String
@@ -517,7 +511,7 @@ struct MacListSearchBar: View {
         }
         .padding(.horizontal, DS.s3)
         .padding(.vertical, DS.s2)
-        .background(Color(nsColor: .windowBackgroundColor))
+//        .background(Color(nsColor: .windowBackgroundColor))
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(DS.line)

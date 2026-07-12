@@ -2,9 +2,12 @@ import SwiftUI
 
 struct NoteCardView: View {
     let note: Note
+    var displayTitle: String? = nil
+    var excludesHexColorsFromTags: Bool = false
     var isSelected: Bool = false
     var isSelecting: Bool = false
     var onTap: (() -> Void)?
+    var onRename: (() -> Void)?
     var onEdit: (() -> Void)?
     var onDelete: (() -> Void)?
     var onToggleSelect: (() -> Void)?
@@ -27,6 +30,11 @@ struct NoteCardView: View {
 
                     if !isSelecting {
                         Menu {
+                            if let onRename {
+                                Button { onRename() } label: {
+                                    Label("重命名", systemImage: "pencil.line")
+                                }
+                            }
                             if let onEdit {
                                 Button { onEdit() } label: {
                                     Label("编辑", systemImage: "pencil")
@@ -47,9 +55,22 @@ struct NoteCardView: View {
                     }
                 }
 
-                tagAwareText(note.body)
-                    .lineLimit(8)
-                    .fixedSize(horizontal: false, vertical: true)
+                if note.isEncrypted {
+                    VStack(alignment: .leading, spacing: DS.s2) {
+                        Text(displayTitle ?? NoteTitleFormatter.displayTitle(from: note.body))
+                            .font(DS.body().weight(.semibold))
+                            .foregroundColor(DS.textBody)
+                            .lineLimit(2)
+
+                        Label("加密笔记，打开后查看正文", systemImage: "lock.fill")
+                            .font(DS.caption())
+                            .foregroundColor(DS.textSubtle)
+                    }
+                } else {
+                    tagAwareText(note.body)
+                        .lineLimit(8)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -83,15 +104,11 @@ struct NoteCardView: View {
     }
 
     private func tagAwareText(_ source: String) -> Text {
-        let pattern = TagParser.pattern
-        guard let regex = try? NSRegularExpression(pattern: pattern) else {
-            return Text(source)
-                .font(DS.body())
-                .foregroundColor(DS.textBody)
-        }
-
         let ns = source as NSString
-        let matches = regex.matches(in: source, range: NSRange(location: 0, length: ns.length))
+        let matches = TagParser.matches(
+            in: source,
+            excludingHexColors: excludesHexColorsFromTags
+        )
 
         if matches.isEmpty {
             return Text(source)

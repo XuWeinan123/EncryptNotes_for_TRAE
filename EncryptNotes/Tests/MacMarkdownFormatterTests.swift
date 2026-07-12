@@ -389,8 +389,8 @@ final class MacMarkdownFormatterTests: XCTestCase {
         4. 编辑的时候似乎窗口还是会跳动，即使不是编辑新起了一行。
         5. 新建笔记时，笔记窗口会记住上次的大小——记住上次新建笔记时调整的窗口大小，如果是编辑旧笔记，则不需要记录。
         ## 昨天遗留的需求
-        **需求 7**：设置页增加 AI 标题模块支持开启 AI 标题
-        用户输入 DeepSeek / Gemini API Key，选择服务，自定义 Prompt；关闭 Editor 后调用 AI 总结标题，只影响 menu 和 iCloud 文件名显示，不改正文；可开启“标题例外”，若第一行是 # 标题 则跳过 AI。
+        **需求 7**：设置页增加维护日志开关
+        用户可以开启维护日志，辅助排查同步与存储问题；默认关闭，不影响正常使用。
         """
         let result = MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
         XCTAssertEqual(result, """
@@ -410,9 +410,9 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
         ## 昨天遗留的需求
 
-        **需求 7**：设置页增加 AI 标题模块支持开启 AI 标题
+        **需求 7**：设置页增加维护日志开关
 
-        用户输入 DeepSeek / Gemini API Key，选择服务，自定义 Prompt；关闭 Editor 后调用 AI 总结标题，只影响 menu 和 iCloud 文件名显示，不改正文；可开启“标题例外”，若第一行是 # 标题 则跳过 AI。
+        用户可以开启维护日志，辅助排查同步与存储问题；默认关闭，不影响正常使用。
 
         """)
     }
