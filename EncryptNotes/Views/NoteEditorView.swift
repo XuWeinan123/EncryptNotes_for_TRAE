@@ -65,6 +65,19 @@ struct NoteEditorView: View {
         self.mode = mode
         self.initialBody = initialBody
         self.onSave = onSave
+
+        // Existing notes must be present before SwiftUI creates the underlying
+        // UITextView. Injecting a full body from `onAppear` causes UIKit to
+        // rebuild attributed text while SwiftUI is measuring the sheet, which
+        // can lock the main thread in repeated text/layout updates.
+        if case .edit(let note) = mode {
+            _noteBody = State(initialValue: note.body)
+            _isEncrypted = State(initialValue: note.isEncrypted)
+            _persistedNote = State(initialValue: note)
+            _lastSavedBody = State(initialValue: note.body)
+            _lastSavedEncrypted = State(initialValue: note.isEncrypted)
+            _didConfigureInitialState = State(initialValue: true)
+        }
     }
 
     var body: some View {
