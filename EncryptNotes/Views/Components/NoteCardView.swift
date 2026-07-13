@@ -134,21 +134,24 @@ struct NoteCardView: View {
             let matchRange = match.range
             if matchRange.location > cursor {
                 let before = ns.substring(with: NSRange(location: cursor, length: matchRange.location - cursor))
-                result = result + Text(before)
+                let beforeText = Text(before)
                     .font(DS.body())
                     .foregroundColor(DS.textBody)
+                result = Text("\(result)\(beforeText)")
             }
             let tag = ns.substring(with: matchRange)
-            result = result + Text(tag)
+            let tagText = Text(tag)
                 .font(DS.body())
                 .foregroundColor(DS.primary)
+            result = Text("\(result)\(tagText)")
             cursor = matchRange.location + matchRange.length
         }
         if cursor < ns.length {
             let tail = ns.substring(from: cursor)
-            result = result + Text(tail)
+            let tailText = Text(tail)
                 .font(DS.body())
                 .foregroundColor(DS.textBody)
+            result = Text("\(result)\(tailText)")
         }
         return result
     }

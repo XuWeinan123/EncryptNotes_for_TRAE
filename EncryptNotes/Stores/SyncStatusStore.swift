@@ -31,10 +31,10 @@ final class SyncStatusStore: ObservableObject {
     private let monitorQueue = DispatchQueue(label: "com.xuweinan.sealnote.network-monitor")
 
     private init() {
-        pathMonitor.pathUpdateHandler = { [weak self] path in
+        pathMonitor.pathUpdateHandler = { path in
             let isAvailable = path.status == .satisfied
             Task { @MainActor in
-                self?.isNetworkAvailable = isAvailable
+                SyncStatusStore.shared.isNetworkAvailable = isAvailable
             }
         }
         pathMonitor.start(queue: monitorQueue)

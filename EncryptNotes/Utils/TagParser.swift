@@ -7,7 +7,7 @@ import Foundation
 /// - 内容不能为空、不包含空格。
 /// - 结束符为空格、换行或正文结尾。
 /// - 不做次级标签，`#产品/隐私` 视为单个标签 `产品/隐私`。
-enum TagParser {
+nonisolated enum TagParser {
     /// 匹配 `#` 后跟若干非空白、非 `#` 字符。
     static let pattern = #"#[^\s#]+"#
 
@@ -35,7 +35,7 @@ enum TagParser {
 }
 
 /// 标签及其在可读笔记中的出现次数。
-struct TagCount: Identifiable, Equatable {
+nonisolated struct TagCount: Identifiable, Equatable {
     let tag: String
     let count: Int
     var id: String { tag }

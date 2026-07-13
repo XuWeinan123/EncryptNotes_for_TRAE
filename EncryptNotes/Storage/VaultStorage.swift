@@ -1,7 +1,9 @@
 import Foundation
 
 extension Notification.Name {
-    static let vaultStorageDidMutate = Notification.Name("SealNoteVaultStorageDidMutate")
+    nonisolated static var vaultStorageDidMutate: Notification.Name {
+        Notification.Name("SealNoteVaultStorageDidMutate")
+    }
 }
 
 nonisolated func postVaultStorageMutation(at url: URL) {
