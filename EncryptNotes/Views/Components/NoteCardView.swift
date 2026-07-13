@@ -4,6 +4,7 @@ struct NoteCardView: View {
     let note: Note
     var displayTitle: String? = nil
     var excludesHexColorsFromTags: Bool = false
+    var isCloudOnly: Bool = false
     var isSelected: Bool = false
     var isSelecting: Bool = false
     var onTap: (() -> Void)?
@@ -55,7 +56,18 @@ struct NoteCardView: View {
                     }
                 }
 
-                if note.isEncrypted {
+                if isCloudOnly {
+                    VStack(alignment: .leading, spacing: DS.s2) {
+                        Text(displayTitle ?? NoteTitleFormatter.emptyTitle)
+                            .font(DS.body().weight(.semibold))
+                            .foregroundColor(DS.textBody)
+                            .lineLimit(2)
+
+                        Label("存储于 iCloud，打开时下载", systemImage: "icloud.and.arrow.down")
+                            .font(DS.caption())
+                            .foregroundColor(DS.textSubtle)
+                    }
+                } else if note.isEncrypted {
                     VStack(alignment: .leading, spacing: DS.s2) {
                         Text(displayTitle ?? NoteTitleFormatter.displayTitle(from: note.body))
                             .font(DS.body().weight(.semibold))

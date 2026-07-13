@@ -182,6 +182,19 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
         return try MarkdownNoteFile.parse(from: data)
     }
 
+    nonisolated func isItemDownloaded(at url: URL) -> Bool {
+        let keys: Set<URLResourceKey> = [
+            .isUbiquitousItemKey,
+            .ubiquitousItemDownloadingStatusKey
+        ]
+        guard let values = try? url.resourceValues(forKeys: keys),
+              values.isUbiquitousItem == true else {
+            return true
+        }
+        return values.ubiquitousItemDownloadingStatus == .current
+            || values.ubiquitousItemDownloadingStatus == .downloaded
+    }
+
     func saveMarkdownFile(_ file: MarkdownNoteFile, at url: URL) throws {
         let data = try file.render()
         try atomicWrite(data: data, to: url)

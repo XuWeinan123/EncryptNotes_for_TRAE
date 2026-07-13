@@ -33,6 +33,10 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack(path: $path) {
             SWPanelStack {
+                if !vaultStore.isKeyLoaded && vaultStore.lockedNoteCount > 0 {
+                    keyOverview
+                }
+
                 SWSectionPanel {
                     settingsLink(.notes, "笔记与编辑器", subtitle: "默认模式、Markdown 与编辑行为", systemImage: "textformat", tint: DS.ai)
                     SWRowDivider()
@@ -77,6 +81,36 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private var keyOverview: some View {
+        NavigationLink(value: SettingsRoute.key) {
+            HStack(spacing: DS.s3) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(DS.pro)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("密钥未加载")
+                        .font(DS.body())
+                        .foregroundColor(DS.textEmphasize)
+                    Text("\(vaultStore.lockedNoteCount) 条加密笔记")
+                        .font(DS.caption())
+                        .foregroundColor(DS.textSecondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(DS.textSubtle)
+            }
+            .padding(DS.s3)
+            .dsCardSurface(cornerRadius: DS.rMd, shadow: false)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("密钥未加载，\(vaultStore.lockedNoteCount) 条加密笔记")
+        .accessibilityHint("打开密钥与加密设置")
     }
 
     private func settingsLink(

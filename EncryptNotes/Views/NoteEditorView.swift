@@ -701,7 +701,11 @@ private struct NoteTextView: UIViewRepresentable {
     func makeUIView(context: Context) -> PlaceholderTextView {
         let textView = PlaceholderTextView()
         textView.placeholder = placeholder
-        textView.delegate = context.coordinator
+        // Configure the initial attributed text before installing the delegate.
+        // `textStorage.setAttributedString` can synchronously emit
+        // `textViewDidChange`; installing the delegate first would make that
+        // callback reapply the attributed text recursively and freeze the UI.
+        context.coordinator.isUpdating = true
         textView.applyMarkdownHighlighting(
             text: text,
             selectedRange: selectedRange,
@@ -709,6 +713,8 @@ private struct NoteTextView: UIViewRepresentable {
             lineHeightMultiple: lineHeightMultiple
         )
         textView.selectedRange = selectedRange
+        context.coordinator.isUpdating = false
+        textView.delegate = context.coordinator
         context.coordinator.textView = textView
         textView.backgroundColor = UIColor(DS.surfaceCard)
         return textView

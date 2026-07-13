@@ -73,6 +73,9 @@ final class VaultStore: ObservableObject {
     private var noteIndex: NoteIndex = NoteIndex()
     private var pendingDownloadRetryTask: Task<Void, Never>?
     private var pendingDownloadCount = 0
+    #if os(iOS)
+    private var cloudOnlyPlainNoteIDs = Set<String>()
+    #endif
 
     private struct LoadedNotesSnapshot {
         let currentKey: CryptoKit.SymmetricKey?
@@ -83,6 +86,9 @@ final class VaultStore: ObservableObject {
         let trashNotes: [TrashNote]
         let noteIndex: NoteIndex
         let pendingDownloadKeys: Set<String>
+        #if os(iOS)
+        let cloudOnlyPlainNoteIDs: Set<String>
+        #endif
     }
 
     private struct PreparedIndexResult {
@@ -307,6 +313,33 @@ final class VaultStore: ObservableObject {
     var lockedNoteCount: Int { lockedEncryptedNotes.count }
     var totalNoteCount: Int { readableNoteCount + lockedEncryptedNotes.count }
 
+    #if os(iOS)
+    func isCloudOnly(_ note: Note) -> Bool {
+        cloudOnlyPlainNoteIDs.contains(note.id)
+    }
+
+    func openCloudOnlyNote(_ note: Note) async throws -> Note {
+        guard cloudOnlyPlainNoteIDs.contains(note.id),
+              let entry = noteIndex.entry(for: note.id),
+              let url = Self.urlForEntry(entry, storage: storage) else {
+            return note
+        }
+        let mdFile = try storage.loadMarkdownFile(at: url)
+        let loaded = Note(
+            id: mdFile.noteId,
+            body: mdFile.body,
+            createdAt: mdFile.createdAt,
+            updatedAt: mdFile.updatedAt,
+            isEncrypted: false
+        )
+        cloudOnlyPlainNoteIDs.remove(note.id)
+        if let index = plainNotes.firstIndex(where: { $0.id == note.id }) {
+            plainNotes[index] = loaded
+        }
+        return loaded
+    }
+    #endif
+
     func initialize() async {
         do {
             let prepared = try await Task.detached(priority: .userInitiated) { [storage] in
@@ -400,6 +433,20 @@ final class VaultStore: ObservableObject {
                 changed = true
                 continue
             }
+
+            #if os(iOS)
+            // The index is the source of truth for iCloud placeholders. Do not
+            // open every note merely to validate it: opening requests a
+            // download and defeats on-demand storage.
+            if storage is ICloudVaultStorage {
+                guard seenNoteIds.insert(entry.noteId).inserted else {
+                    changed = true
+                    continue
+                }
+                survivingEntries.append(entry)
+                continue
+            }
+            #endif
 
             do {
                 let mdFile = try storage.loadMarkdownFile(at: url)
@@ -567,6 +614,18 @@ final class VaultStore: ObservableObject {
     }
 
     private func handlePendingDownloads(_ count: Int) {
+        #if os(iOS)
+        if isUsingICloudStorage {
+            // iOS presents index entries immediately and downloads note bodies
+            // only when opened. A missing/local-placeholder body is not an
+            // active sync job and must not start a refresh timer.
+            pendingDownloadCount = 0
+            pendingDownloadRetryTask?.cancel()
+            pendingDownloadRetryTask = nil
+            SyncStatusStore.shared.setSaved()
+            return
+        }
+        #endif
         pendingDownloadCount = count
         if count > 0 {
             recordPendingDownloads(count)
@@ -631,6 +690,9 @@ final class VaultStore: ObservableObject {
             lockedEncryptedNotes = snapshot.lockedEncryptedNotes
             trashNotes = snapshot.trashNotes
             noteIndex = snapshot.noteIndex
+            #if os(iOS)
+            cloudOnlyPlainNoteIDs = snapshot.cloudOnlyPlainNoteIDs
+            #endif
             state = .ready
             MaintenanceLogStore.shared.record("vault_loaded", fields: [
                 "plain": plainNotes.count,
@@ -665,10 +727,41 @@ final class VaultStore: ObservableObject {
         var trashNotes: [TrashNote] = []
         let updatedIndex = index
         var pendingDownloadKeys = Set<String>()
+        #if os(iOS)
+        var cloudOnlyPlainNoteIDs = Set<String>()
+        #endif
 
         for entry in index.entries {
             guard let url = urlForEntry(entry, storage: storage) else { continue }
             let currentFileKey = fileKey(fileName: entry.fileName, location: entry.location)
+
+            #if os(iOS)
+            if let iCloudStorage = storage as? ICloudVaultStorage,
+               (!FileManager.default.fileExists(atPath: url.path) || !iCloudStorage.isItemDownloaded(at: url)) {
+                let dates = cloudPlaceholderDates(for: url)
+                if entry.location == .notes, entry.mode == .plain {
+                    plainNotes.append(Note(
+                        id: entry.noteId,
+                        body: "",
+                        createdAt: dates.createdAt,
+                        updatedAt: dates.updatedAt,
+                        isEncrypted: false
+                    ))
+                    cloudOnlyPlainNoteIDs.insert(entry.noteId)
+                } else if entry.location == .notes {
+                    lockedEncryptedNotes.append(EncryptedNoteInfo(
+                        id: entry.noteId,
+                        url: url,
+                        title: NoteTitleFormatter.displayTitle(fromFileName: entry.fileName, emptyTitle: "加密笔记"),
+                        ciphertextPreview: "",
+                        fileSize: 0,
+                        createdAt: dates.createdAt,
+                        updatedAt: dates.updatedAt
+                    ))
+                }
+                continue
+            }
+            #endif
 
             guard FileManager.default.fileExists(atPath: url.path) else { continue }
 
@@ -738,6 +831,19 @@ final class VaultStore: ObservableObject {
         decryptedNotes.sort { $0.updatedAt > $1.updatedAt }
         trashNotes.sort { $0.deletedAt > $1.deletedAt }
 
+        #if os(iOS)
+        return LoadedNotesSnapshot(
+            currentKey: currentKey,
+            resetPreferredModeToPlain: resetPreferredModeToPlain,
+            plainNotes: plainNotes,
+            decryptedNotes: decryptedNotes,
+            lockedEncryptedNotes: lockedEncryptedNotes,
+            trashNotes: trashNotes,
+            noteIndex: updatedIndex,
+            pendingDownloadKeys: pendingDownloadKeys,
+            cloudOnlyPlainNoteIDs: cloudOnlyPlainNoteIDs
+        )
+        #else
         return LoadedNotesSnapshot(
             currentKey: currentKey,
             resetPreferredModeToPlain: resetPreferredModeToPlain,
@@ -748,7 +854,17 @@ final class VaultStore: ObservableObject {
             noteIndex: updatedIndex,
             pendingDownloadKeys: pendingDownloadKeys
         )
+        #endif
     }
+
+    #if os(iOS)
+    nonisolated private static func cloudPlaceholderDates(for url: URL) -> (createdAt: Date, updatedAt: Date) {
+        let keys: Set<URLResourceKey> = [.creationDateKey, .contentModificationDateKey]
+        let values = try? url.resourceValues(forKeys: keys)
+        let updatedAt = values?.contentModificationDate ?? values?.creationDate ?? .distantPast
+        return (values?.creationDate ?? updatedAt, updatedAt)
+    }
+    #endif
 
     nonisolated private static func urlForEntry(_ entry: NoteIndexEntry, storage: VaultStorage) -> URL? {
         guard let container = storage.containerURL else { return nil }
@@ -1550,6 +1666,9 @@ final class VaultStore: ObservableObject {
             lockedEncryptedNotes = snapshot.lockedEncryptedNotes
             trashNotes = snapshot.trashNotes
             noteIndex = snapshot.noteIndex
+            #if os(iOS)
+            cloudOnlyPlainNoteIDs = snapshot.cloudOnlyPlainNoteIDs
+            #endif
             handlePendingDownloads(prepared.pendingDownloadKeys.union(snapshot.pendingDownloadKeys).count)
         } catch {
             state = .error(message: error.localizedDescription)

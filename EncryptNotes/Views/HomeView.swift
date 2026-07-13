@@ -45,13 +45,6 @@ struct HomeView: View {
         return false
     }
 
-    private var pendingDownloadCount: Int {
-        if case .pendingDownloads(let count) = syncStore.status {
-            return count
-        }
-        return 0
-    }
-
     var body: some View {
         ZStack {
             mainContent
@@ -381,7 +374,6 @@ struct HomeView: View {
     private var emptyTitle: String {
         if !vaultStore.searchText.isEmpty { return "未找到匹配笔记" }
         if let tag = vaultStore.selectedTag { return "没有 \(tag)" }
-        if pendingDownloadCount > 0 { return "正在同步笔记" }
         if vaultStore.lockedNoteCount > 0 && !vaultStore.isKeyLoaded { return "有笔记待解锁" }
         return "暂无笔记"
     }
@@ -391,44 +383,10 @@ struct HomeView: View {
         if let tag = vaultStore.selectedTag {
             return "没有包含 \(tag) 的可读笔记。"
         }
-        if pendingDownloadCount > 0 {
-            return "还有 \(pendingDownloadCount) 篇笔记在从 iCloud 下载，完成后会自动显示。"
-        }
         if vaultStore.lockedNoteCount > 0 && !vaultStore.isKeyLoaded {
             return "前往密钥设置加载原密钥后，加密笔记会在本机解密显示。"
         }
         return "点击下方按钮创建第一条笔记。"
-    }
-
-    private var keyStatusBanner: some View {
-        HStack(spacing: DS.s3) {
-            Image(systemName: "lock.fill")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(DS.pro)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("密钥未加载")
-                    .font(DS.body())
-                    .foregroundColor(DS.textEmphasize)
-                Text("\(vaultStore.lockedNoteCount) 条加密笔记")
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSecondary)
-            }
-
-            Spacer()
-
-            Button {
-                openKeySettings()
-            } label: {
-                Image(systemName: "key")
-                    .font(.system(size: 17, weight: .semibold))
-            }
-            .buttonStyle(.plain)
-            .foregroundColor(DS.primaryDeep)
-            .accessibilityLabel("打开密钥设置")
-        }
-        .padding(DS.s3)
-        .dsCardSurface(cornerRadius: DS.rMd, shadow: false)
     }
 
     private var homeFeed: some View {
@@ -436,12 +394,6 @@ struct HomeView: View {
             VStack(spacing: DS.memoGap) {
                 if case .failed(let message) = syncStore.status {
                     syncErrorBanner(message)
-                } else if case .pendingDownloads(let count) = syncStore.status {
-                    pendingDownloadsBanner(count)
-                }
-
-                if !vaultStore.isKeyLoaded && vaultStore.lockedNoteCount > 0 {
-                    keyStatusBanner
                 }
 
                 tagChips
@@ -483,11 +435,11 @@ struct HomeView: View {
     private var tagChips: some View {
         VStack(alignment: .leading, spacing: DS.s1) {
             HStack {
-                Text("标签")
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSubtle)
-
-                Spacer()
+//                Text("标签")
+//                    .font(DS.caption())
+//                    .foregroundColor(DS.textSubtle)
+//
+//                Spacer()
 
                 if let selectedTag = vaultStore.selectedTag {
                     Button {
@@ -567,28 +519,6 @@ struct HomeView: View {
             .foregroundColor(DS.primaryDeep)
         }
         .padding(DS.s3)
-        .dsCardSurface(cornerRadius: DS.rMd, shadow: false)
-    }
-
-    private func pendingDownloadsBanner(_ count: Int) -> some View {
-        HStack(spacing: DS.s3) {
-            ProgressView()
-                .controlSize(.small)
-                .tint(DS.primaryDeep)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("正在下载笔记")
-                    .font(DS.body())
-                    .foregroundColor(DS.textEmphasize)
-                Text("还有 \(count) 篇笔记在从 iCloud 下载，完成后会自动显示。")
-                    .font(DS.caption())
-                    .foregroundColor(DS.textSecondary)
-                    .lineLimit(2)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(DS.cardPadding)
         .dsCardSurface(cornerRadius: DS.rMd, shadow: false)
     }
 
@@ -676,10 +606,11 @@ struct HomeView: View {
                 note: note,
                 displayTitle: vaultStore.displayTitle(for: note),
                 excludesHexColorsFromTags: settings.excludeHexColorsFromTags,
+                isCloudOnly: vaultStore.isCloudOnly(note),
                 isSelected: isItemSelected,
                 isSelecting: isSelecting,
                 onTap: {
-                    withAnimation(.easeInOut(duration: 0.2)) { selectedNote = note }
+                    openReadableNote(note)
                 },
                 onRename: note.isEncrypted ? nil : {
                     beginRenaming(note)
@@ -730,6 +661,21 @@ struct HomeView: View {
                 }
             } catch {
                 vaultStore.lastError = "解锁失败：\(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func openReadableNote(_ note: Note) {
+        guard vaultStore.isCloudOnly(note) else {
+            withAnimation(.easeInOut(duration: 0.2)) { selectedNote = note }
+            return
+        }
+        Task { @MainActor in
+            do {
+                let loaded = try await vaultStore.openCloudOnlyNote(note)
+                withAnimation(.easeInOut(duration: 0.2)) { selectedNote = loaded }
+            } catch {
+                vaultStore.lastError = "下载笔记失败：\(error.localizedDescription)"
             }
         }
     }
