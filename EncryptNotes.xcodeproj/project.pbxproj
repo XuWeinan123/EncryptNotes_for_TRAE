@@ -24,7 +24,7 @@
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* EncryptNotes.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EncryptNotes.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000121 /* EncryptNotesTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EncryptNotesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		000000000000000000000122 /* EncryptNotesMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EncryptNotesMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000122 /* Seal Note.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Seal Note.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -133,7 +133,7 @@
 			children = (
 				000000000000000000000120 /* EncryptNotes.app */,
 				000000000000000000000121 /* EncryptNotesTests.xctest */,
-				000000000000000000000122 /* EncryptNotesMac.app */,
+				000000000000000000000122 /* Seal Note.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -202,7 +202,7 @@
 				000000000000000610000000 /* MarkdownView */,
 			);
 			productName = EncryptNotesMac;
-			productReference = 000000000000000000000122 /* EncryptNotesMac.app */;
+			productReference = 000000000000000000000122 /* Seal Note.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -478,7 +478,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = Icon;
 				CODE_SIGN_ENTITLEMENTS = EncryptNotes/EncryptNotesDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = BPP589VP97;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
@@ -503,7 +503,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xuweinan.sealnote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -528,7 +528,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = Icon;
 				CODE_SIGN_ENTITLEMENTS = EncryptNotes/EncryptNotes.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = BPP589VP97;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
@@ -553,7 +553,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xuweinan.sealnote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -620,7 +620,7 @@
 				CODE_SIGN_ENTITLEMENTS = EncryptNotes/EncryptNotesMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = BPP589VP97;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -631,7 +631,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Seal Note";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.5;
+				MARKETING_VERSION = 0.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xuweinan.sealnote;
 				PRODUCT_NAME = "Seal Note";
 				REGISTER_APP_GROUPS = YES;
@@ -653,7 +653,7 @@
 				CODE_SIGN_ENTITLEMENTS = EncryptNotes/EncryptNotesMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = BPP589VP97;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -664,7 +664,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Seal Note";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.5;
+				MARKETING_VERSION = 0.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.xuweinan.sealnote;
 				PRODUCT_NAME = "Seal Note";
 				REGISTER_APP_GROUPS = YES;
@@ -722,7 +722,7 @@
 			repositoryURL = "https://github.com/LiYanan2004/MarkdownView.git";
 			requirement = {
 				kind = exactVersion;
-				version = 2.7.0;
+				version = 3.0.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

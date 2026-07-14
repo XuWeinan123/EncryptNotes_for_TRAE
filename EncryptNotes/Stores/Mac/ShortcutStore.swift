@@ -82,6 +82,8 @@ final class ShortcutStore: ObservableObject {
     @Published private(set) var markdownShortcuts: [MarkdownShortcutAction: MarkdownShortcut]
     @Published private(set) var editorShortcuts: [EditorShortcutAction: MarkdownShortcut]
 
+    private var newNoteKeyEquivalent: String
+
     private var hotKeyRefs: [UInt32: EventHotKeyRef] = [:]
     private var eventHandlerRef: EventHandlerRef?
     private let defaults: UserDefaults
@@ -101,8 +103,10 @@ final class ShortcutStore: ObservableObject {
         if let data = defaults.data(forKey: newNoteKeyDefaults),
            let shortcut = try? JSONDecoder.decode(ShortcutData.self, from: data) {
             self.newNoteKey = (shortcut.keyCode, shortcut.modifiers)
+            self.newNoteKeyEquivalent = shortcut.keyEquivalent ?? Self.keyEquivalent(for: shortcut.keyCode)
         } else {
             self.newNoteKey = Self.defaultNewNoteShortcut
+            self.newNoteKeyEquivalent = Self.keyEquivalent(for: Self.defaultNewNoteShortcut.keyCode)
         }
 
         if let data = defaults.data(forKey: markdownShortcutDefaults),
@@ -158,9 +162,24 @@ final class ShortcutStore: ObservableObject {
         }
     }
 
-    func setNewNoteShortcut(keyCode: UInt32, modifiers: UInt32) {
-        newNoteKey = (keyCode, modifiers)
-        let data = try? JSONEncoder.encode(ShortcutData(keyCode: keyCode, modifiers: modifiers))
+    var newNoteShortcut: MarkdownShortcut {
+        MarkdownShortcut(
+            keyCode: newNoteKey.keyCode,
+            modifiers: newNoteKey.modifiers,
+            keyEquivalent: newNoteKeyEquivalent
+        )
+    }
+
+    func setNewNoteShortcut(_ shortcut: MarkdownShortcut) {
+        newNoteKey = (shortcut.keyCode, shortcut.modifiers)
+        newNoteKeyEquivalent = shortcut.keyEquivalent
+        let data = try? JSONEncoder.encode(
+            ShortcutData(
+                keyCode: shortcut.keyCode,
+                modifiers: shortcut.modifiers,
+                keyEquivalent: shortcut.keyEquivalent
+            )
+        )
         defaults.set(data, forKey: newNoteKeyDefaults)
         registerHotKeys()
     }
@@ -197,6 +216,7 @@ final class ShortcutStore: ObservableObject {
 
     func resetAllShortcuts() {
         newNoteKey = Self.defaultNewNoteShortcut
+        newNoteKeyEquivalent = Self.keyEquivalent(for: Self.defaultNewNoteShortcut.keyCode)
         markdownShortcuts = Self.defaultMarkdownShortcuts
         editorShortcuts = Self.defaultEditorShortcuts
         defaults.removeObject(forKey: newNoteKeyDefaults)
@@ -256,6 +276,15 @@ final class ShortcutStore: ObservableObject {
         if flags.contains(.shift) { modifiers |= UInt32(shiftKey) }
         if flags.contains(.command) { modifiers |= UInt32(cmdKey) }
         return modifiers
+    }
+
+    static func eventModifierFlags(from carbonModifiers: UInt32) -> NSEvent.ModifierFlags {
+        var flags: NSEvent.ModifierFlags = []
+        if carbonModifiers & UInt32(controlKey) != 0 { flags.insert(.control) }
+        if carbonModifiers & UInt32(optionKey) != 0 { flags.insert(.option) }
+        if carbonModifiers & UInt32(shiftKey) != 0 { flags.insert(.shift) }
+        if carbonModifiers & UInt32(cmdKey) != 0 { flags.insert(.command) }
+        return flags
     }
 
     static func displayStringForKey(keyCode: UInt32, modifiers: UInt32) -> String {
@@ -345,6 +374,19 @@ final class ShortcutStore: ObservableObject {
     private struct ShortcutData: Codable {
         let keyCode: UInt32
         let modifiers: UInt32
+        let keyEquivalent: String?
+    }
+
+    private static func keyEquivalent(for keyCode: UInt32) -> String {
+        let equivalents: [UInt32: String] = [
+            0: "a", 1: "s", 2: "d", 3: "f", 4: "h", 5: "g", 6: "z", 7: "x",
+            8: "c", 9: "v", 11: "b", 12: "q", 13: "w", 14: "e", 15: "r", 16: "y",
+            17: "t", 18: "1", 19: "2", 20: "3", 21: "4", 22: "6", 23: "5", 24: "=",
+            25: "9", 26: "7", 27: "-", 28: "8", 29: "0", 30: "]", 31: "o", 32: "u",
+            33: "[", 34: "i", 35: "p", 37: "l", 38: "j", 39: "'", 40: "k", 41: ";",
+            42: "\\", 43: ",", 44: "/", 45: "n", 46: "m", 47: ".", 50: "`"
+        ]
+        return equivalents[keyCode] ?? ""
     }
 }
 

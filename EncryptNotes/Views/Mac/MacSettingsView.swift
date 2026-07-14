@@ -643,7 +643,7 @@ struct MacSettingsView: View {
         ShortcutRecorderView(recordingAction: $recordingAction) { action, shortcut in
             switch action {
             case .newNote:
-                shortcutStore.setNewNoteShortcut(keyCode: shortcut.keyCode, modifiers: shortcut.modifiers)
+                shortcutStore.setNewNoteShortcut(shortcut)
             case .markdown(let markdownAction):
                 shortcutStore.setMarkdownShortcut(shortcut, for: markdownAction)
             case .editor(let editorAction):

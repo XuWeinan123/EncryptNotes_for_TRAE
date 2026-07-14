@@ -2,7 +2,7 @@
 set -euo pipefail
 
 MODE="${1:-run}"
-APP_NAME="EncryptNotesMac"
+APP_NAME="Seal Note"
 PROJECT="EncryptNotes.xcodeproj"
 SCHEME="EncryptNotesMac"
 CODE_SIGNING_ALLOWED="${CODE_SIGNING_ALLOWED:-YES}"

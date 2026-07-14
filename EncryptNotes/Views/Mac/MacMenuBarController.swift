@@ -98,12 +98,15 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
     private func buildMenu(_ menu: NSMenu) {
         menu.removeAllItems()
 
+        let newNoteShortcut = shortcutStore.newNoteShortcut
         let newNoteItem = NSMenuItem(
             title: "新建笔记",
             action: #selector(handleNewNote),
-            keyEquivalent: "z"
+            keyEquivalent: newNoteShortcut.keyEquivalent
         )
-        newNoteItem.keyEquivalentModifierMask = [.control, .command]
+        newNoteItem.keyEquivalentModifierMask = ShortcutStore.eventModifierFlags(
+            from: newNoteShortcut.modifiers
+        )
         newNoteItem.target = self
         menu.addItem(newNoteItem)
 
