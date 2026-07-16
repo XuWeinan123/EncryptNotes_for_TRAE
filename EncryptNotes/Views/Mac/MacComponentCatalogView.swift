@@ -460,6 +460,9 @@ private struct MacComponentPreviewView: View {
         case "Alert / Sheet / ConfirmationDialog":
             HStack(spacing: DS.s3) {
                 Button("显示 Alert") { isAlertPresented = true }
+                Button("显示新版本提示") {
+                    GitHubReleaseUpdateChecker.shared.presentUpdateAlertPreview()
+                }
                 Button("显示 Sheet") { isSheetPresented = true }
                 Button("显示确认菜单") { isConfirmationPresented = true }
             }

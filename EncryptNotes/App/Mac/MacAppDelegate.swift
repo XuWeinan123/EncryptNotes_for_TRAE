@@ -19,6 +19,10 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
         menuBarController.openIntroWindowIfNeeded()
 
         Task {
+            await GitHubReleaseUpdateChecker.shared.checkForUpdates()
+        }
+
+        Task {
             await VaultStore.shared.initialize()
             VaultExternalChangeMonitor.shared.start()
             #if DEBUG

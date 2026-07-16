@@ -672,7 +672,7 @@ private class PlaceholderTextView: UITextView {
             undoManager?.disableUndoRegistration()
         }
         textStorage.setAttributedString(attributed)
-        if shouldRestoreUndoRegistration {
+        if shouldRestoreUndoRegistration, undoManager?.isUndoRegistrationEnabled == false {
             undoManager?.enableUndoRegistration()
         }
         typingAttributes = MacMarkdownHighlighter.iosTypingAttributes(
