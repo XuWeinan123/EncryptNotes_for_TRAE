@@ -7,9 +7,9 @@ enum ZipError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .createFailed: return "无法创建 zip 文件"
-        case .addEntryFailed(let name): return "无法添加文件到 zip: \(name)"
-        case .invalidSource: return "无效的源路径"
+        case .createFailed: return L10n.string("Could not create the zip file")
+        case .addEntryFailed(let name): return L10n.string("Could not add file to zip: %@", name)
+        case .invalidSource: return L10n.string("Invalid source path")
         }
     }
 }

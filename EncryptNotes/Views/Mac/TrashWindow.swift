@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 
 struct TrashView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var vaultStore = VaultStore.shared
     @State private var showingEmptyTrashConfirmation = false
     @State private var searchText = ""
@@ -12,7 +13,7 @@ struct TrashView: View {
         VStack(spacing: 0) {
             if isSearchBarVisible {
                 MacListSearchBar(
-                    placeholder: "搜索回收站…",
+                    placeholder: "Search Trash…",
                     text: $searchText,
                     onClose: { hideSearchBar() }
                 )
@@ -20,6 +21,7 @@ struct TrashView: View {
 
             if filteredTrashNotes.isEmpty {
                 emptyRow
+                    .transition(.opacity)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -29,11 +31,12 @@ struct TrashView: View {
                             trashRow(for: trashNote)
                                 .padding(.horizontal, DS.s3)
                                 .padding(.vertical, DS.s1)
+                                .transition(trashListTransition)
                                 .contextMenu {
-                                    Button("恢复") {
+                                    Button("Restore") {
                                         restore(trashNote)
                                     }
-                                    Button("永久删除", role: .destructive) {
+                                    Button("Delete Permanently", role: .destructive) {
                                         permanentlyDelete(trashNote)
                                     }
                                 }
@@ -45,23 +48,25 @@ struct TrashView: View {
                     }
                 }
                 .background(DS.bg)
+                .transition(.opacity)
             }
         }
+        .animation(trashListAnimation, value: vaultStore.trashNotes.map(\.id))
         .background(DS.bg)
         .dsLiquidGlassToolbar()
-        .navigationTitle("回收站")
+        .navigationTitle("Trash")
         .toolbar { trashToolbar }
         .background(MacListSearchToolbarAppearance(isActive: isSearchBarVisible))
-        .alert("确认清空回收站？", isPresented: $showingEmptyTrashConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("清空", role: .destructive) {
+        .alert("Empty Trash?", isPresented: $showingEmptyTrashConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Empty", role: .destructive) {
                 emptyTrash()
             }
         } message: {
-            Text("回收站中的所有笔记将被永久删除，无法恢复。")
+            Text("All notes in Trash will be permanently deleted and cannot be recovered.")
         }
-        .alert("操作失败", isPresented: actionErrorBinding) {
-            Button("好") {
+        .alert("Operation Failed", isPresented: actionErrorBinding) {
+            Button("OK") {
                 actionErrorMessage = nil
             }
         } message: {
@@ -75,20 +80,20 @@ struct TrashView: View {
             Button {
                 toggleSearchBar()
             } label: {
-                Label("搜索", systemImage: "magnifyingglass")
+                Label("Search", systemImage: "magnifyingglass")
                     .labelStyle(.iconOnly)
             }
-            .help("搜索")
+            .help("Search")
             .keyboardShortcut("f", modifiers: .command)
 
             Button(role: .destructive) {
                 showingEmptyTrashConfirmation = true
             } label: {
-                Label("清空", systemImage: "trash")
+                Label("Empty", systemImage: "trash")
                     .labelStyle(.iconOnly)
             }
             .disabled(vaultStore.trashNotes.isEmpty)
-            .help(vaultStore.trashNotes.isEmpty ? "回收站为空" : "永久删除回收站中的所有笔记")
+            .help(vaultStore.trashNotes.isEmpty ? "Trash Is Empty" : "Permanently delete all notes in Trash")
         }
     }
 
@@ -108,10 +113,10 @@ struct TrashView: View {
     private var listSummary: some View {
         HStack(spacing: DS.s2) {
             Spacer(minLength: 0)
-            Text("回收站 \(filteredTrashNotes.count) 条笔记")
+            Text(L10n.string("%lld notes in Trash", Int64(filteredTrashNotes.count)))
                 .font(DS.caption())
                 .foregroundColor(DS.textSubtle)
-            Text(vaultStore.trashNotes.isEmpty ? "没有已删除笔记" : "删除的笔记会保留 30 天")
+            Text(vaultStore.trashNotes.isEmpty ? "No Deleted Notes" : "Deleted notes are kept for 30 days")
                 .font(DS.caption())
                 .foregroundColor(DS.textSubtle)
             Spacer(minLength: 0)
@@ -131,10 +136,24 @@ struct TrashView: View {
         }
     }
 
+    private var trashListAnimation: Animation? {
+        reduceMotion ? nil : .snappy(duration: 0.28, extraBounce: 0)
+    }
+
+    private var trashListTransition: AnyTransition {
+        if reduceMotion {
+            return .opacity
+        }
+        return .asymmetric(
+            insertion: .opacity.combined(with: .scale(scale: 0.98, anchor: .top)),
+            removal: .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
+        )
+    }
+
     private var emptyRow: some View {
         SWEmptyState(
-            title: vaultStore.trashNotes.isEmpty ? "回收站为空" : "没有匹配的笔记",
-            message: vaultStore.trashNotes.isEmpty ? "删除的笔记会在这里保留 30 天" : "换个关键词试试，或清空搜索内容。",
+            title: vaultStore.trashNotes.isEmpty ? "Trash Is Empty" : "No Matching Notes",
+            message: vaultStore.trashNotes.isEmpty ? "Deleted notes are kept here for 30 days" : "Try another keyword or clear the search.",
             systemImage: "trash"
         )
     }
@@ -156,15 +175,15 @@ struct TrashView: View {
                             .clipShape(Circle())
                             .overlay(Circle().stroke(DS.line, lineWidth: 0.5))
                     }
-                    SWStatusBadge("\(trashNote.remainingDays) 天", systemImage: "clock", style: .warning)
+                    SWStatusBadge(L10n.string("%lld days", Int64(trashNote.remainingDays)), systemImage: "clock", style: .warning)
                 }
 
                 Menu {
-                    Button("恢复") {
+                    Button("Restore") {
                         restore(trashNote)
                     }
                     Divider()
-                    Button("永久删除", role: .destructive) {
+                    Button("Delete Permanently", role: .destructive) {
                         permanentlyDelete(trashNote)
                     }
                 } label: {
@@ -176,7 +195,7 @@ struct TrashView: View {
                 .controlSize(.regular)
                 .tint(DS.textSecondary)
                 .menuIndicator(.hidden)
-                .help("更多操作")
+                .help("More Actions")
             }
         }
     }
@@ -187,7 +206,7 @@ struct TrashView: View {
         } else if trashNote.isEncrypted {
             return trashNote.title
         } else {
-            return "(无内容)"
+            return "(No Content)"
         }
     }
 
@@ -263,13 +282,13 @@ struct TrashListRow<Trailing: View>: View {
     var body: some View {
         HStack(spacing: DS.s3) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(DS.textStrong)
                     .lineLimit(1)
 
                 if !subtitle.isEmpty {
-                    Text(subtitle)
+                    Text(LocalizedStringKey(subtitle))
                         .font(DS.caption())
                         .foregroundColor(DS.textSubtle)
                         .lineLimit(1)

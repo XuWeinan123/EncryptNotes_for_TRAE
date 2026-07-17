@@ -16,7 +16,7 @@ struct EncryptedCardView: View {
                     .padding(.top, DS.s1)
             }
 
-            VStack(alignment: .leading, spacing: DS.memoGap) {
+            VStack(alignment: .leading, spacing: DS.noteGap) {
                 HStack(spacing: DS.s2) {
                     Text(timestampText)
                         .font(DS.caption())
@@ -37,7 +37,7 @@ struct EncryptedCardView: View {
                             }
                             if let onDelete {
                                 Button(role: .destructive) { onDelete() } label: {
-                                    Label("删除", systemImage: "trash")
+                                    Label("Delete", systemImage: "trash")
                                 }
                             }
                         } label: {
@@ -62,7 +62,7 @@ struct EncryptedCardView: View {
                     .opacity(0.7)
 
                 HStack(spacing: DS.s1) {
-                    Text(isKeyLoaded ? "点击解锁查看" : "前往密钥设置")
+                    Text(isKeyLoaded ? "Click to Unlock" : "Go to Key Settings")
                         .font(DS.caption())
                         .foregroundColor(DS.textSubtle)
 
@@ -93,11 +93,11 @@ struct EncryptedCardView: View {
     private var timestampText: String {
         let timestamp = DateFormatters.formatDisplayDateTime(info.updatedAt)
             .replacingOccurrences(of: ".", with: "-")
-        return "\(timestamp) · 加密"
+        return L10n.string("%@ · Encrypted", timestamp)
     }
 
     private var openActionTitle: String {
-        isKeyLoaded ? "解锁查看" : "打开密钥设置"
+        isKeyLoaded ? "Unlock to View" : "Open Key Settings"
     }
 
     private var openActionIcon: String {

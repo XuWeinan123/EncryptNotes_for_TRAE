@@ -36,15 +36,15 @@ enum MacNoteModeConversionNotice: Equatable {
 
     var title: String {
         switch self {
-        case .encrypted: return "已转为加密笔记"
-        case .plain: return "已转为明文笔记"
+        case .encrypted: return "Converted to an Encrypted Note"
+        case .plain: return "Converted to Plain Text"
         }
     }
 
     var message: String {
         switch self {
-        case .encrypted: return "正文已加密并上锁"
-        case .plain: return "正文现在以明文保存"
+        case .encrypted: return "The note content is encrypted and locked"
+        case .plain: return "The note content is now saved as plain text"
         }
     }
 
@@ -66,10 +66,10 @@ private struct MacNoteModeConversionToast: View {
                 .foregroundStyle(DS.primaryDeep)
 
             VStack(alignment: .leading, spacing: DS.s1) {
-                Text(notice.title)
+                Text(LocalizedStringKey(notice.title))
                     .font(DS.title())
                     .foregroundStyle(DS.textStrong)
-                Text(notice.message)
+                Text(LocalizedStringKey(notice.message))
                     .font(DS.caption())
                     .foregroundStyle(DS.textSecondary)
             }
@@ -117,7 +117,7 @@ struct StickyNoteEditorView: View {
         ZStack(alignment: .bottomTrailing) {
             MacTextView(
                 text: $viewModel.text,
-                placeholder: "随便写点什么吧",
+                placeholder: "Write something…",
                 fontSize: CGFloat(settings.macEditorFontSize),
                 lineHeightMultiple: CGFloat(settings.macEditorLineHeightMultiple),
                 autoFocus: true,
@@ -178,7 +178,7 @@ struct StickyNoteEditorView: View {
             }
 
             if !syncStore.isNetworkAvailable {
-                Text("无网络")
+                Text("Offline")
                     .font(DS.caption())
                     .foregroundColor(DS.destructive)
                     .padding(.trailing, DS.s3)
@@ -222,7 +222,7 @@ struct StickyNoteEditorView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { toggleMarkdownPreview() }) {
                     Label(
-                        isMarkdownPreviewing ? "返回编辑" : "预览",
+                        isMarkdownPreviewing ? "Back to Editing" : "Preview",
                         systemImage: isMarkdownPreviewing ? "stop.fill" : "play.fill"
                     )
                     .labelStyle(.iconOnly)
@@ -234,42 +234,42 @@ struct StickyNoteEditorView: View {
                     || isMarkdownPreviewSwitching
                 )
                 .macKeyboardShortcut(markdownPreviewShortcut)
-                .help(isMarkdownPreviewing ? "返回编辑" : "Markdown 预览")
+                .help(isMarkdownPreviewing ? "Back to Editing" : "Markdown Preview")
             }
             ToolbarSpacer()
             ToolbarItemGroup(placement: .primaryAction) {
                 if viewModel.note.isEncrypted {
                     Button(action: { toggleEncryptionLock() }) {
                         Label(
-                            viewModel.isContentLocked ? "解锁" : "上锁",
+                            viewModel.isContentLocked ? "Unlock" : "Lock",
                             systemImage: viewModel.isContentLocked ? "lock.fill" : "lock.open.fill"
                         )
                         .labelStyle(.iconOnly)
                         .frame(width: DS.macToolbarIconWidth)
                     }
                     .disabled(viewModel.isEncryptionToggling)
-                    .help(viewModel.isContentLocked ? "解锁" : "上锁")
+                    .help(viewModel.isContentLocked ? "Unlock" : "Lock")
                 }
 
                 Button(action: { viewModel.copyNoteText() }) {
                     Label(
-                        viewModel.didCopy ? "已复制" : "复制",
+                        viewModel.didCopy ? "Copied" : "Copy",
                         systemImage: viewModel.didCopy ? "checkmark" : "square.on.square"
                     )
                     .labelStyle(.iconOnly)
                     .frame(width: DS.macToolbarIconWidth)
                 }
                 .disabled(viewModel.isContentLocked)
-                .help(viewModel.didCopy ? "已复制" : "复制")
+                .help(viewModel.didCopy ? "Copied" : "Copy")
 
                 Menu {
                     Button(action: { viewModel.fitWindowToContent() }) {
-                        Label("适应内容", systemImage: "arrow.up.left.and.arrow.down.right")
+                        Label("Fit to Content", systemImage: "arrow.up.left.and.arrow.down.right")
                     }
                     .disabled(viewModel.isContentLocked)
                     
                     Button(action: { toggleFindInterface() }) {
-                        Label("搜索", systemImage: "magnifyingglass")
+                        Label("Search", systemImage: "magnifyingglass")
                     }
                     .keyboardShortcut("f", modifiers: .command)
                     .disabled(viewModel.isContentLocked || isMarkdownPreviewing)
@@ -278,14 +278,14 @@ struct StickyNoteEditorView: View {
                         Divider()
 
                         Button(action: { viewModel.decryptPermanently() }) {
-                            Label("转为明文笔记", systemImage: "lock.open")
+                            Label("Convert to Plain Text", systemImage: "lock.open")
                         }
                         .disabled(viewModel.isContentLocked || viewModel.isEncryptionToggling)
                     } else {
                         Divider()
 
                         Button(action: { viewModel.encryptAndLock() }) {
-                            Label("转为加密笔记", systemImage: "lock")
+                            Label("Convert to Encrypted", systemImage: "lock")
                         }
                         .disabled(viewModel.isContentLocked || viewModel.isEncryptionToggling)
                     }
@@ -293,36 +293,36 @@ struct StickyNoteEditorView: View {
                     Divider()
 
                     Button(role: .destructive, action: { viewModel.deleteNote() }) {
-                        Label("移到回收站", systemImage: "trash")
+                        Label("Move to Trash", systemImage: "trash")
                     }
                 } label: {
-                    Label("更多", systemImage: "ellipsis")
+                    Label("More", systemImage: "ellipsis")
                         .labelStyle(.iconOnly)
                         .frame(width: DS.macToolbarIconWidth)
                 }
                 .disabled(viewModel.isContentLocked)
                 .menuIndicator(.hidden)
-                .help("更多")
+                .help("More")
             }
             ToolbarSpacer()
             ToolbarItem {
                 if viewModel.isPinned {
                     Button(action: { viewModel.togglePin() }) {
-                        Label("取消置顶", systemImage: "pin.fill")
+                        Label("Unpin", systemImage: "pin.fill")
                             .labelStyle(.iconOnly)
                             .frame(width: DS.macToolbarIconWidth)
                     }
-                    .help("取消置顶")
+                    .help("Unpin")
                     .buttonStyle(.glassProminent)
                     .buttonBorderShape(.circle)
                     .tint(DS.primary)
                 } else {
                     Button(action: { viewModel.togglePin() }) {
-                        Label("置顶", systemImage: "pin.fill")
+                        Label("Pin", systemImage: "pin.fill")
                             .labelStyle(.iconOnly)
                             .frame(width: DS.macToolbarIconWidth)
                     }
-                    .help("置顶")
+                    .help("Pin")
                     .buttonStyle(.glass)
                     .buttonBorderShape(.circle)
                 }
@@ -330,19 +330,19 @@ struct StickyNoteEditorView: View {
         }
         .alert(isPresented: $viewModel.showingDeleteConfirmation) {
             Alert(
-                title: Text("删除这条笔记？"),
-                message: Text("笔记将移到回收站，可以恢复。"),
-                primaryButton: .destructive(Text("删除")) {
+                title: Text("Delete This Note?"),
+                message: Text("The note will be moved to Trash and can be restored."),
+                primaryButton: .destructive(Text("Delete")) {
                     viewModel.confirmDelete()
                 },
                 secondaryButton: .cancel()
             )
         }
-        .alert("需要密钥", isPresented: $viewModel.showingKeyIssueAlert) {
-            Button("打开密钥设置") {
+        .alert("Key Required", isPresented: $viewModel.showingKeyIssueAlert) {
+            Button("Open Key Settings") {
                 MacMenuBarController.shared.openSettingsWindow(selectedTab: .key)
             }
-            Button("取消", role: .cancel) {}
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text(viewModel.keyIssueMessage)
         }
@@ -355,7 +355,7 @@ struct StickyNoteEditorView: View {
             Image(systemName: "lock.fill")
                 .font(.system(size: 34, weight: .semibold))
                 .foregroundColor(DS.textSubtle)
-                .accessibilityLabel("已上锁")
+                .accessibilityLabel("Locked")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .allowsHitTesting(false)
@@ -563,7 +563,7 @@ struct MacMarkdownPreview: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("随便写点什么吧")
+                    Text("Write something…")
                         .font(previewFont)
                         .foregroundColor(Color(nsColor: .placeholderTextColor))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -578,12 +578,12 @@ struct MacMarkdownPreview: View {
                             font: codeFont
                         ))
                         .foregroundStyle(DS.textBody)
-                        .headingStyle(DS.textEmphasize, for: .h1)
-                        .headingStyle(DS.textEmphasize, for: .h2)
-                        .headingStyle(DS.textEmphasize, for: .h3)
-                        .headingStyle(DS.textEmphasize, for: .h4)
-                        .headingStyle(DS.textEmphasize, for: .h5)
-                        .headingStyle(DS.textEmphasize, for: .h6)
+                        .markdownHeadingStyle(DS.textEmphasize, for: .h1)
+                        .markdownHeadingStyle(DS.textEmphasize, for: .h2)
+                        .markdownHeadingStyle(DS.textEmphasize, for: .h3)
+                        .markdownHeadingStyle(DS.textEmphasize, for: .h4)
+                        .markdownHeadingStyle(DS.textEmphasize, for: .h5)
+                        .markdownHeadingStyle(DS.textEmphasize, for: .h6)
                         .tint(DS.primaryDeep)
                         .tint(DS.link, for: .link)
                         .tint(DS.link, for: .blockQuote)
@@ -654,7 +654,7 @@ private struct MacMarkdownPreviewCodeBlock: View {
                     didCopy = false
                 }
             } label: {
-                Label(didCopy ? "已复制" : "复制", systemImage: didCopy ? "checkmark" : "square.on.square")
+                Label(didCopy ? "Copied" : "Copy", systemImage: didCopy ? "checkmark" : "square.on.square")
                     .contentTransition(.symbolEffect(.replace))
             }
             .buttonStyle(.accessoryBar)
@@ -1138,7 +1138,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
     @Published var isEncryptionToggling = false
     @Published var modeConversionNotice: MacNoteModeConversionNotice?
     @Published var showingKeyIssueAlert = false
-    @Published var keyIssueMessage = "请前往密钥设置处理。"
+    @Published var keyIssueMessage = L10n.string("Go to Key Settings to resolve this issue.")
 
     private let vaultStore = VaultStore.shared
     private let windowStore = MacNoteWindowStore.shared
@@ -1499,29 +1499,29 @@ final class StickyNoteEditorViewModel: ObservableObject {
         if let keyError = error as? VaultKeyFileError {
             switch keyError {
             case .fileMissing:
-                return "找不到密钥。请前往密钥设置处理。"
+                return L10n.string("The key could not be found. Go to Key Settings to resolve this issue.")
             case .fileMoved:
-                return "密钥已不在原位置。请前往密钥设置处理。"
+                return L10n.string("The key is no longer at its original location. Go to Key Settings to resolve this issue.")
             case .permissionDenied:
-                return "无法读取密钥。请前往密钥设置处理。"
+                return L10n.string("The key could not be read. Go to Key Settings to resolve this issue.")
             case .invalidFile:
-                return "密钥格式无效。请前往密钥设置处理。"
+                return L10n.string("The key format is invalid. Go to Key Settings to resolve this issue.")
             case .unsupportedFileExtension:
-                return "请选择有效的 Seal Note 密钥。"
+                return L10n.string("Choose a valid Seal Note key.")
             case .keyReplaced:
-                return "密钥已被替换或内容被修改。请前往密钥设置处理。"
+                return L10n.string("The key was replaced or modified. Go to Key Settings to resolve this issue.")
             case .keyMismatch:
-                return "密钥不匹配，无法解锁当前加密笔记。请前往密钥设置处理。"
+                return L10n.string("The key does not match this encrypted note. Go to Key Settings to resolve this issue.")
             case .keyAlreadyConfigured:
-                return "已经配置了密钥引用。"
+                return L10n.string("A key reference is already configured.")
             case .encryptedNotesExist:
-                return "仍有加密笔记，请先在密钥设置中处理。"
+                return L10n.string("Encrypted notes still exist. Handle them in Key Settings first.")
             case .keyDownloadPending:
-                return "密钥仍在从 iCloud 下载。下载完成后请再试一次。"
+                return L10n.string("The key is still downloading from iCloud. Try again when the download finishes.")
             }
         }
 
-        return "请先前往密钥设置处理。"
+        return L10n.string("Go to Key Settings first.")
     }
 
     private func recordCryptoEvent(
@@ -1733,6 +1733,21 @@ private final class ToolbarInsetScrollView: NSScrollView {
             y: min(max(0, origin.y), maxY)
         )
         contentView.scroll(to: boundedOrigin)
+        reflectScrolledClipView(contentView)
+    }
+
+    /// TextKit scrolls the insertion point into view after an edit. Restoring the
+    /// old clip-view origin here makes a newline at the bottom edge jump back and
+    /// then forward again, which presents as a flash. Resize and restyle first,
+    /// then settle on the selection exactly once.
+    func preservingVisibleSelection(in textView: NSTextView, _ changes: () -> Void) {
+        let selectedRange = textView.selectedRange()
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            context.allowsImplicitAnimation = false
+            changes()
+            textView.scrollRangeToVisible(selectedRange)
+        }
         reflectScrolledClipView(contentView)
     }
 
@@ -2060,7 +2075,7 @@ extension MacTextView {
                 scrollView?.syncDocumentSize(textView)
             }
             if let scrollView {
-                scrollView.preservingVisibleOrigin(refreshEditorState)
+                scrollView.preservingVisibleSelection(in: textView, refreshEditorState)
             } else {
                 refreshEditorState()
             }
@@ -2278,7 +2293,7 @@ extension MacTextView {
         didChangeText()
         coordinator?.parent.onChange(text)
         if let scrollView {
-            scrollView.preservingVisibleOrigin {
+            scrollView.preservingVisibleSelection(in: self) {
                 MacMarkdownHighlighter.applyMarkdownHighlighting(to: self, lineHeightMultiple: lineHeightMultiple)
                 scrollView.syncDocumentSize(self)
             }

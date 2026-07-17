@@ -3,6 +3,7 @@ import SwiftUI
 import AppKit
 
 struct AllNotesView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var vaultStore = VaultStore.shared
     @ObservedObject private var settings = SettingsStore.shared
     @State private var searchText = ""
@@ -14,7 +15,7 @@ struct AllNotesView: View {
         VStack(spacing: 0) {
             if isSearchBarVisible {
                 MacListSearchBar(
-                    placeholder: "搜索笔记…",
+                    placeholder: "Search Notes…",
                     text: $searchText,
                     onClose: { hideSearchBar() }
                 )
@@ -24,16 +25,18 @@ struct AllNotesView: View {
 
             if isLoading {
                 SWEmptyState(
-                    title: "正在加载笔记",
-                    message: "笔记会在同步和索引读取完成后显示。",
+                    title: "Loading Notes",
+                    message: "Notes will appear when syncing and index loading are complete.",
                     systemImage: "tray.full"
                 )
+                .transition(.opacity)
             } else if filteredNotes.isEmpty {
                 SWEmptyState(
-                    title: "没有匹配的笔记",
+                    title: "No Matching Notes",
                     message: emptyStateMessage,
                     systemImage: "magnifyingglass"
                 )
+                .transition(.opacity)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -43,6 +46,7 @@ struct AllNotesView: View {
                             noteRow(for: item)
                                 .padding(.horizontal, DS.s3)
                                 .padding(.vertical, DS.s1)
+                                .transition(noteListTransition)
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     openNote(item)
@@ -58,12 +62,14 @@ struct AllNotesView: View {
                     }
                 }
                 .background(DS.bg)
+                .transition(.opacity)
             }
         }
+        .animation(noteListAnimation, value: noteCollectionIDs)
         .safeAreaPadding(.top, DS.s2)
         .background(DS.bg)
         .dsLiquidGlassToolbar()
-        .navigationTitle("全部笔记")
+        .navigationTitle("All Notes")
         .toolbar { allNotesToolbar }
         .background(MacListSearchToolbarAppearance(isActive: isSearchBarVisible))
         .onChange(of: listSnapshot.tagCounts) { _, tagCounts in
@@ -72,8 +78,8 @@ struct AllNotesView: View {
                 self.selectedTag = nil
             }
         }
-        .alert("操作失败", isPresented: actionErrorBinding) {
-            Button("好") {
+        .alert("Operation Failed", isPresented: actionErrorBinding) {
+            Button("OK") {
                 actionErrorMessage = nil
             }
         } message: {
@@ -87,10 +93,10 @@ struct AllNotesView: View {
             Button {
                 toggleSearchBar()
             } label: {
-                Label("搜索", systemImage: "magnifyingglass")
+                Label("Search", systemImage: "magnifyingglass")
                     .labelStyle(.iconOnly)
             }
-            .help("搜索")
+            .help("Search")
             .keyboardShortcut("f", modifiers: .command)
         }
     }
@@ -111,12 +117,12 @@ struct AllNotesView: View {
     private var listSummary: some View {
         HStack(spacing: DS.s2) {
             Spacer(minLength: 0)
-            Text(noteCountText)
+            Text(LocalizedStringKey(noteCountText))
                 .font(DS.caption())
                 .foregroundColor(DS.textSubtle)
                 .padding(.top, 8)
 //            if listSnapshot.emptyReadableCount > 0 {
-//                SWStatusBadge("\(listSnapshot.emptyReadableCount) 条空笔记", systemImage: "exclamationmark.triangle", style: .warning)
+//                SWStatusBadge(L10n.string("%lld empty notes", Int64(listSnapshot.emptyReadableCount)), systemImage: "exclamationmark.triangle", style: .warning)
 //            }
             Spacer(minLength: 0)
         }
@@ -151,7 +157,7 @@ struct AllNotesView: View {
         let overflowTags = Array(tagCounts.dropFirst(visibleCount))
 
         return HStack(spacing: DS.s1) {
-            SWFilterChip(title: "全部", isSelected: selectedTag == nil) {
+            SWFilterChip(title: "All", isSelected: selectedTag == nil) {
                 selectedTag = nil
             }
             ForEach(visibleTags) { tagCount in
@@ -175,6 +181,24 @@ struct AllNotesView: View {
         listSnapshot.items
     }
 
+    private var noteCollectionIDs: [String] {
+        vaultStore.readableNotes.map(\.id) + vaultStore.lockedEncryptedNotes.map(\.id)
+    }
+
+    private var noteListAnimation: Animation? {
+        reduceMotion ? nil : .snappy(duration: 0.28, extraBounce: 0)
+    }
+
+    private var noteListTransition: AnyTransition {
+        if reduceMotion {
+            return .opacity
+        }
+        return .asymmetric(
+            insertion: .opacity.combined(with: .scale(scale: 0.98, anchor: .top)),
+            removal: .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
+        )
+    }
+
     private var listSnapshot: MacNoteListSnapshot {
         MacNoteListSnapshotBuilder.make(
             readableNotes: vaultStore.readableNotes,
@@ -192,22 +216,22 @@ struct AllNotesView: View {
     }
 
     private var noteCountText: String {
-        guard !isLoading else { return "全部笔记加载中" }
+        guard !isLoading else { return "Loading All Notes" }
         let encryptedCount = listSnapshot.encryptedCount
         if encryptedCount > 0 {
-            return "共 \(listSnapshot.totalCount) 条笔记，加密笔记 \(encryptedCount) 条"
+            return L10n.string("%lld notes, %lld encrypted", Int64(listSnapshot.totalCount), Int64(encryptedCount))
         }
-        return "共 \(listSnapshot.totalCount) 条笔记"
+        return L10n.string("%lld notes", Int64(listSnapshot.totalCount))
     }
 
     private var emptyStateMessage: String {
         if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "换个关键词试试，或清空搜索内容。"
+            return "Try another keyword or clear the search."
         }
         if selectedTag != nil {
-            return "这个标签下暂时没有可读笔记。"
+            return "There are no readable notes with this tag."
         }
-        return "创建第一条笔记后会出现在这里。"
+        return "Your first note will appear here."
     }
 
     @ViewBuilder
@@ -239,25 +263,25 @@ struct AllNotesView: View {
     private func noteContextMenu(for item: NoteListItem) -> some View {
         switch item {
         case .readable(let note):
-            Button("重命名...") { beginRenaming(note) }
+            Button("Rename…") { beginRenaming(note) }
                 .disabled(note.isEncrypted)
         case .locked:
-            Button("重命名...") {}
+            Button("Rename…") {}
                 .disabled(true)
         }
         Divider()
         switch item {
         case .readable(let note):
             if note.isEncrypted {
-                Button("转为明文笔记") { convertToPlain(item) }
+                Button("Convert to Plain Text") { convertToPlain(item) }
             } else {
-                Button("转为加密笔记") { convertToEncrypted(note) }
+                Button("Convert to Encrypted") { convertToEncrypted(note) }
             }
         case .locked:
-            Button("转为明文笔记") { convertToPlain(item) }
+            Button("Convert to Plain Text") { convertToPlain(item) }
         }
         Divider()
-        Button("移到回收站", role: .destructive) {
+        Button("Move to Trash", role: .destructive) {
             deleteNote(item)
         }
     }
@@ -313,7 +337,7 @@ struct AllNotesView: View {
                 _ = try await vaultStore.encryptNoteForEditing(note, body: note.body)
                 SyncStatusStore.shared.setSaved()
             } catch {
-                actionErrorMessage = "转为加密笔记失败：\(error.localizedDescription)"
+                actionErrorMessage = L10n.string("Could not convert to an encrypted note: %@", error.localizedDescription)
                 SyncStatusStore.shared.setFailed(message: error.localizedDescription)
             }
         }
@@ -333,7 +357,7 @@ struct AllNotesView: View {
                 _ = try await vaultStore.decryptNotePermanently(encryptedNote)
                 SyncStatusStore.shared.setSaved()
             } catch {
-                actionErrorMessage = "转为明文笔记失败：\(error.localizedDescription)"
+                actionErrorMessage = L10n.string("Could not convert to a plain-text note: %@", error.localizedDescription)
                 SyncStatusStore.shared.setFailed(message: error.localizedDescription)
             }
         }
@@ -341,16 +365,16 @@ struct AllNotesView: View {
 
     private func beginRenaming(_ note: Note) {
         let alert = NSAlert()
-        alert.messageText = "重命名笔记"
-        alert.informativeText = "标题只影响列表、菜单和文件名，不会改写正文。"
+        alert.messageText = "Rename Note"
+        alert.informativeText = "The title only affects lists, menus, and filenames. It does not change note content."
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "保存")
-        alert.addButton(withTitle: "取消")
+        alert.addButton(withTitle: L10n.string("Save"))
+        alert.addButton(withTitle: L10n.string("Cancel"))
 
         let titleField = NSTextField(
             string: vaultStore.displayTitle(for: note, emptyTitle: "")
         )
-        titleField.placeholderString = "标题"
+        titleField.placeholderString = "Title"
         titleField.frame = NSRect(x: 0, y: 0, width: 320, height: 24)
         titleField.selectText(nil)
         alert.accessoryView = titleField
@@ -358,7 +382,7 @@ struct AllNotesView: View {
         let handleResponse: (NSApplication.ModalResponse) -> Void = { response in
             guard response == .alertFirstButtonReturn else { return }
             guard let cleanedTitle = NoteTitleFormatter.sanitizedGeneratedTitle(titleField.stringValue) else {
-                actionErrorMessage = "请输入有效标题。"
+                actionErrorMessage = "Enter a valid title."
                 return
             }
 
@@ -366,7 +390,7 @@ struct AllNotesView: View {
                 do {
                     try await vaultStore.renameNote(note, title: cleanedTitle)
                 } catch {
-                    actionErrorMessage = "重命名失败：\(error.localizedDescription)"
+                    actionErrorMessage = L10n.string("Rename failed: %@", error.localizedDescription)
                 }
             }
         }
@@ -394,13 +418,13 @@ struct AllNotesListRow<MenuContent: View>: View {
     var body: some View {
         HStack(spacing: DS.s3) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(DS.textStrong)
                     .lineLimit(1)
 
                 if !subtitle.isEmpty {
-                    Text(subtitle)
+                    Text(LocalizedStringKey(subtitle))
                         .font(DS.caption())
                         .foregroundColor(DS.textSubtle)
                         .lineLimit(1)
@@ -412,12 +436,12 @@ struct AllNotesListRow<MenuContent: View>: View {
             if isHovering {
                 HStack(spacing: DS.s1) {
                     Button(action: onOpen) {
-                        Text("打开")
+                        Text("Open")
                             .foregroundStyle(DS.textSecondary)
                     }
                     .buttonStyle(.borderless)
                     .controlSize(.regular)
-                    .help("打开")
+                    .help("Open")
 
                     Menu {
                         menu()
@@ -430,7 +454,7 @@ struct AllNotesListRow<MenuContent: View>: View {
                     .controlSize(.regular)
                     .tint(DS.textSecondary)
                     .menuIndicator(.hidden)
-                    .help("更多操作")
+                    .help("More Actions")
                 }
             } else {
                 HStack(spacing: DS.s2) {
@@ -492,7 +516,7 @@ struct MacListSearchBar: View {
                             .foregroundColor(DS.textSubtle)
                     }
                     .buttonStyle(.plain)
-                    .help("清空搜索")
+                    .help("Clear Search")
                 }
             }
             .padding(.horizontal, DS.s3)
@@ -502,12 +526,12 @@ struct MacListSearchBar: View {
             Button {
                 onClose()
             } label: {
-                Label("关闭搜索", systemImage: "xmark")
+                Label("Close Search", systemImage: "xmark")
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.plain)
             .foregroundColor(DS.textSecondary)
-            .help("关闭搜索")
+            .help("Close Search")
         }
         .padding(.horizontal, DS.s3)
         .padding(.vertical, DS.s2)

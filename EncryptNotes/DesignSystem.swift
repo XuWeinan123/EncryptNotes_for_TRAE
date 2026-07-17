@@ -5,14 +5,14 @@ import UIKit
 import AppKit
 #endif
 
-/// flomo 设计系统 token
+/// Seal Note 设计系统 token
 ///
 /// 详见根目录 DESIGN.md。所有界面颜色、字号、间距、圆角均通过此处的常量引用，
 /// 以保证主题一致并支持后续深色模式切换。
 enum DS {
     // MARK: - Colors
 
-    /// 品牌叶绿色；主按钮、发送、`#tags`、浮动按钮、热力图。
+    /// 默认粉色主题的品牌强调色；用于关键操作、焦点与选中状态。
     static var primary: Color {
         switch currentMacTheme {
         case .green: return Color(light: 0x30CF79, dark: 0x397354)
@@ -40,14 +40,12 @@ enum DS {
     static let link = Color(light: 0x6890F8, dark: 0x4071E2)
     /// 删除与危险操作。
     static let destructive = Color(light: 0xE47571, dark: 0xBD5551)
-    /// AI 洞察强调色。
-    static let ai = Color(hex: 0xA94AD9)
-    /// PRO / 会员琥珀色。
-    static let pro = Color(hex: 0xF07200)
+    /// 警告、等待与需要注意的状态。
+    static let warning = Color(hex: 0xF07200)
 
     /// 应用画布。
     static let bg = Color(light: 0xF9F9F9, dark: 0x121212)
-    /// memo 卡片。
+    /// 默认内容与分组表面。
     static let surfaceCard = Color(light: 0xFFFFFF, dark: 0x202020)
     /// 浮层、底部弹层、菜单。
     static let surfaceRaised = Color(light: 0xFFFFFF, dark: 0x202020)
@@ -78,16 +76,8 @@ enum DS {
     static let onFloat = Color.white
     /// 侧栏分区小标题。
     static let sidebarSectionTitle = Color(light: 0xC18B49, dark: 0x89602F)
-    /// 侧栏统计数字与热力图空格。
+    /// 侧栏次级统计数字。
     static let sidebarMetric = Color(light: 0x9D9D9D, dark: 0x949494)
-    /// 热力图空格。
-    static let contribution0 = Color(light: 0xE8E8E8, dark: 0x343434)
-    /// 热力图低频。
-    static let contribution1 = Color(light: 0xCFE8D9, dark: 0x254D39)
-    /// 热力图中频。
-    static let contribution2 = Color(light: 0x8AD9B1, dark: 0x397354)
-    /// 热力图高频。
-    static let contribution3 = Color(light: 0x53B88B, dark: 0x4EA778)
 
     /// 深色模式画布。
     static let darkBg = Color(hex: 0x121212)
@@ -118,7 +108,7 @@ enum DS {
 
     static let cardPadding: CGFloat = 16
     static let sectionGutter: CGFloat = 24
-    static let memoGap: CGFloat = 12
+    static let noteGap: CGFloat = 12
     static let sidebarWidth: CGFloat = 280
     static let sidebarRowHeight: CGFloat = 40
     static let sidebarRowRadius: CGFloat = 26
@@ -139,7 +129,7 @@ enum DS {
     /// L3 Popover: `0 6px 24px rgba(0,0,0,.12), 0 0 0 .5px rgba(0,0,0,.06)`。
     static let popoverShadow = (color: Color.black.opacity(0.12),
                                 radius: CGFloat(24), x: CGFloat(0), y: CGFloat(6))
-    /// L4 Float: Figma 浮动按钮阴影，不使用额外绿色光晕。
+    /// L4 Float: 轻量浮动对象阴影，不使用额外彩色光晕。
     static let floatShadow = (color: Color.black.opacity(0.15),
                               radius: CGFloat(5), x: CGFloat(0), y: CGFloat(0))
 
@@ -148,7 +138,7 @@ enum DS {
     /// 时间戳、元信息、列标题。12/16/400。
     static func caption() -> Font { .system(size: 12, weight: .regular) }
 
-    /// 默认 memo 内容。15/24/400。
+    /// 默认笔记与界面正文。15/24/400。
     static func body() -> Font { .system(size: 15, weight: .regular) }
 
     /// 舒适阅读与设置行。15/22/400。
@@ -160,7 +150,7 @@ enum DS {
     /// 屏幕 / 导航栏标题。16/16/600。
     static func page() -> Font { .system(size: 16, weight: .semibold) }
 
-    /// 引导页标题、大数字、字标兜底。28/34/600。
+    /// About 产品名、空状态主标题、大数字。28/34/600。
     static func display() -> Font { .system(size: 28, weight: .semibold) }
 
     /// API 片段与等宽数据。13/18/400。

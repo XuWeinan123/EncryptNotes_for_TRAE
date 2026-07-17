@@ -53,7 +53,9 @@ final class StickyNoteWindowManager: NSObject {
             frame = windowFrameNearMouse(screenPoint: point, size: size)
         }
 
-        let editorView = StickyNoteEditorView(note: note)
+        let editorView = AppLocalizedRoot {
+            StickyNoteEditorView(note: note)
+        }
         let hostingView = NSHostingView(rootView: editorView)
 
         let frameRect = NSRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height)
@@ -136,7 +138,9 @@ final class StickyNoteWindowManager: NSObject {
             updatedAt: info.updatedAt,
             isEncrypted: true
         )
-        let editorView = StickyNoteEditorView(note: lockedNote, startsLocked: true, initialKeyIssue: keyIssue)
+        let editorView = AppLocalizedRoot {
+            StickyNoteEditorView(note: lockedNote, startsLocked: true, initialKeyIssue: keyIssue)
+        }
         let hostingView = NSHostingView(rootView: editorView)
 
         let frameRect = NSRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height)

@@ -105,6 +105,22 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.macTheme, .cyan)
     }
 
+    func testAppLanguageDefaultsToFollowingSystemAndPersists() {
+        let store = makeStore()
+        XCTAssertEqual(store.appLanguage, .system)
+
+        store.appLanguage = .japanese
+        let reloaded = makeStore()
+        XCTAssertEqual(reloaded.appLanguage, .japanese)
+    }
+
+    func testSupportedSystemLanguageResolutionFallsBackToEnglish() {
+        XCTAssertEqual(AppLanguage.supportedIdentifier(for: "zh-Hant-HK"), "zh-Hant")
+        XCTAssertEqual(AppLanguage.supportedIdentifier(for: "zh-CN"), "zh-Hans")
+        XCTAssertEqual(AppLanguage.supportedIdentifier(for: "pt-BR"), "pt")
+        XCTAssertNil(AppLanguage.supportedIdentifier(for: "it-IT"))
+    }
+
     func testEditingPrivacyAndDataPreferencesPersist() {
         let store = makeStore()
         store.preferredNoteMode = .encrypted

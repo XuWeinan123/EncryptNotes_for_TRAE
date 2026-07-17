@@ -1,7 +1,17 @@
 import Foundation
 import SwiftUI
+import Combine
 import AppKit
 import UniformTypeIdentifiers
+
+@MainActor
+final class MacSettingsRouter: ObservableObject {
+    static let shared = MacSettingsRouter()
+
+    @Published var selectedTab: MacSettingsView.Tab = .general
+
+    private init() {}
+}
 
 struct MacSettingsView: View {
     enum Tab: Hashable {
@@ -15,7 +25,8 @@ struct MacSettingsView: View {
     @ObservedObject private var shortcutStore = ShortcutStore.shared
     @ObservedObject private var vaultStore = VaultStore.shared
     @ObservedObject private var settings = SettingsStore.shared
-    @State private var selectedTab: Tab
+    @State private var localSelectedTab: Tab
+    private let externalSelectedTab: Binding<Tab>?
     @State private var recordingAction: MacShortcutRecordingAction?
     @State private var settingsErrorMessage: String?
     #if DEBUG
@@ -23,38 +34,48 @@ struct MacSettingsView: View {
     #endif
 
     init(selectedTab: Tab = .general) {
-        _selectedTab = State(initialValue: selectedTab)
+        _localSelectedTab = State(initialValue: selectedTab)
+        externalSelectedTab = nil
+    }
+
+    init(selectedTab: Binding<Tab>) {
+        _localSelectedTab = State(initialValue: selectedTab.wrappedValue)
+        externalSelectedTab = selectedTab
+    }
+
+    private var selectedTab: Binding<Tab> {
+        externalSelectedTab ?? $localSelectedTab
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
+        TabView(selection: selectedTab) {
             generalTab
                 .tabItem {
-                    Label("通用", systemImage: "gear")
+                    Label("General", systemImage: "gear")
                 }
                 .tag(Tab.general)
 
             editorTab
                 .tabItem {
-                    Label("编辑器", systemImage: "textformat")
+                    Label("Editor", systemImage: "textformat")
                 }
                 .tag(Tab.editor)
 
             shortcutTab
                 .tabItem {
-                    Label("快捷键", systemImage: "keyboard")
+                    Label("Shortcuts", systemImage: "keyboard")
                 }
                 .tag(Tab.shortcuts)
 
             keyTab
                 .tabItem {
-                    Label("密钥", systemImage: "key")
+                    Label("Key", systemImage: "key")
                 }
                 .tag(Tab.key)
 
             aboutTab
                 .tabItem {
-                    Label("关于", systemImage: "info.circle")
+                    Label("About", systemImage: "info.circle")
                 }
                 .tag(Tab.about)
         }
@@ -70,35 +91,47 @@ struct MacSettingsView: View {
         )
         .background(DS.bg)
         .background(shortcutRecorder)
-        .alert("设置失败", isPresented: settingsErrorBinding) {
-            Button("确定", role: .cancel) {}
+        .alert("Settings Failed", isPresented: settingsErrorBinding) {
+            Button("OK", role: .cancel) {}
         } message: {
-            Text(settingsErrorMessage ?? "无法保存这个设置。")
+            Text(settingsErrorMessage ?? L10n.string("This setting could not be saved."))
         }
         #if DEBUG
         .confirmationDialog(
-            "恢复所有默认设置？",
+            "Restore All Default Settings?",
             isPresented: $isShowingRestoreDefaultsConfirmation
         ) {
-            Button("恢复所有默认", role: .destructive) {
+            Button("Restore All Defaults", role: .destructive) {
                 restoreAllDefaults()
             }
-            Button("取消", role: .cancel) {}
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("将恢复所有设置、快捷键和启动时的功能介绍，不会删除笔记或密钥。")
+            Text("This restores all settings, shortcuts, and the launch introduction without deleting notes or keys.")
         }
         #endif
     }
 
     private var generalTab: some View {
         panelStack {
-            macPanel("菜单栏") {
-                toggleRow("启动时打开菜单栏应用", systemImage: "menubar.rectangle", isOn: launchAtLoginBinding)
+            macPanel("Language") {
+                SWSettingsRow("Application Language", systemImage: "globe") {
+                    Picker("Application Language", selection: $settings.appLanguage) {
+                        ForEach(AppLanguage.allCases) { language in
+                            Text(language.titleKey).tag(language)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 190, alignment: .trailing)
+                }
+            }
+
+            macPanel("Menu Bar") {
+                toggleRow("Launch Menu Bar App at Login", systemImage: "menubar.rectangle", isOn: launchAtLoginBinding)
 
                 SWRowDivider()
 
-                SWSettingsRow("最近笔记数量", systemImage: "list.number") {
-                    Picker("最近笔记数量", selection: recentNotesLimitBinding) {
+                SWSettingsRow("Number of Recent Notes", systemImage: "list.number") {
+                    Picker("Number of Recent Notes", selection: recentNotesLimitBinding) {
                         ForEach(SettingsStore.macRecentNotesLimitOptions, id: \.self) { count in
                             Text("\(count)").tag(count)
                         }
@@ -109,33 +142,33 @@ struct MacSettingsView: View {
                 }
             }
 
-            macPanel("笔记") {
-                toggleRow("笔记默认置顶", systemImage: "pin.fill", isOn: $settings.pinNewNotesByDefault)
+            macPanel("Notes") {
+                toggleRow("Pin New Notes by Default", systemImage: "pin.fill", isOn: $settings.pinNewNotesByDefault)
                 SWRowDivider()
-                toggleRow("新建笔记自动加密", subtitle: vaultStore.isKeyLoaded ? nil : "需要先在“密钥”中创建或加载密钥。", systemImage: "lock", isOn: newEncryptedNoteBinding)
+                toggleRow("Encrypt New Notes Automatically", subtitle: vaultStore.isKeyLoaded ? nil : "Create or load a key in Key Settings first.", systemImage: "lock", isOn: newEncryptedNoteBinding)
                     .disabled(!vaultStore.isKeyLoaded)
             }
 
-            macPanel("存储") {
+            macPanel("Storage") {
                 SWSettingsRow(
-                    vaultStore.isUsingICloudStorage ? "iCloud 文件夹" : "本地文件夹",
-                    subtitle: vaultStore.isUsingICloudStorage ? "笔记文件直接位于 iCloud Drive 公开文件夹中。" : "当前未使用 iCloud，已回退到本地存储。",
+                    vaultStore.isUsingICloudStorage ? "iCloud Folder" : "Local Folder",
+                    subtitle: vaultStore.isUsingICloudStorage ? "Note files are stored directly in a public iCloud Drive folder." : "iCloud is unavailable, so local storage is being used.",
                     systemImage: vaultStore.isUsingICloudStorage ? "icloud" : "folder",
-                    tint: vaultStore.isUsingICloudStorage ? DS.primaryDeep : DS.pro
+                    tint: vaultStore.isUsingICloudStorage ? DS.primaryDeep : DS.warning,
+                    trailingMinWidth: 72
                 ) {
-                    Button("打开") {
+                    Button("Open") {
                         openStorageFolder()
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
+                    .settingsFilledButton()
                 }
             }
 
-            macPanel("主题") {
-                SWSettingsRow("主题色", systemImage: "paintpalette", tint: DS.primaryDeep) {
-                    Picker("主题色", selection: $settings.macTheme) {
+            macPanel("Theme") {
+                SWSettingsRow("Theme Color", systemImage: "paintpalette", tint: DS.primaryDeep) {
+                    Picker("Theme Color", selection: $settings.macTheme) {
                         ForEach(MacTheme.allCases) { theme in
-                            Text(theme.title).tag(theme)
+                            Text(LocalizedStringKey(theme.title)).tag(theme)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -155,14 +188,14 @@ struct MacSettingsView: View {
                         
                         VStack(spacing: DS.s2) {
                             Text("Seal Note")
-                                .font(.system(size: 34, weight: .semibold))
+                                .font(DS.display())
                                 .foregroundStyle(DS.textEmphasize)
                             
                             Text("v\(appVersion)")
                                 .font(DS.caption())
                                 .foregroundStyle(DS.textSubtle)
                             
-                            Text("快速记录，不打断当前工作。")
+                            Text("Capture quickly without interrupting your work.")
                                 .font(.system(size: 16, weight: .regular))
                                 .foregroundStyle(DS.textSecondary)
                         }
@@ -171,20 +204,20 @@ struct MacSettingsView: View {
                     HStack(alignment: .top, spacing: DS.s6) {
                         feature(
                             systemImage: "menubar.rectangle",
-                            title: "快速捕捉",
-                            detail: "从菜单栏新建或打开最近笔记，不打断当前工作。"
+                            title: "Quick Capture",
+                            detail: "Create or open recent notes from the menu bar without interrupting your work."
                         )
                         
                         feature(
                             systemImage: "doc.plaintext",
-                            title: "自由迁移",
-                            detail: "以标准 Markdown 文件保存，方便同步、迁移和跨工具读取。"
+                            title: "Portable by Design",
+                            detail: "Save as standard Markdown files for easy sync, migration, and use across tools."
                         )
                         
                         feature(
                             systemImage: "lock.shield",
-                            title: "安心加密",
-                            detail: "端侧加密，密钥文件由你保存和管理。"
+                            title: "On-Device Encryption",
+                            detail: "On-device encryption with a key file you own and manage."
                         )
                     }
                     .padding(.horizontal, DS.s6)
@@ -192,22 +225,21 @@ struct MacSettingsView: View {
                 .padding(.vertical, DS.s8)
             }
 
-            macPanel("组件") {
-                SWSettingsRow("查看组件", systemImage: "square.grid.2x2") {
+            macPanel("Components") {
+                SWSettingsRow("View Components", systemImage: "square.grid.2x2") {
                     Button {
                         MacMenuBarController.shared.openComponentCatalogWindow()
                     } label: {
                         Image(systemName: "arrow.up.right")
                             .font(.body)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
-                    .help("打开组件目录")
+                    .settingsFilledButton()
+                    .help("Open Component Catalog")
                 }
             }
 
-            macPanel("维护日志") {
-                SWSettingsRow("开启日志记录", subtitle: "记录保存、索引等元数据；不记录正文或密钥。", systemImage: "doc.text.magnifyingglass") {
+            macPanel("Maintenance Log") {
+                SWSettingsRow("Enable Logging", subtitle: "Record save and index metadata without recording note content or keys.", systemImage: "doc.text.magnifyingglass") {
                     if settings.maintenanceLoggingEnabled {
                         HStack(spacing: DS.s2) {
                             Button {
@@ -215,33 +247,29 @@ struct MacSettingsView: View {
                             } label: {
                                 Image(systemName: "folder")
                             }
-                            .buttonStyle(.bordered)
-                            .controlSize(.regular)
-                            .help("打开日志文件夹")
+                            .settingsFilledButton()
+                            .help("Open Log Folder")
 
-                            Button("关闭", role: .destructive) {
+                            Button("Close", role: .destructive) {
                                 settings.maintenanceLoggingEnabled = false
                             }
-                            .buttonStyle(.bordered)
-                            .controlSize(.regular)
+                            .settingsDestructiveFilledButton()
                         }
                     } else {
-                        Button("开启") {
+                        Button("Enable") {
                             settings.maintenanceLoggingEnabled = true
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.regular)
-                        .tint(DS.primary)
+                        .settingsFilledButton()
                     }
                 }
             }
 
             HStack(spacing: DS.s3) {
-                Link("隐私政策", destination: privacyPolicyURL)
+                Link("Privacy Policy", destination: privacyPolicyURL)
                 #if DEBUG
                 Text("·")
                     .foregroundStyle(DS.textSubtle)
-                Button("恢复所有默认") {
+                Button("Restore All Defaults") {
                     isShowingRestoreDefaultsConfirmation = true
                 }
                 .buttonStyle(.link)
@@ -268,7 +296,7 @@ struct MacSettingsView: View {
             shortcutStore.resetAllShortcuts()
             MacMenuBarController.shared.restoreDefaultWindowSizes()
         } catch {
-            settingsErrorMessage = "无法恢复所有默认设置：\(error.localizedDescription)"
+            settingsErrorMessage = L10n.string("Could not restore all default settings: %@", error.localizedDescription)
         }
     }
     #endif
@@ -282,12 +310,12 @@ struct MacSettingsView: View {
                 .background(DS.primaryContainer)
                 .clipShape(Circle())
 
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(DS.bodyLg().weight(.semibold))
                 .foregroundStyle(DS.textStrong)
                 .multilineTextAlignment(.center)
 
-            Text(detail)
+            Text(LocalizedStringKey(detail))
                 .font(DS.caption())
                 .foregroundStyle(DS.textSubtle)
                 .multilineTextAlignment(.center)
@@ -298,8 +326,8 @@ struct MacSettingsView: View {
 
     private var editorTab: some View {
         panelStack {
-            macPanel("编辑体验") {
-                SWSettingsRow("编辑字号", systemImage: "textformat.size") {
+            macPanel("Editing Experience") {
+                SWSettingsRow("Editor Font Size", systemImage: "textformat.size") {
                     VStack(alignment: .trailing, spacing: DS.s1) {
                         Text(String(format: "%.0f", settings.macEditorFontSize))
                             .font(DS.caption())
@@ -317,7 +345,7 @@ struct MacSettingsView: View {
 
                 SWRowDivider()
 
-                SWSettingsRow("行高", systemImage: "line.3.horizontal.decrease") {
+                SWSettingsRow("Line Height", systemImage: "line.3.horizontal.decrease") {
                     VStack(alignment: .trailing, spacing: DS.s1) {
                         Text(String(format: "%.2fx", settings.macEditorLineHeightMultiple))
                             .font(DS.caption())
@@ -334,20 +362,20 @@ struct MacSettingsView: View {
                 }
             }
 
-            macPanel("编辑行为") {
-                toggleRow("复制为更宽松的 Markdown 段落", subtitle: "复制时自动补充段落空行，便于粘贴到 Typora 等 Markdown 编辑器使用。", systemImage: "doc.on.clipboard", isOn: $settings.copyAddsParagraphSpacing)
+            macPanel("Editing Behavior") {
+                toggleRow("Copy as Looser Markdown Paragraphs", subtitle: "Automatically add blank lines between paragraphs when copying for Markdown editors such as Typora.", systemImage: "doc.on.clipboard", isOn: $settings.copyAddsParagraphSpacing)
 
                 SWRowDivider()
 
-                toggleRow("关闭空白笔记时自动丢弃", systemImage: "trash", isOn: $settings.autoDeleteEmptyNotes)
+                toggleRow("Discard Empty Notes When Closing", systemImage: "trash", isOn: $settings.autoDeleteEmptyNotes)
 
                 SWRowDivider()
 
-                toggleRow("自动命名笔记", subtitle: "开启后每次自动保存都会按正文重新命名；关闭时仅保留手动标题和首次标题规则。", systemImage: "text.cursor", isOn: $settings.autoRenameNotesOnSave)
+                toggleRow("Name Notes Automatically", subtitle: "When enabled, every autosave renames the note from its content. When disabled, manual titles and the initial title rule are preserved.", systemImage: "text.cursor", isOn: $settings.autoRenameNotesOnSave)
 
                 SWRowDivider()
 
-                toggleRow("不将 Hex 色值识别为标签", subtitle: "忽略 #RRGGBB 和含透明度的 #RRGGBBAA 色值。", systemImage: "paintpalette", isOn: $settings.excludeHexColorsFromTags)
+                toggleRow("Exclude Hex Colors from Tags", subtitle: "Ignore #RRGGBB and #RRGGBBAA color values.", systemImage: "paintpalette", isOn: $settings.excludeHexColorsFromTags)
             }
         }
     }
@@ -355,10 +383,10 @@ struct MacSettingsView: View {
 
     private var shortcutTab: some View {
         panelStack {
-            macPanel("常用操作") {
+            macPanel("Common Actions") {
                 LazyVGrid(columns: shortcutGridColumns, alignment: .leading, spacing: DS.s2) {
                     shortcutTile(
-                        title: "新建笔记",
+                        title: "New Note",
                         value: ShortcutStore.displayStringForKey(
                             keyCode: shortcutStore.newNoteKey.keyCode,
                             modifiers: shortcutStore.newNoteKey.modifiers
@@ -382,7 +410,7 @@ struct MacSettingsView: View {
                 }
             }
 
-            macPanel("Markdown 格式") {
+            macPanel("Markdown Formatting") {
                 LazyVGrid(columns: shortcutGridColumns, alignment: .leading, spacing: DS.s2) {
                     ForEach(MarkdownShortcutAction.allCases) { action in
                         let shortcut = shortcutStore.shortcut(for: action)
@@ -401,14 +429,13 @@ struct MacSettingsView: View {
             }
 
             HStack(spacing: DS.s2) {
-                helperText(recordingAction == nil ? "点击录制后按下新的组合键；Esc 取消。" : "正在录制：按下新的组合键，或按 Esc 取消。")
+                helperText(recordingAction == nil ? "Click record, then press a new key combination. Press Esc to cancel." : "Recording: press a new key combination, or press Esc to cancel.")
                 Spacer(minLength: DS.s3)
-                Button("恢复默认") {
+                Button("Restore Defaults") {
                     shortcutStore.resetAllShortcuts()
                     recordingAction = nil
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
+                .settingsFilledButton()
             }
         }
     }
@@ -416,7 +443,7 @@ struct MacSettingsView: View {
     private var keyTab: some View {
         panelStack {
             let keyStatus = vaultStore.macKeyStatus
-            macPanel("密钥状态") {
+            macPanel("Key Status") {
                 SWSettingsRow(
                     keyStatusTitle(keyStatus),
                     subtitle: keyManagementSubtitle(for: keyStatus),
@@ -441,28 +468,28 @@ struct MacSettingsView: View {
     private func keyStatusTitle(_ status: MacVaultKeyStatus) -> String {
         switch status {
         case .noReference:
-            return "未加载密钥"
+            return "No Key Loaded"
         case .available:
-            return "密钥已加载"
+            return "Key Loaded"
         case .invalid(.keyReplaced):
-            return "密钥已被替换"
+            return "Key Replaced"
         case .invalid(.keyDownloadPending):
-            return "密钥正在下载"
+            return "Key Downloading"
         case .invalid:
-            return "密钥失效"
+            return "Key Invalid"
         }
     }
 
     private func keyStatusSubtitle(_ status: MacVaultKeyStatus) -> String {
         switch status {
         case .noReference:
-            return "加载密钥后才能查看加密笔记正文"
+            return "Load the key to view encrypted note content"
         case .available:
-            return "这台 Mac 已经可以解锁加密笔记"
+            return "This Mac can unlock encrypted notes"
         case .invalid(.keyDownloadPending):
-            return "密钥文件仍在从 iCloud 下载，请稍后再试"
+            return "The key file is still downloading from iCloud. Try again later."
         case .invalid:
-            return "密钥需要重新定位后才能解锁加密笔记"
+            return "Relocate the key before encrypted notes can be unlocked"
         }
     }
 
@@ -470,18 +497,18 @@ struct MacSettingsView: View {
         let encryptedCount = vaultStore.encryptedEntryCount
         switch status {
         case .noReference where encryptedCount > 0:
-            return "发现 \(encryptedCount) 条加密笔记，请优先加载原密钥。"
+            return L10n.string("%lld encrypted notes were found. Load the original key first.", Int64(encryptedCount))
         case .noReference:
-            return "当前未加载密钥。密钥只会在本机读取，不会保存到钥匙串。"
+            return "No key is currently loaded. Seal Note reads key files only on this Mac and does not save them to Keychain."
         case .available:
             return abbreviatedDisplayPath(vaultStore.keyFileDisplayPath)
-                ?? "请妥善保存密钥，丢失后无法恢复加密笔记。"
+                ?? "Keep the key safe. Encrypted notes cannot be recovered if it is lost."
         case .invalid(.keyDownloadPending):
-            return "已请求 iCloud 下载密钥文件。下载完成后再打开加密笔记。"
+            return "The key file has been requested from iCloud. Open encrypted notes after the download finishes."
         case .invalid where encryptedCount > 0:
-            return "密钥失效，\(encryptedCount) 条加密笔记需要原密钥解锁。"
+            return L10n.string("The key is invalid. %lld encrypted notes require the original key.", Int64(encryptedCount))
         case .invalid:
-            return "密钥不可用、格式无效，或内容已被替换。"
+            return "The key is unavailable, invalid, or has been replaced."
         }
     }
 
@@ -528,33 +555,31 @@ struct MacSettingsView: View {
         case .noReference:
             if vaultStore.encryptedEntryCount > 0 {
                 HStack(spacing: DS.s2) {
-                    Button("加载已有密钥") {
+                    Button("Load Existing Key") {
                         loadKey()
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.regular)
                     .tint(DS.primary)
 
-                    Button("创建新密钥") {
+                    Button("Create New Key") {
                         createNewKey()
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
+                    .settingsFilledButton()
                 }
             } else {
                 HStack(spacing: DS.s2) {
-                    Button("创建新密钥") {
+                    Button("Create New Key") {
                         createNewKey()
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.regular)
                     .tint(DS.primary)
 
-                    Button("加载已有密钥") {
+                    Button("Load Existing Key") {
                         loadKey()
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
+                    .settingsFilledButton()
                 }
             }
         case .available:
@@ -564,30 +589,27 @@ struct MacSettingsView: View {
                 } label: {
                     Image(systemName: "folder")
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-                .help("打开密钥位置")
+                .buttonStyle(.borderless)
+                .help("Open Key Location")
 
-                Button("移除引用", role: .destructive) {
+                Button("Remove", role: .destructive) {
                     unloadKey()
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
+                .settingsFilledButton()
             }
         case .invalid:
             HStack(spacing: DS.s2) {
-                Button("重新定位密钥") {
+                Button("Relocate Key") {
                     loadKey()
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.regular)
                 .tint(DS.primary)
 
-                Button("移除引用", role: .destructive) {
+                Button("Remove", role: .destructive) {
                     unloadKey()
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
+                .settingsFilledButton()
             }
         }
     }
@@ -622,7 +644,7 @@ struct MacSettingsView: View {
                 do {
                     try settings.setLaunchAtLogin(isEnabled)
                 } catch {
-                    settingsErrorMessage = "无法更新登录项设置：\(error.localizedDescription)"
+                    settingsErrorMessage = L10n.string("Could not update the login item setting: %@", error.localizedDescription)
                 }
             }
         )
@@ -702,7 +724,7 @@ struct MacSettingsView: View {
                 .background((isRecording ? DS.primary : DS.textSubtle).opacity(0.12))
                 .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
 
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(DS.body())
                 .foregroundColor(DS.textStrong)
                 .lineLimit(1)
@@ -719,13 +741,13 @@ struct MacSettingsView: View {
             Button {
                 onRecord()
             } label: {
-                Label(isRecording ? "正在录制" : "录制快捷键", systemImage: isRecording ? "record.circle.fill" : "record.circle")
+                Label(isRecording ? "Recording" : "Record Shortcut", systemImage: isRecording ? "record.circle.fill" : "record.circle")
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.borderless)
             .controlSize(.regular)
             .tint(isRecording ? DS.primary : nil)
-            .help(isRecording ? "正在录制" : "录制快捷键")
+            .help(isRecording ? "Recording" : "Record Shortcut")
         }
         .padding(.horizontal, DS.s2)
         .padding(.vertical, DS.s2)
@@ -746,7 +768,7 @@ struct MacSettingsView: View {
     }
 
     private func helperText(_ text: String) -> some View {
-        Text(text)
+        Text(LocalizedStringKey(text))
             .font(DS.caption())
             .foregroundColor(DS.textSubtle)
             .fixedSize(horizontal: false, vertical: true)
@@ -771,25 +793,25 @@ struct MacSettingsView: View {
     private func openStorageFolder() {
         guard let containerURL = vaultStore.storageContainerURL else {
             let alert = NSAlert()
-            alert.messageText = "无法打开文件夹"
-            alert.informativeText = "当前没有可用的存储目录。"
-            alert.addButton(withTitle: "确定")
+            alert.messageText = L10n.string("Could Not Open Folder")
+            alert.informativeText = L10n.string("No storage folder is currently available.")
+            alert.addButton(withTitle: L10n.string("OK"))
             alert.runModal()
             return
         }
 
         if !NSWorkspace.shared.open(containerURL) {
             let alert = NSAlert()
-            alert.messageText = "无法打开文件夹"
-            alert.informativeText = "Finder 未能打开：\(containerURL.path)"
-            alert.addButton(withTitle: "确定")
+            alert.messageText = L10n.string("Could Not Open Folder")
+            alert.informativeText = L10n.string("Finder could not open: %@", containerURL.path)
+            alert.addButton(withTitle: L10n.string("OK"))
             alert.runModal()
         }
     }
 
     private func openKeyLocation() {
         guard let displayPath = vaultStore.keyFileDisplayPath else {
-            settingsErrorMessage = "当前没有可打开的密钥位置。"
+            settingsErrorMessage = L10n.string("There is no key location to open.")
             return
         }
 
@@ -799,7 +821,7 @@ struct MacSettingsView: View {
         } else {
             let parentURL = url.deletingLastPathComponent()
             if !NSWorkspace.shared.open(parentURL) {
-                settingsErrorMessage = "Finder 未能打开：\(parentURL.path)"
+                settingsErrorMessage = L10n.string("Finder could not open: %@", parentURL.path)
             }
         }
     }
@@ -809,17 +831,17 @@ struct MacSettingsView: View {
         do {
             try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
             if !NSWorkspace.shared.open(url) {
-                settingsErrorMessage = "Finder 未能打开：\(url.path)"
+                settingsErrorMessage = L10n.string("Finder could not open: %@", url.path)
             }
         } catch {
-            settingsErrorMessage = "无法打开日志文件夹：\(error.localizedDescription)"
+            settingsErrorMessage = L10n.string("Could not open the log folder: %@", error.localizedDescription)
         }
     }
 
     private func loadKey() {
         let panel = NSOpenPanel()
-        panel.title = "加载已有密钥"
-        panel.message = "密钥只会在本机读取，不会上传。"
+        panel.title = L10n.string("Load Existing Key")
+        panel.message = L10n.string("Seal Note reads the key file only on this Mac and never uploads it.")
         panel.allowedContentTypes = [.init(filenameExtension: "snkey")!]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
@@ -850,10 +872,10 @@ struct MacSettingsView: View {
 
     private func confirmRemoveKeyReference() {
         let alert = NSAlert()
-        alert.messageText = "移除密钥引用？"
-        alert.informativeText = "只会让 Seal Note 忘记密钥位置，不会删除密钥本身。"
-        alert.addButton(withTitle: "移除密钥引用")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = L10n.string("key.removeReference.confirmationTitle")
+        alert.informativeText = L10n.string("Seal Note will forget the key location without deleting the key itself.")
+        alert.addButton(withTitle: L10n.string("Remove Key Reference"))
+        alert.addButton(withTitle: L10n.string("Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         Task {
             do {
@@ -868,11 +890,11 @@ struct MacSettingsView: View {
 
     private func confirmUsableKeyRemoval() {
         let alert = NSAlert()
-        alert.messageText = "移除密钥引用前如何处理加密笔记？"
-        alert.informativeText = affectedEncryptedNotesMessage(prefix: "移除密钥引用前，需要先删除这些加密笔记，或全部解密为明文。")
-        alert.addButton(withTitle: "删除全部加密笔记")
-        alert.addButton(withTitle: "先全部解密成明文")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = L10n.string("How Should Encrypted Notes Be Handled?")
+        alert.informativeText = affectedEncryptedNotesMessage(prefix: L10n.string("Before removing the key reference, delete these encrypted notes or decrypt them all to plain text."))
+        alert.addButton(withTitle: L10n.string("Delete All Encrypted Notes"))
+        alert.addButton(withTitle: L10n.string("Decrypt All to Plain Text"))
+        alert.addButton(withTitle: L10n.string("Cancel"))
         alert.buttons.first?.hasDestructiveAction = true
 
         switch alert.runModal() {
@@ -887,10 +909,10 @@ struct MacSettingsView: View {
 
     private func confirmInvalidKeyRemoval() {
         let alert = NSAlert()
-        alert.messageText = "密钥失效时移除密钥引用？"
-        alert.informativeText = affectedEncryptedNotesMessage(prefix: "当前密钥不可用，无法在此时解密加密笔记。若仍保留原密钥，请取消并先重新定位密钥。")
-        alert.addButton(withTitle: "删除全部加密笔记")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = L10n.string("Remove the Invalid Key Reference?")
+        alert.informativeText = affectedEncryptedNotesMessage(prefix: L10n.string("The current key is unavailable, so encrypted notes cannot be decrypted now. If you still have the original key, cancel and relocate it first."))
+        alert.addButton(withTitle: L10n.string("Delete All Encrypted Notes"))
+        alert.addButton(withTitle: L10n.string("Cancel"))
         alert.buttons.first?.hasDestructiveAction = true
 
         guard alert.runModal() == .alertFirstButtonReturn else { return }
@@ -913,7 +935,7 @@ struct MacSettingsView: View {
     }
 
     private func affectedEncryptedNotesMessage(prefix: String) -> String {
-        "\(prefix)\n\n受影响范围包括当前列表和回收站中的 \(vaultStore.encryptedEntryCount) 条加密笔记。"
+        L10n.string("%@\n\nThis affects %lld encrypted notes in the current list and Trash.", prefix, Int64(vaultStore.encryptedEntryCount))
     }
 
     private func createNewKey() {
@@ -932,10 +954,10 @@ struct MacSettingsView: View {
 
     private func confirmDeleteEncryptedNotesAndCreateKey() {
         let alert = NSAlert()
-        alert.messageText = "创建新密钥会影响已有加密笔记"
-        alert.informativeText = affectedEncryptedNotesMessage(prefix: "新密钥无法解锁现有加密笔记。继续前必须删除这些加密笔记。")
-        alert.addButton(withTitle: "删除这些加密笔记并创建新密钥")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = L10n.string("Creating a New Key Affects Existing Encrypted Notes")
+        alert.informativeText = affectedEncryptedNotesMessage(prefix: L10n.string("A new key cannot unlock existing encrypted notes. These notes must be deleted before continuing."))
+        alert.addButton(withTitle: L10n.string("Delete These Notes and Create a New Key"))
+        alert.addButton(withTitle: L10n.string("Cancel"))
         alert.buttons.first?.hasDestructiveAction = true
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
@@ -955,18 +977,18 @@ struct MacSettingsView: View {
 
     private func presentCreateKeyPanel() {
         let alert = NSAlert()
-        alert.messageText = "创建新密钥？"
-        alert.informativeText = "请将密钥保存到安全位置。丢失密钥将无法解密加密笔记。"
-        alert.addButton(withTitle: "创建")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = L10n.string("Create a New Key?")
+        alert.informativeText = L10n.string("Save the key in a secure location. Losing it makes encrypted notes impossible to decrypt.")
+        alert.addButton(withTitle: L10n.string("Create"))
+        alert.addButton(withTitle: L10n.string("Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         let savePanel = NSSavePanel()
-        savePanel.title = "保存密钥"
-        savePanel.message = "保存成功后，Seal Note 会记住这个密钥的位置。"
+        savePanel.title = L10n.string("Save Key")
+        savePanel.message = L10n.string("After saving, Seal Note will remember this key location.")
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
-        savePanel.nameFieldStringValue = "Seal Note-密钥-\(formatter.string(from: Date())).snkey"
+        savePanel.nameFieldStringValue = "Seal Note-Key-\(formatter.string(from: Date())).snkey"
         savePanel.allowedContentTypes = [.init(filenameExtension: "snkey")!]
         guard savePanel.runModal() == .OK, let saveURL = savePanel.url else { return }
 
@@ -976,9 +998,9 @@ struct MacSettingsView: View {
             } catch {
                 await MainActor.run {
                     let errorAlert = NSAlert()
-                    errorAlert.messageText = "创建失败"
+                    errorAlert.messageText = L10n.string("Creation Failed")
                     errorAlert.informativeText = error.localizedDescription
-                    errorAlert.addButton(withTitle: "确定")
+                    errorAlert.addButton(withTitle: L10n.string("OK"))
                     errorAlert.runModal()
                 }
             }
@@ -992,11 +1014,11 @@ struct MacSettingsView: View {
         }
 
         let alert = NSAlert()
-        alert.messageText = "所选密钥无法解锁现有加密笔记"
-        alert.informativeText = affectedEncryptedNotesMessage(prefix: "默认不会保存这次选择的密钥。")
-        alert.addButton(withTitle: "重新选择密钥")
-        alert.addButton(withTitle: "删除这些加密笔记并使用此密钥")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = L10n.string("The Selected Key Cannot Unlock Existing Notes")
+        alert.informativeText = affectedEncryptedNotesMessage(prefix: L10n.string("The selected key will not be saved by default."))
+        alert.addButton(withTitle: L10n.string("Choose Another Key"))
+        alert.addButton(withTitle: L10n.string("Delete These Notes and Use This Key"))
+        alert.addButton(withTitle: L10n.string("Cancel"))
         if alert.buttons.indices.contains(1) {
             alert.buttons[1].hasDestructiveAction = true
         }
@@ -1022,23 +1044,37 @@ struct MacSettingsView: View {
     }
 }
 
-#Preview("设置 - 通用") {
+private extension View {
+    func settingsFilledButton() -> some View {
+        buttonStyle(.borderedProminent)
+            .controlSize(.regular)
+            .tint(DS.primary)
+    }
+
+    func settingsDestructiveFilledButton() -> some View {
+        buttonStyle(.borderedProminent)
+            .controlSize(.regular)
+            .tint(DS.destructive)
+    }
+}
+
+#Preview("Settings - General") {
     MacSettingsView(selectedTab: .general)
 }
 
-#Preview("设置 - 编辑器") {
+#Preview("Settings - Editor") {
     MacSettingsView(selectedTab: .editor)
 }
 
-#Preview("设置 - 快捷键") {
+#Preview("Settings - Shortcuts") {
     MacSettingsView(selectedTab: .shortcuts)
 }
 
-#Preview("设置 - 密钥") {
+#Preview("Settings - Key") {
     MacSettingsView(selectedTab: .key)
 }
 
-#Preview("设置 - 关于") {
+#Preview("Settings - About") {
     MacSettingsView(selectedTab: .about)
 }
 

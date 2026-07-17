@@ -742,7 +742,7 @@ extension MacMarkdownHighlighter {
         switch role {
         case .headingMarker:
             return [
-                .foregroundColor: NSColor(DS.ai),
+                .foregroundColor: NSColor(DS.primaryDeep),
                 .font: bodyFont
             ]
         case .headingText(let level):
@@ -959,7 +959,7 @@ extension MacMarkdownHighlighter {
 
         switch role {
         case .headingMarker:
-            return [.foregroundColor: UIColor(DS.ai), .font: bodyFont]
+            return [.foregroundColor: UIColor(DS.primaryDeep), .font: bodyFont]
         case .headingText:
             return [.foregroundColor: UIColor(DS.textEmphasize), .font: UIFont.systemFont(ofSize: fontSize, weight: .bold)]
         case .emphasisMarker:

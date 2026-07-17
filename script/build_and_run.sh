@@ -6,6 +6,8 @@ APP_NAME="Seal Note"
 PROJECT="EncryptNotes.xcodeproj"
 SCHEME="EncryptNotesMac"
 CODE_SIGNING_ALLOWED="${CODE_SIGNING_ALLOWED:-YES}"
+DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode-beta.app/Contents/Developer}"
+export DEVELOPER_DIR
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DERIVED_DATA="$ROOT_DIR/build/DerivedData"

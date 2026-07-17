@@ -326,7 +326,7 @@ struct HomeView: View {
 
     private var loadingSkeleton: some View {
         ScrollView {
-            LazyVStack(spacing: DS.memoGap) {
+            LazyVStack(spacing: DS.noteGap) {
                 ForEach(0..<3, id: \.self) { _ in
                     SWShimmer {
                         VStack(alignment: .leading, spacing: DS.s3) {
@@ -391,7 +391,7 @@ struct HomeView: View {
 
     private var homeFeed: some View {
         ScrollView {
-            VStack(spacing: DS.memoGap) {
+            VStack(spacing: DS.noteGap) {
                 if case .failed(let message) = syncStore.status {
                     syncErrorBanner(message)
                 }
@@ -405,7 +405,7 @@ struct HomeView: View {
                 if filteredItems.isEmpty {
                     emptyState
                 } else {
-                    LazyVStack(spacing: DS.memoGap) {
+                    LazyVStack(spacing: DS.noteGap) {
                         ForEach(filteredItems) { item in
                             noteRow(item)
                         }

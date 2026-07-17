@@ -23,9 +23,9 @@ final class GitHubReleaseUpdateChecker {
         var errorDescription: String? {
             switch self {
             case .invalidResponse:
-                return "GitHub 返回了无效的响应，请稍后再试。"
+                return L10n.string("GitHub returned an invalid response. Try again later.")
             case .missingAppVersion:
-                return "无法读取当前应用版本。"
+                return L10n.string("The current app version could not be read.")
             }
         }
     }
@@ -60,13 +60,13 @@ final class GitHubReleaseUpdateChecker {
                 )
             } else if alwaysShowResult {
                 presentInformationAlert(
-                    title: "已经是最新版本",
-                    message: "当前版本：\(currentVersion)\n最新版本：\(latestVersion)"
+                    title: L10n.string("Seal Note Is Up to Date"),
+                    message: L10n.string("Current version: %@\nLatest version: %@", currentVersion, latestVersion)
                 )
             }
         } catch {
             guard alwaysShowResult else { return }
-            presentInformationAlert(title: "无法检查更新", message: error.localizedDescription)
+            presentInformationAlert(title: L10n.string("Could Not Check for Updates"), message: error.localizedDescription)
         }
     }
 
@@ -108,11 +108,11 @@ final class GitHubReleaseUpdateChecker {
         let latestVersion = Self.normalizedVersion(release.tagName)
         let alert = NSAlert()
         alert.alertStyle = .informational
-        alert.messageText = "发现新版本 \(latestVersion)"
-        alert.informativeText = "当前版本为 \(currentVersion)。新版本已经发布，是否前往 GitHub Release 页面下载？"
-        alert.addButton(withTitle: "前往下载")
-        alert.addButton(withTitle: "稍后")
-        alert.addButton(withTitle: "此版本不再提示")
+        alert.messageText = L10n.string("New Version %@ Available", latestVersion)
+        alert.informativeText = L10n.string("You are using version %@. Would you like to download the new version from GitHub Releases?", currentVersion)
+        alert.addButton(withTitle: L10n.string("Download"))
+        alert.addButton(withTitle: L10n.string("Later"))
+        alert.addButton(withTitle: L10n.string("Skip This Version"))
 
         NSApp.activate(ignoringOtherApps: true)
         switch alert.runModal() {
@@ -130,7 +130,7 @@ final class GitHubReleaseUpdateChecker {
         alert.alertStyle = .informational
         alert.messageText = title
         alert.informativeText = message
-        alert.addButton(withTitle: "确定")
+        alert.addButton(withTitle: L10n.string("OK"))
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
     }

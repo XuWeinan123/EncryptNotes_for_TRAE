@@ -7,6 +7,8 @@ import Carbon
 final class MacMainMenuController: NSObject {
     static let shared = MacMainMenuController()
 
+    private var settingsLinkMenuItem: NSMenuItem?
+
     private override init() {
         super.init()
     }
@@ -28,28 +30,28 @@ final class MacMainMenuController: NSObject {
         if let editMenu = findMenu(in: mainMenu, containing: #selector(NSText.paste(_:))) {
             configureEditMenu(editMenu)
         } else {
-            let editMenuItem = NSMenuItem(title: "编辑", action: nil, keyEquivalent: "")
-            let editMenu = NSMenu(title: "编辑")
+            let editMenuItem = NSMenuItem(title: L10n.string("Edit"), action: nil, keyEquivalent: "")
+            let editMenu = NSMenu(title: L10n.string("Edit"))
             configureEditMenu(editMenu)
             editMenuItem.submenu = editMenu
             mainMenu.addItem(editMenuItem)
         }
 
-        if let formatMenu = findMenu(in: mainMenu, named: "格式") ?? findMenu(in: mainMenu, named: "Format") {
+        if let formatMenu = findMenu(in: mainMenu, named: L10n.string("Format")) ?? findMenu(in: mainMenu, named: "Format") {
             configureFormatMenu(formatMenu)
         } else {
-            let formatMenuItem = NSMenuItem(title: "格式", action: nil, keyEquivalent: "")
-            let formatMenu = NSMenu(title: "格式")
+            let formatMenuItem = NSMenuItem(title: L10n.string("Format"), action: nil, keyEquivalent: "")
+            let formatMenu = NSMenu(title: L10n.string("Format"))
             configureFormatMenu(formatMenu)
             formatMenuItem.submenu = formatMenu
             mainMenu.addItem(formatMenuItem)
         }
 
-        if let noteMenu = findMenu(in: mainMenu, named: "便签") {
+        if let noteMenu = findMenu(in: mainMenu, named: L10n.string("Note")) ?? findMenu(in: mainMenu, named: "Note") {
             configureNoteMenu(noteMenu)
         } else {
-            let noteMenuItem = NSMenuItem(title: "便签", action: nil, keyEquivalent: "")
-            let noteMenu = NSMenu(title: "便签")
+            let noteMenuItem = NSMenuItem(title: L10n.string("Note"), action: nil, keyEquivalent: "")
+            let noteMenu = NSMenu(title: L10n.string("Note"))
             configureNoteMenu(noteMenu)
             noteMenuItem.submenu = noteMenu
             mainMenu.addItem(noteMenuItem)
@@ -77,35 +79,55 @@ final class MacMainMenuController: NSObject {
     }
 
     private func configureAppMenu(_ menu: NSMenu) {
+        if settingsLinkMenuItem == nil {
+            settingsLinkMenuItem = menu.items.first(where: isSettingsLinkMenuItem)
+        }
+
         menu.removeAllItems()
         let appName = ProcessInfo.processInfo.processName
 
-        menu.addItem(NSMenuItem(title: "关于 \(appName)", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: L10n.string("About %@", appName), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: ""))
         menu.addItem(.separator())
-        let settingsItem = NSMenuItem(title: "设置...", action: #selector(MacMainMenuController.showSettings(_:)), keyEquivalent: ",")
-        settingsItem.target = self
-        menu.addItem(settingsItem)
+        if let settingsLinkMenuItem {
+            settingsLinkMenuItem.title = L10n.string("Settings…")
+            menu.addItem(settingsLinkMenuItem)
+        }
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "隐藏 \(appName)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"))
-        let hideOthersItem = NSMenuItem(title: "隐藏其他", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+        menu.addItem(NSMenuItem(title: L10n.string("Hide %@", appName), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"))
+        let hideOthersItem = NSMenuItem(title: L10n.string("Hide Others"), action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
         hideOthersItem.keyEquivalentModifierMask = [.command, .option]
         menu.addItem(hideOthersItem)
-        menu.addItem(NSMenuItem(title: "全部显示", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: L10n.string("Show All"), action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: ""))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "退出", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: L10n.string("Quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+    }
+
+    private func isSettingsLinkMenuItem(_ item: NSMenuItem) -> Bool {
+        item.keyEquivalent == "," && item.keyEquivalentModifierMask.contains(.command)
+    }
+
+    func openSettings(selectedTab: MacSettingsView.Tab = .general) {
+        MacSettingsRouter.shared.selectedTab = selectedTab
+        NSApp.activate(ignoringOtherApps: true)
+
+        guard let settingsLinkMenuItem,
+              let menu = settingsLinkMenuItem.menu else { return }
+        let index = menu.index(of: settingsLinkMenuItem)
+        guard index >= 0 else { return }
+        menu.performActionForItem(at: index)
     }
 
     private func configureEditMenu(_ menu: NSMenu) {
         menu.removeAllItems()
-        menu.addItem(NSMenuItem(title: "撤销", action: #selector(UndoManager.undo), keyEquivalent: "z"))
-        let redoItem = NSMenuItem(title: "重做", action: #selector(UndoManager.redo), keyEquivalent: "z")
+        menu.addItem(NSMenuItem(title: L10n.string("Undo"), action: #selector(UndoManager.undo), keyEquivalent: "z"))
+        let redoItem = NSMenuItem(title: L10n.string("Redo"), action: #selector(UndoManager.redo), keyEquivalent: "z")
         redoItem.keyEquivalentModifierMask = [.command, .shift]
         menu.addItem(redoItem)
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
-        menu.addItem(NSMenuItem(title: "复制", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
-        menu.addItem(NSMenuItem(title: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
-        menu.addItem(NSMenuItem(title: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+        menu.addItem(NSMenuItem(title: L10n.string("Cut"), action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
+        menu.addItem(NSMenuItem(title: L10n.string("Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
+        menu.addItem(NSMenuItem(title: L10n.string("Paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
+        menu.addItem(NSMenuItem(title: L10n.string("Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
     }
 
     private func configureFormatMenu(_ menu: NSMenu) {
@@ -129,7 +151,7 @@ final class MacMainMenuController: NSObject {
 
     private func addMarkdownItem(_ action: MarkdownShortcutAction, to menu: NSMenu) {
         let shortcut = ShortcutStore.shared.shortcut(for: action)
-        let item = NSMenuItem(title: action.title, action: action.selector, keyEquivalent: shortcut.keyEquivalent)
+        let item = NSMenuItem(title: L10n.string(action.title), action: action.selector, keyEquivalent: shortcut.keyEquivalent)
         item.keyEquivalentModifierMask = modifierMask(from: shortcut.modifiers)
         item.target = nil
         menu.addItem(item)
@@ -147,24 +169,21 @@ final class MacMainMenuController: NSObject {
     private func configureNoteMenu(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        let saveItem = NSMenuItem(title: "保存", action: Selector(("markdownSave:")), keyEquivalent: "s")
+        let saveItem = NSMenuItem(title: L10n.string("Save"), action: Selector(("markdownSave:")), keyEquivalent: "s")
         saveItem.target = nil
         menu.addItem(saveItem)
 
-        let applyItem = NSMenuItem(title: "应用并保持打开", action: Selector(("markdownApply:")), keyEquivalent: "s")
+        let applyItem = NSMenuItem(title: L10n.string("Apply and Keep Open"), action: Selector(("markdownApply:")), keyEquivalent: "s")
         applyItem.keyEquivalentModifierMask = [.command, .shift]
         applyItem.target = nil
         menu.addItem(applyItem)
 
         menu.addItem(.separator())
 
-        let fitItem = NSMenuItem(title: "适应内容", action: Selector(("markdownFitToContent:")), keyEquivalent: "f")
+        let fitItem = NSMenuItem(title: L10n.string("Fit to Content"), action: Selector(("markdownFitToContent:")), keyEquivalent: "f")
         fitItem.keyEquivalentModifierMask = [.command, .option]
         fitItem.target = nil
         menu.addItem(fitItem)
     }
 
-    @objc private func showSettings(_ sender: Any?) {
-        MacMenuBarController.shared.openSettingsWindow()
-    }
 }

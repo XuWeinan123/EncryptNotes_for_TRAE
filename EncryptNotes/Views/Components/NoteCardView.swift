@@ -20,7 +20,7 @@ struct NoteCardView: View {
                     .padding(.top, DS.s1)
             }
 
-            VStack(alignment: .leading, spacing: DS.memoGap) {
+            VStack(alignment: .leading, spacing: DS.noteGap) {
                 HStack(spacing: DS.s2) {
                     Text(timestampText)
                         .font(DS.caption())
@@ -33,17 +33,17 @@ struct NoteCardView: View {
                         Menu {
                             if let onRename {
                                 Button { onRename() } label: {
-                                    Label("重命名", systemImage: "pencil.line")
+                                    Label("Rename", systemImage: "pencil.line")
                                 }
                             }
                             if let onEdit {
                                 Button { onEdit() } label: {
-                                    Label("编辑", systemImage: "pencil")
+                                    Label("Edit", systemImage: "pencil")
                                 }
                             }
                             if let onDelete {
                                 Button(role: .destructive) { onDelete() } label: {
-                                    Label("删除", systemImage: "trash")
+                                    Label("Delete", systemImage: "trash")
                                 }
                             }
                         } label: {
@@ -63,7 +63,7 @@ struct NoteCardView: View {
                             .foregroundColor(DS.textBody)
                             .lineLimit(2)
 
-                        Label("存储于 iCloud，打开时下载", systemImage: "icloud.and.arrow.down")
+                        Label("Stored in iCloud and downloaded when opened", systemImage: "icloud.and.arrow.down")
                             .font(DS.caption())
                             .foregroundColor(DS.textSubtle)
                     }
@@ -74,7 +74,7 @@ struct NoteCardView: View {
                             .foregroundColor(DS.textBody)
                             .lineLimit(2)
 
-                        Label("加密笔记，打开后查看正文", systemImage: "lock.fill")
+                        Label("Encrypted note; open to view content", systemImage: "lock.fill")
                             .font(DS.caption())
                             .foregroundColor(DS.textSubtle)
                     }
@@ -103,7 +103,7 @@ struct NoteCardView: View {
     private var timestampText: String {
         let timestamp = DateFormatters.formatDisplayDateTime(note.updatedAt)
             .replacingOccurrences(of: ".", with: "-")
-        return note.isEncrypted ? "\(timestamp) · 加密" : timestamp
+        return note.isEncrypted ? L10n.string("%@ · Encrypted", timestamp) : timestamp
     }
 
     private var selectionCircle: some View {

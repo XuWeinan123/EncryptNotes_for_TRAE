@@ -49,11 +49,11 @@ struct DateFormatters {
         let diff = max(0, now.timeIntervalSince(date))
 
         if diff < 60 {
-            return "刚刚"
+            return "Just now"
         }
 
         if diff < 3600 {
-            return "\(Int(floor(diff / 60))) 分钟前"
+            return L10n.string("%lld minutes ago", Int64(floor(diff / 60)))
         }
 
         if diff < 86400 {
@@ -61,11 +61,11 @@ struct DateFormatters {
         }
 
         if diff < 2 * 86400 {
-            return "昨天 \(hourMinute.string(from: date))"
+            return L10n.string("Yesterday %@", hourMinute.string(from: date))
         }
 
         if diff < 7 * 86400 {
-            return "\(Int(floor(diff / 86400))) 天前 \(hourMinute.string(from: date))"
+            return L10n.string("%lld days ago at %@", Int64(floor(diff / 86400)), hourMinute.string(from: date))
         }
 
         if calendar.component(.year, from: date) == calendar.component(.year, from: now) {

@@ -9,8 +9,8 @@ struct MacComponentCatalogView: View {
 
         var title: String {
             switch self {
-            case .system: return "系统组件"
-            case .custom: return "自建组件"
+            case .system: return "System Components"
+            case .custom: return "Custom Components"
             }
         }
 
@@ -33,37 +33,37 @@ struct MacComponentCatalogView: View {
     @State private var previewController = MacComponentPreviewWindowController()
 
     private static let systemComponents: [ComponentEntry] = [
-        ComponentEntry(name: "Alert / Sheet / ConfirmationDialog", description: "错误、确认、编辑和导出流程。", source: "SwiftUI", kind: .system),
-        ComponentEntry(name: "Button", description: "基础点击动作、工具栏动作和表单尾部操作。", source: "SwiftUI", kind: .system),
-        ComponentEntry(name: "Image / SF Symbols", description: "图标、状态标识和按钮图形。", source: "SwiftUI", kind: .system),
-        ComponentEntry(name: "LazyVStack / LazyVGrid", description: "列表、快捷键双列布局和栅格内容。", source: "SwiftUI", kind: .system),
-        ComponentEntry(name: "List", description: "全部笔记、回收站和设置集合。", source: "SwiftUI", kind: .system),
-        ComponentEntry(name: "Menu", description: "更多操作、菜单栏列表和笔记上下文操作。", source: "SwiftUI / AppKit NSMenu", kind: .system),
-        ComponentEntry(name: "NSHostingView", description: "把 SwiftUI 内容承载到 macOS 窗口。", source: "AppKit", kind: .system),
-        ComponentEntry(name: "NSStatusItem", description: "macOS 菜单栏入口。", source: "AppKit", kind: .system),
-        ComponentEntry(name: "NSTextView / NSScrollView", description: "macOS 便签编辑器和 Markdown 高亮编辑体验。", source: "AppKit", kind: .system),
-        ComponentEntry(name: "NSWindow", description: "便签、全部笔记、回收站、设置和组件目录窗口。", source: "AppKit", kind: .system),
-        ComponentEntry(name: "Picker", description: "设置页分段选项和模式选择。", source: "SwiftUI", kind: .system),
-        ComponentEntry(name: "ProgressView", description: "导入、导出、加载等等待状态。", source: "SwiftUI", kind: .system),
-        ComponentEntry(name: "ScrollView", description: "设置页、关于页和组件目录滚动容器。", source: "SwiftUI", kind: .system),
-        ComponentEntry(name: "SecureField", description: "密钥与敏感字段输入。", source: "SwiftUI", kind: .system),
-        ComponentEntry(name: "Slider", description: "编辑器字号、行高和透明度设置。", source: "SwiftUI", kind: .system),
-        ComponentEntry(name: "TabView", description: "设置页分栏。", source: "SwiftUI", kind: .system),
-        ComponentEntry(name: "TextField", description: "搜索、标题、路径和 API Key 输入。", source: "SwiftUI", kind: .system),
-        ComponentEntry(name: "Toggle", description: "设置页开关项。", source: "SwiftUI", kind: .system)
+        ComponentEntry(name: "Alert / Sheet / ConfirmationDialog", description: "Error, confirmation, editing, and export flows.", source: "SwiftUI", kind: .system),
+        ComponentEntry(name: "Button", description: "Basic actions, toolbar actions, and form actions.", source: "SwiftUI", kind: .system),
+        ComponentEntry(name: "Image / SF Symbols", description: "Icons, status indicators, and button graphics.", source: "SwiftUI", kind: .system),
+        ComponentEntry(name: "LazyVStack / LazyVGrid", description: "Lists, two-column shortcut layouts, and grid content.", source: "SwiftUI", kind: .system),
+        ComponentEntry(name: "List", description: "All Notes, Trash, and Settings collections.", source: "SwiftUI", kind: .system),
+        ComponentEntry(name: "Menu", description: "More actions, menu bar lists, and note context actions.", source: "SwiftUI / AppKit NSMenu", kind: .system),
+        ComponentEntry(name: "NSHostingView", description: "Hosts SwiftUI content in a macOS window.", source: "AppKit", kind: .system),
+        ComponentEntry(name: "NSStatusItem", description: "A macOS menu bar entry point.", source: "AppKit", kind: .system),
+        ComponentEntry(name: "NSTextView / NSScrollView", description: "The macOS note editor and Markdown highlighting experience.", source: "AppKit", kind: .system),
+        ComponentEntry(name: "NSWindow", description: "Note, All Notes, Trash, Settings, and component catalog windows.", source: "AppKit", kind: .system),
+        ComponentEntry(name: "Picker", description: "Segmented options and mode selection for settings.", source: "SwiftUI", kind: .system),
+        ComponentEntry(name: "ProgressView", description: "Waiting states for import, export, and loading.", source: "SwiftUI", kind: .system),
+        ComponentEntry(name: "ScrollView", description: "Scroll containers for Settings, About, and the component catalog.", source: "SwiftUI", kind: .system),
+        ComponentEntry(name: "SecureField", description: "Input for keys and sensitive fields.", source: "SwiftUI", kind: .system),
+        ComponentEntry(name: "Slider", description: "Editor font size, line height, and opacity settings.", source: "SwiftUI", kind: .system),
+        ComponentEntry(name: "TabView", description: "Settings page columns.", source: "SwiftUI", kind: .system),
+        ComponentEntry(name: "TextField", description: "Search, title, path, and API key input.", source: "SwiftUI", kind: .system),
+        ComponentEntry(name: "Toggle", description: "Toggle rows for settings.", source: "SwiftUI", kind: .system)
     ]
 
     private static let customComponents: [ComponentEntry] = [
-        ComponentEntry(name: "SWStatusBadge", description: "状态胶囊标签。", source: "Views/Components/SWComponents.swift", kind: .custom),
-        ComponentEntry(name: "SWSectionPanel", description: "设置页和信息页的分组面板。", source: "Views/Components/SWComponents.swift", kind: .custom),
-        ComponentEntry(name: "SWSettingsRow", description: "设置页列表行。", source: "Views/Components/SWComponents.swift", kind: .custom),
-        ComponentEntry(name: "SWRowDivider", description: "设置列表行分割线。", source: "Views/Components/SWComponents.swift", kind: .custom),
-        ComponentEntry(name: "SWEmptyState", description: "空状态展示。", source: "Views/Components/SWComponents.swift", kind: .custom),
-        ComponentEntry(name: "SWFilterChip", description: "标签和过滤条件胶囊。", source: "Views/Components/SWComponents.swift", kind: .custom),
-        ComponentEntry(name: "AllNotesListRow", description: "全部笔记窗口的自定义列表项。", source: "Views/Mac/AllNotesWindow.swift", kind: .custom),
-        ComponentEntry(name: "MacListSearchBar", description: "macOS 列表窗口搜索栏。", source: "Views/Mac/AllNotesWindow.swift", kind: .custom),
-        ComponentEntry(name: "TrashListRow", description: "回收站窗口的自定义列表项。", source: "Views/Mac/TrashWindow.swift", kind: .custom),
-        ComponentEntry(name: "MacMarkdownPreview", description: "macOS Markdown 预览视图。", source: "Views/Mac/StickyNoteEditorView.swift", kind: .custom)
+        ComponentEntry(name: "SWStatusBadge", description: "Status badges.", source: "Views/Components/SWComponents.swift", kind: .custom),
+        ComponentEntry(name: "SWSectionPanel", description: "Grouped panels for settings and information pages.", source: "Views/Components/SWComponents.swift", kind: .custom),
+        ComponentEntry(name: "SWSettingsRow", description: "Settings list rows.", source: "Views/Components/SWComponents.swift", kind: .custom),
+        ComponentEntry(name: "SWRowDivider", description: "Settings row dividers.", source: "Views/Components/SWComponents.swift", kind: .custom),
+        ComponentEntry(name: "SWEmptyState", description: "Empty-state presentation.", source: "Views/Components/SWComponents.swift", kind: .custom),
+        ComponentEntry(name: "SWFilterChip", description: "Tag and filter chips.", source: "Views/Components/SWComponents.swift", kind: .custom),
+        ComponentEntry(name: "AllNotesListRow", description: "Custom list rows for the All Notes window.", source: "Views/Mac/AllNotesWindow.swift", kind: .custom),
+        ComponentEntry(name: "MacListSearchBar", description: "Search bars for macOS list windows.", source: "Views/Mac/AllNotesWindow.swift", kind: .custom),
+        ComponentEntry(name: "TrashListRow", description: "Custom list rows for the Trash window.", source: "Views/Mac/TrashWindow.swift", kind: .custom),
+        ComponentEntry(name: "MacMarkdownPreview", description: "A macOS Markdown preview view.", source: "Views/Mac/StickyNoteEditorView.swift", kind: .custom)
     ]
 
     var body: some View {
@@ -83,13 +83,13 @@ struct MacComponentCatalogView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: DS.s3) {
-            Text("查看组件")
+            Text("View Components")
                 .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(DS.textEmphasize)
 
             HStack(spacing: DS.s2) {
-                SWStatusBadge("系统组件 \(Self.systemComponents.count)", systemImage: "macwindow", style: .neutral)
-                SWStatusBadge("自建组件 \(Self.customComponents.count)", systemImage: "shippingbox", style: .success)
+                SWStatusBadge(L10n.string("System Components %lld", Int64(Self.systemComponents.count)), systemImage: "macwindow", style: .neutral)
+                SWStatusBadge(L10n.string("Custom Components %lld", Int64(Self.customComponents.count)), systemImage: "shippingbox", style: .success)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -99,7 +99,7 @@ struct MacComponentCatalogView: View {
         let sortedEntries = entries.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
 
         return VStack(alignment: .leading, spacing: DS.s3) {
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(DS.title())
                 .foregroundStyle(DS.textStrong)
 
@@ -129,7 +129,7 @@ struct MacComponentCatalogView: View {
             HStack(alignment: .center, spacing: DS.s3) {
                 VStack(alignment: .leading, spacing: DS.s1) {
                     HStack(spacing: DS.s2) {
-                        Text(entry.name)
+                        Text(LocalizedStringKey(entry.name))
                             .font(DS.bodyLg().weight(.semibold))
                             .foregroundStyle(DS.textEmphasize)
                             .lineLimit(1)
@@ -137,7 +137,7 @@ struct MacComponentCatalogView: View {
                         SWStatusBadge(entry.kind.title, style: entry.kind.badgeStyle)
                     }
 
-                    Text(entry.description)
+                    Text(LocalizedStringKey(entry.description))
                         .font(DS.caption())
                         .foregroundStyle(DS.textSecondary)
                         .lineLimit(2)
@@ -164,12 +164,12 @@ struct MacComponentCatalogView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button("复制名称", systemImage: "doc.on.doc") {
+            Button("Copy Name", systemImage: "doc.on.doc") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(entry.name, forType: .string)
             }
         }
-        .help("查看 \(entry.name)")
+        .help(L10n.string("View %@", entry.name))
     }
 }
 
@@ -219,8 +219,8 @@ private struct MacComponentPreviewView: View {
     @State private var sliderValue = 0.64
     @State private var textValue = "Seal Note"
     @State private var secureValue = "seal-note-key"
-    @State private var draft = "快速记录一条 #想法"
-    @State private var pickerValue = "明文"
+    @State private var draft = "Capture a quick #idea"
+    @State private var pickerValue = "Plain Text"
     @State private var markdownScrollY: CGFloat = 0
     @State private var isToolbarHovered = false
     @State private var isAlertPresented = false
@@ -232,7 +232,7 @@ private struct MacComponentPreviewView: View {
             header
 
             VStack(alignment: .leading, spacing: DS.s3) {
-                Text("预览")
+                Text("Preview")
                     .font(DS.title())
                     .foregroundStyle(DS.textStrong)
 
@@ -252,37 +252,37 @@ private struct MacComponentPreviewView: View {
         .padding(DS.s6)
         .frame(minWidth: 560, minHeight: 520)
         .background(DS.bg)
-        .alert("系统 Alert", isPresented: $isAlertPresented) {
-            Button("确定", role: .cancel) {}
+        .alert("System Alert", isPresented: $isAlertPresented) {
+            Button("OK", role: .cancel) {}
         } message: {
-            Text("这是 SwiftUI Alert 的真实展示。")
+            Text("This is a real SwiftUI alert.")
         }
         .sheet(isPresented: $isSheetPresented) {
             VStack(spacing: DS.s3) {
                 Image(systemName: "rectangle.on.rectangle")
                     .font(.system(size: 30, weight: .semibold))
                     .foregroundStyle(DS.primary)
-                Text("系统 Sheet")
+                Text("System Sheet")
                     .font(DS.title())
-                Button("关闭") { isSheetPresented = false }
+                Button("Close") { isSheetPresented = false }
                     .keyboardShortcut(.cancelAction)
             }
             .padding(DS.s6)
             .frame(width: 320, height: 220)
         }
-        .confirmationDialog("确认操作", isPresented: $isConfirmationPresented) {
-            Button("继续") {}
-            Button("删除", role: .destructive) {}
-            Button("取消", role: .cancel) {}
+        .confirmationDialog("Confirm Action", isPresented: $isConfirmationPresented) {
+            Button("Continue") {}
+            Button("Delete", role: .destructive) {}
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("这是 ConfirmationDialog 的真实展示。")
+            Text("This is a real confirmation dialog.")
         }
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: DS.s2) {
             HStack(spacing: DS.s2) {
-                Text(entry.name)
+                Text(LocalizedStringKey(entry.name))
                     .font(.system(size: 26, weight: .semibold))
                     .foregroundStyle(DS.textEmphasize)
                     .lineLimit(1)
@@ -290,7 +290,7 @@ private struct MacComponentPreviewView: View {
                 SWStatusBadge(entry.kind.title, style: entry.kind.badgeStyle)
             }
 
-            Text(entry.description)
+            Text(LocalizedStringKey(entry.description))
                 .font(DS.body())
                 .foregroundStyle(DS.textSecondary)
                 .lineLimit(2)
@@ -314,37 +314,37 @@ private struct MacComponentPreviewView: View {
                     spacing: DS.s4
                 ) {
                     buttonStylePreview("Automatic") {
-                        Button("系统按钮") {}
+                        Button("System Button") {}
                             .buttonStyle(.automatic)
                     }
                     buttonStylePreview("Borderless") {
-                        Button("系统按钮") {}
+                        Button("System Button") {}
                             .buttonStyle(.borderless)
                     }
                     buttonStylePreview("Bordered") {
-                        Button("系统按钮") {}
+                        Button("System Button") {}
                             .buttonStyle(.bordered)
                     }
                     buttonStylePreview("Bordered Prominent") {
-                        Button("系统按钮") {}
+                        Button("System Button") {}
                             .buttonStyle(.borderedProminent)
                             .tint(DS.primary)
                     }
                     buttonStylePreview("Glass") {
-                        Button("系统按钮") {}
+                        Button("System Button") {}
                             .buttonStyle(.glass)
                     }
                     buttonStylePreview("Glass Prominent") {
-                        Button("系统按钮") {}
+                        Button("System Button") {}
                             .buttonStyle(.glassProminent)
                             .tint(DS.primary)
                     }
                     buttonStylePreview("Link") {
-                        Button("系统按钮") {}
+                        Button("System Button") {}
                             .buttonStyle(.link)
                     }
                     buttonStylePreview("Plain") {
-                        Button("系统按钮") {}
+                        Button("System Button") {}
                             .buttonStyle(.plain)
                     }
                 }
@@ -367,40 +367,40 @@ private struct MacComponentPreviewView: View {
             .frame(width: 560)
         case "Menu":
             Menu {
-                Button("打开") {}
-                Button("重命名") {}
+                Button("Open") {}
+                Button("Rename") {}
                 Divider()
-                Button("删除", role: .destructive) {}
+                Button("Delete", role: .destructive) {}
             } label: {
-                Label("更多操作", systemImage: "ellipsis.circle")
+                Label("More Actions", systemImage: "ellipsis.circle")
             }
             .menuStyle(.button)
         case "Picker":
-            Picker("保存方式", selection: $pickerValue) {
-                Text("明文").tag("明文")
-                Text("加密").tag("加密")
+            Picker("Save Mode", selection: $pickerValue) {
+                Text("Plain Text").tag("Plain Text")
+                Text("Encrypted").tag("Encrypted")
             }
             .pickerStyle(.segmented)
             .tint(DS.primary)
             .frame(width: 220)
         case "Toggle":
-            Toggle("开启日志记录", isOn: $toggleValue)
+            Toggle("Enable Logging", isOn: $toggleValue)
                 .toggleStyle(.switch)
                 .frame(width: 220)
         case "Slider":
             VStack(alignment: .leading, spacing: DS.s2) {
-                Text("透明度 \(Int(sliderValue * 100))%")
+                Text(L10n.string("Opacity %lld%%", Int64(sliderValue * 100)))
                     .font(DS.caption())
                     .foregroundStyle(DS.textSecondary)
                 Slider(value: $sliderValue)
             }
             .frame(width: 260)
         case "TextField":
-            TextField("搜索笔记...", text: $textValue)
+            TextField("Search Notes…", text: $textValue)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 260)
         case "SecureField":
-            SecureField("输入密钥", text: $secureValue)
+            SecureField("Enter Key", text: $secureValue)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 260)
         case "TextEditor":
@@ -410,16 +410,16 @@ private struct MacComponentPreviewView: View {
                 .clipShape(RoundedRectangle(cornerRadius: DS.rSm, style: .continuous))
         case "List":
             List {
-                Text("Seal Note 迭代记录")
-                Text("连接器界面疑问")
-                Text("功能测试")
+                Text("Seal Note Iteration Log")
+                Text("Connector UI Questions")
+                Text("Feature Test")
             }
             .frame(width: 320, height: 150)
         case "ScrollView":
             ScrollView {
                 VStack(alignment: .leading, spacing: DS.s2) {
                     ForEach(1...8, id: \.self) { index in
-                        Text("滚动内容 \(index)")
+                        Text(L10n.string("Scrollable Content %lld", Int64(index)))
                             .font(DS.body())
                     }
                 }
@@ -439,8 +439,8 @@ private struct MacComponentPreviewView: View {
             .frame(width: 280)
         case "TabView":
             TabView {
-                Text("通用").tabItem { Label("通用", systemImage: "gear") }
-                Text("关于").tabItem { Label("关于", systemImage: "info.circle") }
+                Text("General").tabItem { Label("General", systemImage: "gear") }
+                Text("About").tabItem { Label("About", systemImage: "info.circle") }
             }
             .frame(width: 320, height: 180)
         case "ProgressView":
@@ -459,12 +459,12 @@ private struct MacComponentPreviewView: View {
             .foregroundStyle(DS.primary)
         case "Alert / Sheet / ConfirmationDialog":
             HStack(spacing: DS.s3) {
-                Button("显示 Alert") { isAlertPresented = true }
-                Button("显示新版本提示") {
+                Button("Show Alert") { isAlertPresented = true }
+                Button("Show Update Alert") {
                     GitHubReleaseUpdateChecker.shared.presentUpdateAlertPreview()
                 }
-                Button("显示 Sheet") { isSheetPresented = true }
-                Button("显示确认菜单") { isConfirmationPresented = true }
+                Button("Show Sheet") { isSheetPresented = true }
+                Button("Show Confirmation Dialog") { isConfirmationPresented = true }
             }
             .buttonStyle(.bordered)
         case "NSWindow":
@@ -472,7 +472,7 @@ private struct MacComponentPreviewView: View {
                 Image(systemName: "macwindow")
                     .font(.system(size: 42, weight: .semibold))
                     .foregroundStyle(DS.primary)
-                Text("当前详情窗口就是一个 NSWindow")
+                Text("The current detail window is an NSWindow")
                     .font(DS.title())
                 Text("titled · closable · resizable · unifiedTitleAndToolbar")
                     .font(DS.mono())
@@ -487,7 +487,7 @@ private struct MacComponentPreviewView: View {
         case "NSTextView / NSScrollView":
             MacTextView(
                 text: $draft,
-                placeholder: "输入 Markdown",
+                placeholder: "Enter Markdown",
                 fontSize: 16,
                 lineHeightMultiple: 1.35,
                 autoFocus: false,
@@ -506,12 +506,12 @@ private struct MacComponentPreviewView: View {
         case "NavigationStack":
             NavigationStack {
                 List {
-                    NavigationLink("打开笔记详情") {
-                        Text("NavigationStack 详情页")
+                    NavigationLink("Open Note Details") {
+                        Text("NavigationStack Detail")
                             .font(DS.title())
                     }
                 }
-                .navigationTitle("笔记")
+                .navigationTitle("Notes")
             }
             .frame(width: 420, height: 360)
         case "SWShimmer":
@@ -522,50 +522,50 @@ private struct MacComponentPreviewView: View {
             }
         case "SWStatusBadge":
             HStack(spacing: DS.s2) {
-                SWStatusBadge("系统组件", style: .neutral)
-                SWStatusBadge("已启用", systemImage: "checkmark", style: .success)
-                SWStatusBadge("30 天", systemImage: "clock", style: .warning)
+                SWStatusBadge("System Components", style: .neutral)
+                SWStatusBadge("Enabled", systemImage: "checkmark", style: .success)
+                SWStatusBadge("30 Days", systemImage: "clock", style: .warning)
             }
         case "SWSectionPanel":
-            SWSectionPanel("分组标题", footer: "这里是 footer 文案。") {
-                SWSettingsRow("设置项", subtitle: "说明文本", systemImage: "gear") {
+            SWSectionPanel("Section Title", footer: "Footer text appears here.") {
+                SWSettingsRow("Setting", subtitle: "Description", systemImage: "gear") {
                     EmptyView()
                 }
             }
             .frame(width: 340)
         case "SWPanelStack":
             SWPanelStack {
-                SWSectionPanel("第一组") { Text("内容区域").font(DS.body()) }
-                SWSectionPanel("第二组") { Text("内容区域").font(DS.body()) }
+                SWSectionPanel("First Section") { Text("Content Area").font(DS.body()) }
+                SWSectionPanel("Second Section") { Text("Content Area").font(DS.body()) }
             }
             .frame(width: 340)
         case "SWPageHeader":
-            SWPageHeader(title: "页面标题", subtitle: "页面说明", systemImage: "sparkles")
+            SWPageHeader(title: "Page Title", subtitle: "Page Description", systemImage: "sparkles")
                 .frame(width: 340)
         case "SWSettingsRow":
-            SWSettingsRow("设置项", subtitle: "右侧可放按钮或状态", systemImage: "slider.horizontal.3") {
-                SWStatusBadge("已保存", style: .success)
+            SWSettingsRow("Setting", subtitle: "Buttons or status can appear on the right", systemImage: "slider.horizontal.3") {
+                SWStatusBadge("Saved", style: .success)
             }
             .frame(width: 360)
         case "SWRowDivider":
             VStack(spacing: 0) {
-                SWSettingsRow("上一行", systemImage: "1.circle") { EmptyView() }
+                SWSettingsRow("Previous Row", systemImage: "1.circle") { EmptyView() }
                 SWRowDivider()
-                SWSettingsRow("下一行", systemImage: "2.circle") { EmptyView() }
+                SWSettingsRow("Next Row", systemImage: "2.circle") { EmptyView() }
             }
             .frame(width: 360)
         case "SWEmptyState":
-            SWEmptyState(title: "暂无内容", message: "内容会在这里显示。", systemImage: "tray")
+            SWEmptyState(title: "No Content", message: "Content will appear here.", systemImage: "tray")
         case "SWFilterChip":
             HStack(spacing: DS.s2) {
-                SWFilterChip(title: "全部", isSelected: true) {}
-                SWFilterChip(title: "工作", isSelected: false) {}
+                SWFilterChip(title: "All", isSelected: true) {}
+                SWFilterChip(title: "Work", isSelected: false) {}
             }
         case "NoteCardView":
             NoteCardView(
                 note: Note(
                     id: "component-preview-note",
-                    body: "# Seal Note 迭代记录\n\n组件详情现在会展示真实的笔记卡片。 #组件",
+                    body: "# Seal Note Iteration Log\n\nComponent details now show a real note card. #components",
                     createdAt: Date().addingTimeInterval(-3_600),
                     updatedAt: Date().addingTimeInterval(-120)
                 ),
@@ -579,7 +579,7 @@ private struct MacComponentPreviewView: View {
                 info: EncryptedNoteInfo(
                     id: "component-preview-encrypted-note",
                     url: URL(fileURLWithPath: "/tmp/component-preview.md"),
-                    title: "加密笔记示例",
+                    title: "Encrypted Note Example",
                     ciphertextPreview: "snenc:v1:eyJub25jZSI6Ik...",
                     fileSize: 2_048,
                     createdAt: Date().addingTimeInterval(-7_200),
@@ -595,24 +595,24 @@ private struct MacComponentPreviewView: View {
                 .frame(width: 660, height: 560)
         case "AllNotesListRow":
             AllNotesListRow(
-                title: "Seal Note 迭代记录",
-                subtitle: "组件详情展示真实的全部笔记列表项",
+                title: "Seal Note Iteration Log",
+                subtitle: "Component details show a real All Notes list row",
                 isLocked: false,
-                timeText: "刚刚",
+                timeText: "Just now",
                 onOpen: {}
             ) {
-                Button("重命名") {}
-                Button("删除", role: .destructive) {}
+                Button("Rename") {}
+                Button("Delete", role: .destructive) {}
             }
             .frame(width: 520)
         case "MacListSearchBar":
-            MacListSearchBar(placeholder: "搜索笔记...", text: $textValue, onClose: {})
+            MacListSearchBar(placeholder: "Search Notes…", text: $textValue, onClose: {})
                 .frame(width: 380)
         case "MacListSearchToolbarAppearance":
             VStack(spacing: DS.s3) {
-                MacListSearchBar(placeholder: "搜索笔记...", text: $textValue, onClose: {})
+                MacListSearchBar(placeholder: "Search Notes…", text: $textValue, onClose: {})
                     .frame(width: 460)
-                Text("该桥接组件正在把当前详情窗口切换为搜索工具栏外观")
+                Text("This bridge switches the current detail window to a search toolbar appearance")
                     .font(DS.caption())
                     .foregroundStyle(DS.textSecondary)
             }
@@ -622,12 +622,12 @@ private struct MacComponentPreviewView: View {
                 .frame(width: 660, height: 560)
         case "TrashListRow":
             TrashListRow(
-                title: "已删除的加密笔记",
-                subtitle: "昨天删除 · 29 天后永久删除"
+                title: "Deleted Encrypted Note",
+                subtitle: "Deleted yesterday · permanently deleted in 29 days"
             ) {
                 HStack(spacing: DS.s2) {
-                    SWStatusBadge("加密", systemImage: "lock.fill", style: .neutral)
-                    SWStatusBadge("29 天", systemImage: "clock", style: .warning)
+                    SWStatusBadge("Encrypted", systemImage: "lock.fill", style: .neutral)
+                    SWStatusBadge("29 Days", systemImage: "clock", style: .warning)
                 }
             }
             .frame(width: 520)
@@ -644,7 +644,7 @@ private struct MacComponentPreviewView: View {
             StickyNoteEditorView(
                 note: Note(
                     id: "component-preview-editor",
-                    body: "# Markdown 编辑器\n\n这是悬浮便签编辑器的真实预览。",
+                    body: "# Markdown Editor\n\nThis is a real preview of the floating note editor.",
                     createdAt: Date(),
                     updatedAt: Date()
                 ),
@@ -654,7 +654,7 @@ private struct MacComponentPreviewView: View {
         case "MacTextView":
             MacTextView(
                 text: $draft,
-                placeholder: "随便写点什么吧",
+                placeholder: "Write something…",
                 fontSize: 16,
                 lineHeightMultiple: 1.35,
                 autoFocus: false,
@@ -674,7 +674,7 @@ private struct MacComponentPreviewView: View {
             .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
         case "MacMarkdownPreview":
             MacMarkdownPreview(
-                text: "# Markdown 预览\n\n- **粗体** 与 *斜体*\n- `inline code`\n\n> 这是实际的 Markdown 渲染组件。",
+                text: "# Markdown Preview\n\n- **Bold** and *italic*\n- `inline code`\n\n> This is the actual Markdown rendering component.",
                 fontSize: 16,
                 lineHeightMultiple: 1.35,
                 scrollY: $markdownScrollY
@@ -689,7 +689,7 @@ private struct MacComponentPreviewView: View {
                 VStack(spacing: DS.s2) {
                     Image(systemName: "cursorarrow.motionlines")
                         .font(.system(size: 28, weight: .semibold))
-                    Text(isToolbarHovered ? "已进入工具栏感应区域" : "将指针移入此区域")
+                    Text(isToolbarHovered ? "Pointer is inside the toolbar region" : "Move the pointer into this region")
                         .font(DS.body())
                 }
                 .foregroundStyle(isToolbarHovered ? DS.primaryDeep : DS.textSecondary)
@@ -710,11 +710,11 @@ private struct MacComponentPreviewView: View {
                 .background(DS.primaryContainer)
                 .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
 
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(DS.title())
                 .foregroundStyle(DS.textStrong)
 
-            Text(subtitle)
+            Text(LocalizedStringKey(subtitle))
                 .font(DS.caption())
                 .foregroundStyle(DS.textSecondary)
                 .multilineTextAlignment(.center)
@@ -741,7 +741,7 @@ private struct MacComponentPreviewView: View {
             Text(name)
                 .font(DS.mono())
                 .foregroundStyle(DS.textSecondary)
-            Button("系统按钮") {}
+            Button("System Button") {}
                 .buttonStyle(.borderedProminent)
                 .controlSize(size)
                 .tint(DS.primary)
@@ -766,7 +766,7 @@ private struct AppKitHostingViewPreview: NSViewRepresentable {
                 Image(systemName: "swift")
                     .font(.system(size: 30, weight: .semibold))
                     .foregroundStyle(DS.primary)
-                Text("由 NSHostingView 承载的 SwiftUI 内容")
+                Text("SwiftUI content hosted by NSHostingView")
                     .font(DS.body())
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

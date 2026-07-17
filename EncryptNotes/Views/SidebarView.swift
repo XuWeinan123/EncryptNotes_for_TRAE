@@ -67,7 +67,7 @@ struct SidebarView: View {
         case .pendingDownloads(let count):
             Image(systemName: "arrow.triangle.2.circlepath.icloud")
                 .font(.system(size: 16, weight: .regular))
-                .foregroundColor(DS.pro)
+                .foregroundColor(DS.warning)
                 .frame(width: 32, height: 32)
                 .accessibilityLabel("正在下载 \(count) 篇笔记")
         case .saved:
@@ -91,7 +91,7 @@ struct SidebarView: View {
             HStack(spacing: DS.s2) {
                 Image(systemName: vaultStore.isKeyLoaded ? "lock.open.fill" : "lock.fill")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(vaultStore.isKeyLoaded ? DS.primaryDeep : DS.pro)
+                    .foregroundColor(vaultStore.isKeyLoaded ? DS.primaryDeep : DS.warning)
 
                 Text(vaultStore.isKeyLoaded ? "密钥已加载" : "未加载密钥")
                     .font(DS.title())

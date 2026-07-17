@@ -1,81 +1,63 @@
 ---
 version: alpha
-name: flomo
-description: Capture-first card-note tool with crisp index cards, restrained leaf-green action, and quiet warm-neutral surfaces.
+name: Seal Note
+description: A quiet, privacy-first note utility with a warm pink accent, native Apple materials, and compact editorial surfaces.
 colors:
-  primary: "#30CF79"
-  primary-container: "#E6F9EF"
-  primary-deep: "#397354"
+  primary: "#FF94C5"
+  primary-container: "#FFE8F3"
+  primary-deep: "#8F2D5A"
+  on-primary: "#351625"
   link: "#6890F8"
   destructive: "#E47571"
-  ai: "#A94AD9"
-  pro: "#F07200"
-  bg: "#F9F9F9"
-  surface-card: "#FFFFFF"
+  background: "#F9F9F9"
+  surface: "#FFFFFF"
   surface-raised: "#FFFFFF"
   surface-sunken: "#F5F5F5"
-  text-emphasize: "#121212"
-  text-strong: "#262626"
-  text-body: "#2E2E2E"
-  text-secondary: "#787078"
-  text-subtle: "#949494"
-  line: "rgba(0,0,0,.08)"
-  on-primary: "#FFFFFF"
-  dark-primary: "#397354"
-  dark-primary-container: "rgba(57,115,84,.32)"
-  dark-primary-deep: "#D4D4D4"
-  dark-link: "#4071E2"
-  dark-destructive: "#BD5551"
-  dark-bg: "#121212"
-  dark-surface-card: "#202020"
-  dark-surface-raised: "#202020"
-  dark-surface-sunken: "rgba(120,120,120,.18)"
-  dark-text-emphasize: "#FFFFFF"
-  dark-text-strong: "#E2E2E2"
-  dark-text-body: "#D4D4D4"
-  dark-text-secondary: "#949494"
-  dark-text-subtle: "#949494"
-  dark-line: "rgba(120,120,120,.18)"
-  dark-text: "#D4D4D4"
+  on-surface-emphasize: "#121212"
+  on-surface-strong: "#262626"
+  on-surface: "#2E2E2E"
+  on-surface-secondary: "#787078"
+  on-surface-subtle: "#949494"
+  outline-subtle: "rgba(0,0,0,.08)"
 typography:
   caption:
-    fontFamily: PingFang SC
+    fontFamily: system-ui, PingFang SC, sans-serif
     fontSize: 12px
     fontWeight: 400
     lineHeight: 16px
     letterSpacing: 0em
   body:
-    fontFamily: PingFang SC
+    fontFamily: system-ui, PingFang SC, sans-serif
     fontSize: 15px
     fontWeight: 400
     lineHeight: 24px
     letterSpacing: 0em
-  body-lg:
-    fontFamily: PingFang SC
+  body-comfortable:
+    fontFamily: system-ui, PingFang SC, sans-serif
     fontSize: 15px
     fontWeight: 400
     lineHeight: 22px
     letterSpacing: 0em
   title:
-    fontFamily: PingFang SC
+    fontFamily: system-ui, PingFang SC, sans-serif
     fontSize: 16px
     fontWeight: 600
     lineHeight: 24px
     letterSpacing: 0em
-  page:
-    fontFamily: PingFang SC
+  page-title:
+    fontFamily: system-ui, PingFang SC, sans-serif
     fontSize: 16px
     fontWeight: 600
     lineHeight: 16px
     letterSpacing: 0em
   display:
-    fontFamily: Baloo 2
+    fontFamily: system-ui, PingFang SC, sans-serif
     fontSize: 28px
     fontWeight: 600
     lineHeight: 34px
     letterSpacing: 0em
   mono:
-    fontFamily: SF Mono
+    fontFamily: SF Mono, ui-monospace, monospace
     fontSize: 13px
     fontWeight: 400
     lineHeight: 18px
@@ -94,267 +76,157 @@ spacing:
   8: 32px
   card-padding: 16px
   section-gutter: 24px
-  memo-gap: 12px
+  note-gap: 12px
   sidebar-width: 280px
   sidebar-row-height: 40px
-  sidebar-row-radius: 26px
   content-max: 720px
-  navbar-height: 52px
-components:
-  button-primary:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.on-primary}"
-    typography: "{typography.body}"
-    rounded: "{rounded.lg}"
-    padding: 12px
-    height: 36px
-  button-tonal:
-    backgroundColor: "{colors.primary-container}"
-    textColor: "{colors.primary-deep}"
-    typography: "{typography.body}"
-    rounded: "{rounded.sm}"
-    padding: 12px
-  memo-card:
-    backgroundColor: "{colors.surface-card}"
-    textColor: "{colors.text-body}"
-    typography: "{typography.body}"
-    rounded: "{rounded.lg}"
-    padding: 16px
-  tag-inline:
-    backgroundColor: transparent
-    textColor: "{colors.primary}"
-    typography: "{typography.body}"
-    rounded: "{rounded.sm}"
-    padding: 0px
-  float-button:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.on-primary}"
-    rounded: "{rounded.lg}"
-    size: 52px
-  input:
-    backgroundColor: "{colors.surface-card}"
-    textColor: "{colors.text-body}"
-    typography: "{typography.body}"
-    rounded: "{rounded.lg}"
-    padding: 12px
-  app-canvas:
-    backgroundColor: "{colors.bg}"
-    textColor: "{colors.text-body}"
-    typography: "{typography.body}"
-  destructive-action:
-    backgroundColor: "{colors.destructive}"
-    textColor: "{colors.text-emphasize}"
-    typography: "{typography.body}"
-    rounded: "{rounded.sm}"
-    padding: 12px
-  sunken-well:
-    backgroundColor: "{colors.surface-sunken}"
-    textColor: "{colors.text-body}"
-    typography: "{typography.body}"
-    rounded: "{rounded.sm}"
-    padding: 12px
-  popover:
-    backgroundColor: "{colors.surface-raised}"
-    textColor: "{colors.text-body}"
-    typography: "{typography.body}"
-    rounded: "{rounded.md}"
-    padding: 16px
-  divider:
-    backgroundColor: "{colors.line}"
-    width: 100px
-    height: 1px
-  dark-canvas:
-    backgroundColor: "{colors.dark-bg}"
-    textColor: "{colors.dark-text}"
-    typography: "{typography.body}"
-  dark-card:
-    backgroundColor: "{colors.dark-surface-card}"
-    textColor: "{colors.dark-text}"
-    typography: "{typography.body}"
-    rounded: "{rounded.lg}"
-    padding: 16px
+  toolbar-icon-width: 18px
 ---
 
-# Design System: flomo (浮墨笔记)
+# Seal Note Design System
+
+<!--
+  Ownership mode: code-backed.
+  SwiftUI and AppKit source code own exact component construction, native
+  materials, interaction states, accessibility, and alternate color themes.
+  This document owns the default pink theme's stable visual semantics and
+  component-selection intent.
+-->
 
 ## Overview
 
-flomo (浮墨笔记) 是一个以捕捉为先的卡片笔记工具：用户快速记下一闪而过的想法，用 `#tags` 将其连接起来，并通过每日回顾与 AI 洞察让过往笔记重新浮现。
+Seal Note 是一款安静、轻巧且重视隐私的快速记录工具。界面要让用户感到内容始终属于自己：记录路径短，信息层级清楚，加密能力可信但不制造压迫感。
 
-产品哲学是「记录想法，而非管理任务」。界面应显得谦逊、密集、几乎没有装饰镀层：清爽的白色无阴影索引卡片、一个明亮的叶绿色强调色，以及温暖的近中性灰阶。
+默认视觉以柔和粉色为唯一品牌强调，搭配系统中性色、原生玻璃材质与紧凑排版。整体气质应温暖而克制，既不像企业后台，也不做甜腻或装饰性的少女风表达。
 
-移动端是主要界面，包含 memo 信息流、底部编辑器、统计/热力图、标签下钻和 AI 洞察。桌面/Web 使用双栏布局：280px 左侧栏 + 居中的 720px 信息流，并始终展示内联编辑器。
+设计遵循以下原则：
 
-设计原则：
-
-- **捕捉优先于管理。** 编辑器始终触手可及；不要在想法和信息流之间放置模态框、向导或其他阻碍。
-- **一个强调色，克制使用。** 叶绿色只标记动作与身份：主按钮、发送、`#tags`、浮动按钮、热力图。
-- **索引卡片，而不是胶囊。** 12px 圆角、细线边框、无阴影，形成清爽纸感。
-- **默认安静。** 低对比度中性色、紧凑排版、无渐变、无发光效果；绿色浮动按钮只使用轻投影。
-- **重反思，轻通知。** 动效和颜色鼓励慢慢重读，而不是制造紧迫感；不要使用弹跳、循环动画或抢眼红点。
-
-声音与文案也属于视觉系统的一部分。flomo 的语气是安静、温暖、第二人称中文，像一位体贴的朋友一样称呼用户为“你”，团队称为“我们”。品牌名 `flomo` 小写；缩略词大写（`PRO`、`AI`、`API`）；统计标签大写（`MEMO / DAY / TAG`）。
+- **内容先于装饰。** 笔记正文是最高优先级，容器只提供必要的边界与层级。
+- **粉色表达品牌与交互。** 粉色用于关键操作、焦点、选中状态和少量身份提示，不作为大面积背景填充。
+- **优先使用 Apple 原生控件。** 系统按钮、菜单、工具栏、输入控件与弹层保留平台熟悉的材质、反馈和无障碍行为。
+- **安全感来自清晰。** 加密、密钥、存储和危险操作使用直接、准确的文字与稳定的语义色，不用夸张警示制造焦虑。
+- **桌面工作流保持轻盈。** 菜单栏入口、悬浮笔记窗口和快捷键应让记录融入当前工作，而不是要求用户切换到复杂的管理界面。
 
 ## Colors
 
-调色板建立在微弱米白画布与温暖近中性灰阶之上，只使用一个标志性叶绿色作为主强调色。正文文字绝不要使用纯 `#000`，墨色应是柔和黑。
+文档只定义默认粉色主题。其他可选主题及深色外观的精确映射由 `DesignSystem.swift` 负责，不在此扩展第二套调色板。
 
-### Brand & Semantic Roles
+### Pink Accent
 
-| Token                        | Light     | Dark                 | Role                                                  |
-| ---------------------------- | --------- | -------------------- | ----------------------------------------------------- |
-| `{colors.primary}`           | `#30CF79` | `#397354`            | 品牌叶绿色；主按钮、发送、`#tags`、浮动按钮、热力图。 |
-| `{colors.primary-container}` | `#E6F9EF` | `rgba(57,115,84,.32)` | 带强调色的浅色表面，用于选中状态。                    |
-| `{colors.primary-deep}`      | `#397354` | `#D4D4D4`            | 浅色背景上的强调文字。                                |
-| `{colors.link}`              | `#6890F8` | `#4071E2`            | 超链接。                                              |
-| `{colors.destructive}`       | `#E47571` | `#BD5551`            | 删除与危险操作。                                      |
-| `{colors.ai}`                | `#A94AD9` | `#A94AD9`            | AI 洞察强调色。                                       |
-| `{colors.pro}`               | `#F07200` | `#F07200`            | PRO / 会员琥珀色。                                    |
+| Token | Value | Role |
+| --- | --- | --- |
+| `{colors.primary}` | `#FF94C5` | 主要交互强调、系统控件 tint、焦点与少量品牌识别。 |
+| `{colors.primary-container}` | `#FFE8F3` | 选中、悬停和提示区域的柔和强调表面。 |
+| `{colors.primary-deep}` | `#8F2D5A` | 浅粉表面上的图标、文字和 Markdown 强调。 |
+| `{colors.on-primary}` | `#351625` | 实色粉色表面上的前景色。 |
 
-次级强调色必须锁定角色。蓝色只用于链接，红色只用于危险操作，紫色只用于 AI，琥珀色只用于 PRO。不要为了增加视觉趣味而调用这些颜色。
+`{colors.primary}` 应保持稀疏；同一视图中优先突出一个动作或一组紧密关联的状态。大面积区域使用中性表面，让粉色保持辨识度。
 
-### Surface & Text
+### Surfaces and Text
 
-| Token                     | Light             | Dark                  | Role                   |
-| ------------------------- | ----------------- | --------------------- | ---------------------- |
-| `{colors.bg}`             | `#F9F9F9`         | `#121212`             | 应用画布。             |
-| `{colors.surface-card}`   | `#FFFFFF`         | `#202020`             | memo 卡片。            |
-| `{colors.surface-raised}` | `#FFFFFF`         | `#202020`             | 浮层、底部弹层、菜单。 |
-| `{colors.surface-sunken}` | `#F5F5F5`         | `rgba(120,120,120,.18)` | 内嵌区域与代码。       |
-| `{colors.text-emphasize}` | `#121212`         | `#FFFFFF`             | 标题与强调内容。       |
-| `{colors.text-strong}`    | `#262626`         | `#E2E2E2`             | 标题文字。             |
-| `{colors.text-body}`      | `#2E2E2E`         | `#D4D4D4`             | 默认正文。             |
-| `{colors.text-secondary}` | `#787078`         | `#949494`             | 元信息与说明文字。     |
-| `{colors.text-subtle}`    | `#949494`         | `#949494`             | 时间戳与提示。         |
-| `{colors.line}`           | `rgba(0,0,0,.08)` | `rgba(120,120,120,.18)` | 极细边框。             |
-| `{colors.sidebar-section-title}` | `#C18B49` | `#89602F`             | 侧栏分区小标题。       |
-| `{colors.sidebar-metric}` | `#9D9D9D`         | `#949494`             | 侧栏统计数字。         |
-| `{colors.contribution-0}` | `#E8E8E8`         | `#343434`             | 热力图空格。           |
-| `{colors.contribution-1}` | `#CFE8D9`         | `#254D39`             | 热力图低频。           |
-| `{colors.contribution-2}` | `#8AD9B1`         | `#397354`             | 热力图中频。           |
-| `{colors.contribution-3}` | `#53B88B`         | `#4EA778`             | 热力图高频。           |
+| Token | Value | Role |
+| --- | --- | --- |
+| `{colors.background}` | `#F9F9F9` | 应用画布与列表底层。 |
+| `{colors.surface}` | `#FFFFFF` | 笔记、设置分组与输入区域。 |
+| `{colors.surface-raised}` | `#FFFFFF` | 浮层、菜单和需要暂时聚焦的内容。 |
+| `{colors.surface-sunken}` | `#F5F5F5` | 代码、预览和内嵌信息区域。 |
+| `{colors.on-surface-emphasize}` | `#121212` | 页面级标题与最高层级信息。 |
+| `{colors.on-surface-strong}` | `#262626` | 分区标题和强调正文。 |
+| `{colors.on-surface}` | `#2E2E2E` | 默认正文。 |
+| `{colors.on-surface-secondary}` | `#787078` | 说明、辅助标签与非关键状态。 |
+| `{colors.on-surface-subtle}` | `#949494` | 时间、占位符和可省略的元信息。 |
+| `{colors.outline-subtle}` | `rgba(0,0,0,.08)` | 0.5px 细边界与弱分隔。 |
 
-深色模式 token 来自 Figma Dark 组（`Pages - Narrow / Dark`）的实际渲染值。实现时始终使用语义 token，让主题自动切换，不要在视图里手写 `.white`、`.black` 或固定 hex。
+正文不使用纯黑；通过多级中性文字建立信息层级。`{colors.on-surface-subtle}` 只承载非关键元信息，必要说明使用 `{colors.on-surface-secondary}` 或更高层级。
+
+### Semantic Color
+
+- `{colors.link}` 只用于可打开的链接和 URL。
+- `{colors.destructive}` 只用于删除、清空、替换密钥等不可逆或高风险操作。
+- 状态图标应优先使用系统语义色；只有当状态同时承担品牌交互含义时才使用粉色。
 
 ## Typography
 
-中文界面采用紧凑、密集的字号阶梯。只使用两种字重：Regular 400 与 SemiBold 600；不要使用 Light、Medium-display 或 Bold。
+使用 Apple 系统字体。中文由系统匹配 PingFang SC，拉丁文本使用 SF 系列；代码与结构化片段使用 SF Mono。常规界面只使用 Regular 400 与 Semibold 600，保持阅读自然并避免不必要的字重噪声。
 
-| Token                  | Size / Line Height | Weight | Use                            |
-| ---------------------- | ------------------ | ------ | ------------------------------ |
-| `{typography.caption}` | 12px / 16px        | 400    | 时间戳、元信息、列标题。       |
-| `{typography.body}`    | 15px / 24px        | 400    | 默认 memo 内容。               |
-| `{typography.body-lg}` | 15px / 22px        | 400    | 舒适阅读与设置行。             |
-| `{typography.title}`   | 16px / 24px        | 600    | 分区 / 分组标题。              |
-| `{typography.page}`    | 16px / 16px        | 600    | 屏幕 / 导航栏标题。            |
-| `{typography.display}` | 28px / 34px        | 600    | 引导页标题、大数字、字标兜底。 |
-| `{typography.mono}`    | 13px / 18px        | 400    | API 片段与等宽数据。           |
+| Token | Size / Line Height | Weight | Use |
+| --- | --- | --- | --- |
+| `{typography.caption}` | 12px / 16px | 400 | 时间、元信息和紧凑标签。 |
+| `{typography.body}` | 15px / 24px | 400 | 默认笔记与界面正文。 |
+| `{typography.body-comfortable}` | 15px / 22px | 400 | 设置说明与舒适阅读区域。 |
+| `{typography.title}` | 16px / 24px | 600 | 分区和分组标题。 |
+| `{typography.page-title}` | 16px / 16px | 600 | 窗口与工具栏标题。 |
+| `{typography.display}` | 28px / 34px | 600 | About 产品名、空状态主标题与大数字。 |
+| `{typography.mono}` | 13px / 18px | 400 | 密钥指纹、路径、Markdown 与技术数据。 |
 
-行高应保持紧凑。不要放大字号，flomo 有意采用小字号。UI 文案使用简短名词短语，例如「全部笔记」「无标签笔记」「每日回顾」「会员权益」。
+笔记编辑器字号可由用户设置；它属于阅读偏好，不改变界面字体层级。标题层级通过字号、字重和间距共同建立，不用彩色标题代替结构。
+
+引导页的 40px 产品标题是为首次启动场景保留的特殊层级，不作为可复用 Token。
 
 ## Layout
 
-布局应服务于快速捕捉与回看，节奏像纸张一样轻：`4 · 8 · 12 · 16 · 24 · 32`。这些值映射到 `{spacing.1}` 至 `{spacing.8}`。
+基础间距节奏为 `4 · 8 · 12 · 16 · 24 · 32`，对应 `{spacing.1}` 至 `{spacing.8}`。相邻控件使用 8–12px，容器内边距使用 16px，主要分区使用 24–32px。
 
-核心布局 token：
+- `{spacing.card-padding}` 16px：内容卡片和紧凑分组的标准内边距。
+- `{spacing.section-gutter}` 24px：窗口主要分区与面板边距。
+- `{spacing.note-gap}` 12px：笔记内部元素和列表内容间距。
+- `{spacing.sidebar-width}` 280px：需要侧栏时的基准宽度。
+- `{spacing.sidebar-row-height}` 40px：侧栏可点击行的基准高度。
+- `{spacing.content-max}` 720px：长文本和集中阅读区域的建议最大宽度。
+- `{spacing.toolbar-icon-width}` 18px：macOS 工具栏图标的稳定占位宽度。
 
-- `{spacing.sidebar-width}`: 280px，用于桌面左侧栏。
-- `{spacing.sidebar-row-height}`: 40px，用于侧栏列表项高度。
-- `{spacing.sidebar-row-radius}`: 26px，用于侧栏列表项胶囊圆角。
-- `{spacing.content-max}`: 720px，用于桌面/Web 居中信息流。
-- `{spacing.navbar-height}`: 52px，用于导航栏高度。
-- `{spacing.card-padding}`: 16px，用于卡片内边距。
-- `{spacing.section-gutter}`: 24px，用于分区边距。
-- `{spacing.memo-gap}`: 12px，用于 memo 内容间距。
-
-移动端应优先保留底部编辑器与单列信息流。桌面/Web 使用 280px 左侧栏加 720px 中央 feed，内联编辑器始终可见。页面不需要营销式大留白；信息应紧凑但可扫读。
-
-图像与媒体只在 memo 内容需要时出现，使用 `{rounded.lg}` 12px。不要引入营销插图、装饰渐变或与内容无关的背景图。
+悬浮笔记窗口应让正文自然占据可用空间，工具栏不挤压编辑区。设置与列表窗口可以扩展宽度，但文本行长仍应保持可读。不要为了视觉饱满而填入与当前任务无关的面板。
 
 ## Elevation & Depth
 
-flomo 的深度很浅，主要通过极细边框、轻微阴影和表面层级表达，而不是厚重投影。
+层级主要依靠原生材质、表面明度与细边界建立。投影只用于需要从其他窗口或内容上方脱离的层。
 
-| Level       | Treatment                                                  | Use                            |
-| ----------- | ---------------------------------------------------------- | ------------------------------ |
-| L0 Flat     | 无边框、无阴影。                                           | 应用画布、大面积空白。         |
-| L1 Hairline | 0.5px `{colors.line}`。                                    | 卡片、输入框、分隔线。         |
-| L2 Card     | 仅使用 0.5px `{colors.line}`，无阴影。                      | 默认首页 memo 卡片。           |
-| L3 Popover  | `0 6px 24px rgba(0,0,0,.12), 0 0 0 .5px rgba(0,0,0,.06)`。 | 浮层、菜单、底部弹层、对话框。 |
-| L4 Float    | `0 0 5px rgba(0,0,0,.15)`。                                | 绿色浮动按钮的轻投影。         |
+| Level | Treatment | Use |
+| --- | --- | --- |
+| Flat | `{colors.background}` 或透明系统背景，无阴影。 | 应用画布与连续内容。 |
+| Bordered | `{colors.surface}` + 0.5px `{colors.outline-subtle}`。 | 笔记容器、输入区与设置面板。 |
+| Card | 黑色 3% 不透明度、半径 6px、Y 轴 1px。 | 确实需要与画布区分的轻量卡片。 |
+| Popover | 黑色 12% 不透明度、半径 24px、Y 轴 6px。 | 悬浮笔记窗口与聚焦浮层。 |
+| Float | 黑色 15% 不透明度、半径 5px。 | 应用图标等少量悬浮对象。 |
 
-交互状态：
-
-- 悬停：普通控件使用淡灰色覆盖 `rgba(0,0,0,.05)`；填充控件亮度降低约 6%。
-- 按下：按钮缩放到 `0.97`，浮动按钮缩放到 `0.92`。
-- 选中：使用 `{colors.primary-container}` 表面与 `{colors.primary-deep}` 文字。
-- 动效：标准 `cubic-bezier(.4,0,.2,1)`，时长 120-200ms。分段控件滑块是系统中最显眼的动效。
-- 禁止：弹跳、无限循环和装饰性动画。
+macOS 26 工具栏使用系统 Liquid Glass 与滚动边缘效果。保持工具栏透明，按钮使用系统默认 glass 表现；不要叠加自定义背景、描边、渐变或粉色光晕。
 
 ## Shapes
 
-形状语言是纸感、克制。卡片、主按钮和输入框默认使用 `{rounded.lg}` 12px；小型 chip 使用 `{rounded.sm}`，图标按钮、图片和内嵌控件使用 `{rounded.md}`。
+连续圆角用于柔化紧凑界面，但每个半径对应明确层级：
 
-| Token            | Value  | Use                            |
-| ---------------- | ------ | ------------------------------ |
-| `{rounded.sm}`   | 3px    | 小型 chip。                    |
-| `{rounded.md}`   | 6px    | 图标按钮、图片、内嵌控件。     |
-| `{rounded.lg}`   | 12px   | 卡片、主按钮、输入框、分组列表。 |
-| `{rounded.full}` | 9999px | 仅限圆形头像和胶囊 chip。      |
+| Token | Value | Use |
+| --- | --- | --- |
+| `{rounded.sm}` | 3px | 小型标记和非常紧凑的内嵌对象。 |
+| `{rounded.md}` | 6px | 图标容器、输入控件和悬浮笔记窗口。 |
+| `{rounded.lg}` | 12px | 卡片、面板和较大的内容分组。 |
+| `{rounded.full}` | 9999px | 圆形状态、短胶囊标签和明确采用 Capsule 的单一动作。 |
 
-不要把普通按钮、卡片、输入框圆成胶囊。`{rounded.full}` 是少数高语义对象的例外，不是默认形状。
-
-图标使用 SF Symbols 风格的线性/填充字形：纤细、圆润、单一字重。真实产品中使用 Apple SF Symbols；本系统提供 flomo 绘制的矢量模块：
-
-- `assets/icons/icon-data.js`: 38 个字形，格式为 `{ viewBox, body }`。
-- `assets/icons/Icon.jsx`: `<Icon name="…" size={…} />`，使用 `currentColor` 绘制。
-- `assets/icons/Icon.d.ts`: 有效名称索引，命名图标前必须阅读。
-
-不要手绘 SVG 图标，也不要把 emoji 用作功能性图标。Emoji 只出现在 About/设置列表行中（每行一个前导 emoji）以及 🍀 品牌标记中。Logo 以矢量形式提供：`assets/logo-text.svg`。
+图标统一使用 SF Symbols，并匹配系统控件的字号和字重。功能图标不使用 emoji，也不为常见系统动作重新绘制私有图标。
 
 ## Components
 
-组件加载在全局命名空间 `window.DesignSystem_e2e2a1` 上（bundle: `_ds_bundle.js`）。构建界面时应组合使用这些组件，不要重新实现基础组件。
+组件的精确尺寸、材质、状态和行为由 SwiftUI 与 AppKit 实现负责。新增界面应先组合系统组件和仓库中已有的共享组件，再考虑创建新的视觉构件。
 
-| Group      | Components                                           |
-| ---------- | ---------------------------------------------------- |
-| core       | `Button` · `IconButton` · `Tag` · `Badge` · `Avatar` |
-| forms      | `Input` · `Textarea` · `Checkbox` · `Segment`        |
-| memo       | `MemoCard` · `Heatmap` · `StatRow`                   |
-| navigation | `NavBar` · `FloatButton`                             |
-| feedback   | `Snackbar` · `Dialog`                                |
-| icons      | `Icon`（38 个字形）                                  |
-
-### Buttons
-
-`{components.button-primary}` 是唯一主动作样式：叶绿色背景、白色文字、12px 圆角。用于发送、主 CTA 和关键确认动作。
-
-`{components.button-tonal}` 用于选中或弱强调状态：浅绿色背景、深绿色文字。普通工具按钮应保持中性色。
-
-### Memo & Tags
-
-`{components.memo-card}` 是默认首页内容容器：白色表面、柔和黑正文、16px 内边距、12px 圆角、0.5px 边框，无阴影。卡片操作（分享、更多）应默认隐藏，悬停时渐进披露。
-
-`{components.tag-inline}` 用于 memo 正文中的 `#tags`，继承正文节奏并使用叶绿色文字。侧栏 chip 可以使用 `{rounded.full}`，但正文标签不应显得像大型胶囊按钮。
-
-### Navigation & Feedback
-
-`FloatButton` 使用 52px 正方形、12px 圆角和轻黑色投影。`NavBar` 高度为 52px。`Snackbar`、`Dialog`、菜单和底部弹层使用 `{rounded.lg}` 或系统 sheet 圆角与 L3 浮层阴影。
-
-`Sidebar` 使用 280px 白色/深色浮层，右侧遮罩 `rgba(0,0,0,.6)`。内容横向内边距 12px，列表项宽 256px、高 40px、圆角 26px、左右 12px 内边距、图标 16px、标题 15/16。选中态使用 `{colors.primary}` 胶囊背景和白色文字；普通态保持透明背景与 `{colors.text-emphasize}`。
+- **Buttons:** 工具栏按钮保留系统自动样式；主要确认动作使用系统 prominent 或 glass prominent 变体并以 `{colors.primary}` 着色。危险按钮使用系统 destructive role。
+- **Toolbars:** 保持透明，让系统管理 glass 分组、悬停、按下和窗口激活状态。图标使用 `{spacing.toolbar-icon-width}` 稳定布局。
+- **Note surfaces:** 笔记容器使用现有的系统背景、`{rounded.md}` 连续圆角与细边界；除非窗口层级需要，不额外增加阴影。
+- **Inputs:** 短文本使用原生 TextField，长文本和 Markdown 编辑使用现有编辑器；输入焦点跟随系统行为与粉色 tint。
+- **Selection:** 柔和选中态使用 `{colors.primary-container}`，前景使用 `{colors.primary-deep}`；强选中态才使用 `{colors.primary}`。
+- **Panels and lists:** 设置面板使用清晰分组与行分隔；列表在悬停时只做轻微表面变化，不把每一行都变成独立卡片。
+- **Feedback:** Alert、Sheet、Confirmation Dialog、Menu 与 Progress View 优先使用原生组件；安全状态文案保持具体，错误与危险操作保持明确。
 
 ## Do's and Don'ts
 
-- 叶绿色仅用于动作和标识。
-- 除非具有明确的语义角色，否则其他所有颜色都应保持中性。
-- 半径应保持较小；表面应像索引卡片一样清晰易读。
-- 首页 memo 卡片使用 0.5px 的极细边框，不使用阴影；浮层和设置分组可使用低调阴影。
-- 在备忘录正文中，使用 `<Tag>` 内联渲染 `#tags`。
-- 使用简短、亲切的第二人称中文文案。
-- 使用 `currentColor` 为图标重新着色，并从 `Icon.d.ts` 文件中获取图标名称。
-- 不要使用蓝紫色渐变、装饰性发光或浓重的阴影。
-- 不要使用纯黑色 `#000` 作为正文颜色。
-- 不要增大字体大小或将普通控件转换为药丸状控件。
-- 不要手绘 SVG 图标或将表情符号用作功能性图标。
-- 不要将蓝色、红色、紫色或琥珀色用于其明确语义角色之外的用途。
-- 不要在捕获流程前面添加模态框或向导。
+- Do use `{colors.primary}` as the single brand accent so important actions remain easy to find.
+- Do pair `{colors.primary-container}` with `{colors.primary-deep}` for quiet selection and hover feedback.
+- Do preserve the existing transparent toolbar and native glass button treatment.
+- Do use system controls and SF Symbols so macOS interaction, accessibility, and materials stay coherent.
+- Do keep note surfaces restrained: neutral background, continuous radius, 0.5px boundary, and only necessary elevation.
+- Do use `{colors.destructive}` and system destructive roles only for genuinely risky actions.
+- Don't introduce green, cyan, or another competing theme palette into the default pink visual contract.
+- Don't apply pink to large backgrounds, long text, or every icon; that turns the accent into visual noise.
+- Don't add gradients, colored glows, thick borders, or decorative shadows around native glass controls.
+- Don't replace the current note container, toolbar, or button materials with custom styling without a specific functional need.
+- Don't use `{colors.on-surface-subtle}` for required instructions or essential status because its contrast is intentionally secondary.
+- Don't create one-off colors, radii, or spacing values when an existing semantic token expresses the same role.

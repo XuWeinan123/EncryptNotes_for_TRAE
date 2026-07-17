@@ -38,11 +38,11 @@ struct SettingsView: View {
                 }
 
                 SWSectionPanel {
-                    settingsLink(.notes, "笔记与编辑器", subtitle: "默认模式、Markdown 与编辑行为", systemImage: "textformat", tint: DS.ai)
+                    settingsLink(.notes, "笔记与编辑器", subtitle: "默认模式、Markdown 与编辑行为", systemImage: "textformat", tint: DS.primaryDeep)
                     SWRowDivider()
                     settingsLink(.key, "密钥与加密", subtitle: "创建、导入、移除或处理加密笔记", systemImage: "lock", tint: DS.primaryDeep)
                     SWRowDivider()
-                    settingsLink(.privacy, "隐私保护", subtitle: "后台隐藏与本机密钥保护", systemImage: "hand.raised", tint: DS.pro)
+                    settingsLink(.privacy, "隐私保护", subtitle: "后台隐藏与本机密钥保护", systemImage: "hand.raised", tint: DS.warning)
                     SWRowDivider()
                     settingsLink(.data, "数据", subtitle: "回收站、同步、导出与维护", systemImage: "externaldrive", tint: DS.link)
                     SWRowDivider()
@@ -88,7 +88,7 @@ struct SettingsView: View {
             HStack(spacing: DS.s3) {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(DS.pro)
+                    .foregroundColor(DS.warning)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("密钥未加载")
@@ -977,7 +977,7 @@ private struct DataSettingsView: View {
     private var syncTint: Color {
         switch syncStore.status {
         case .failed: return DS.destructive
-        case .syncing, .pendingDownloads: return DS.pro
+        case .syncing, .pendingDownloads: return DS.warning
         case .saved: return DS.primaryDeep
         }
     }

@@ -28,7 +28,7 @@ struct MacIntroView: View {
                         .font(.system(size: 40, weight: .semibold))
                         .foregroundStyle(DS.textEmphasize)
 
-                    Text("快速记录，不打断当前工作。")
+                    Text("Capture quickly without interrupting your work.")
                         .font(.system(size: 18, weight: .regular))
                         .foregroundStyle(DS.textSecondary)
                 }
@@ -37,14 +37,26 @@ struct MacIntroView: View {
             .padding(.bottom, DS.s8)
 
             VStack(alignment: .leading, spacing: DS.s6) {
-                introRow(systemImage: "menubar.rectangle", title: "快速捕捉", text: "从菜单栏新建或打开最近笔记，不打断当前工作。")
-                introRow(systemImage: "doc.plaintext", title: "自由迁移", text: "以标准 Markdown 文件保存，方便同步、迁移和跨工具读取。")
-                introRow(systemImage: "lock.shield", title: "安心加密", text: "端侧加密，密钥文件由你保存和管理。")
+                introRow(
+                    systemImage: "menubar.rectangle",
+                    title: Text("Quick Capture"),
+                    description: Text("Create or open recent notes from the menu bar without interrupting your work.")
+                )
+                introRow(
+                    systemImage: "doc.plaintext",
+                    title: Text("Portable by Design"),
+                    description: Text("Save as standard Markdown files for easy sync, migration, and use across tools.")
+                )
+                introRow(
+                    systemImage: "lock.shield",
+                    title: Text("On-Device Encryption"),
+                    description: Text("On-device encryption with a key file you own and manage.")
+                )
             }
             .frame(width: 460, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
 
-            Text("通过右上角菜单栏图标，或按 \(newNoteShortcut) 新建笔记。")
+            Text("Use the menu bar icon or press \(newNoteShortcut) to create a note.")
                 .font(DS.bodyLg())
                 .foregroundStyle(DS.textSecondary)
                 .multilineTextAlignment(.center)
@@ -58,7 +70,7 @@ struct MacIntroView: View {
                 Button {
                     onClose()
                 } label: {
-                    Text("关闭")
+                    Text("Close")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 104, height: 34)
@@ -68,7 +80,7 @@ struct MacIntroView: View {
                 .buttonStyle(.plain)
                 .keyboardShortcut(.defaultAction)
 
-                Toggle("不再显示", isOn: $settings.hideMacIntroOnLaunch)
+                Toggle("Do Not Show Again", isOn: $settings.hideMacIntroOnLaunch)
                     .toggleStyle(.checkbox)
                     .font(DS.body())
                     .foregroundStyle(DS.textSecondary)
@@ -107,7 +119,7 @@ struct MacIntroView: View {
         }
     }
 
-    private func introRow(systemImage: String, title: String, text: String) -> some View {
+    private func introRow(systemImage: String, title: Text, description: Text) -> some View {
         HStack(alignment: .top, spacing: DS.s4) {
             ZStack {
                 RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
@@ -120,11 +132,11 @@ struct MacIntroView: View {
             }
 
             VStack(alignment: .leading, spacing: DS.s2) {
-                Text(title)
+                title
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(DS.textStrong)
 
-                Text(text)
+                description
                     .font(DS.bodyLg())
                     .foregroundStyle(DS.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

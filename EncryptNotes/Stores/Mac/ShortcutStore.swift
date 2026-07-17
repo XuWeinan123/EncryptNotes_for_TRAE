@@ -18,14 +18,14 @@ enum MarkdownShortcutAction: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .bold: return "粗体"
-        case .italic: return "斜体"
-        case .underline: return "下划线"
-        case .inlineCode: return "行内代码"
-        case .inlineMath: return "行内公式"
-        case .strike: return "删除线"
-        case .htmlComment: return "注释"
-        case .link: return "链接"
+        case .bold: return "Bold"
+        case .italic: return "Italic"
+        case .underline: return "Underline"
+        case .inlineCode: return "Inline Code"
+        case .inlineMath: return "Inline Math"
+        case .strike: return "Strikethrough"
+        case .htmlComment: return "Comment"
+        case .link: return "Link"
         }
     }
 
@@ -63,7 +63,7 @@ enum EditorShortcutAction: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .markdownPreview: return "切换 Markdown 预览"
+        case .markdownPreview: return "Toggle Markdown Preview"
         }
     }
 }
@@ -289,7 +289,7 @@ final class ShortcutStore: ObservableObject {
 
     static func displayStringForKey(keyCode: UInt32, modifiers: UInt32) -> String {
         if keyCode == 0 && modifiers == 0 {
-            return "未设置"
+            return L10n.string("Not Set")
         }
         var parts: [String] = []
         if modifiers & UInt32(controlKey) != 0 { parts.append("⌃") }

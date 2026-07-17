@@ -48,7 +48,7 @@ enum SWStatusBadgeStyle {
     var tint: Color {
         switch self {
         case .success: return DS.primaryDeep
-        case .warning: return DS.pro
+        case .warning: return DS.warning
         case .error: return DS.destructive
         case .neutral: return DS.textSecondary
         }
@@ -57,7 +57,7 @@ enum SWStatusBadgeStyle {
     var fill: Color {
         switch self {
         case .success: return DS.primaryContainer
-        case .warning: return DS.pro.opacity(0.12)
+        case .warning: return DS.warning.opacity(0.12)
         case .error: return DS.destructive.opacity(0.12)
         case .neutral: return DS.surfaceSunken
         }
@@ -81,7 +81,7 @@ struct SWStatusBadge: View {
                 Image(systemName: systemImage)
                     .font(.system(size: 11, weight: .semibold))
             }
-            Text(text)
+            Text(LocalizedStringKey(text))
                 .font(DS.caption())
                 .lineLimit(1)
         }
@@ -115,7 +115,7 @@ struct SWSectionPanel<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DS.s2) {
             if let title {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(DS.title())
                     .foregroundColor(DS.textEmphasize)
                     .padding(.horizontal, DS.s1)
@@ -127,7 +127,7 @@ struct SWSectionPanel<Content: View>: View {
             .dsCardSurface(shadow: false)
 
             if let footer {
-                Text(footer)
+                Text(LocalizedStringKey(footer))
                     .font(DS.caption())
                     .foregroundColor(DS.textSubtle)
                     .fixedSize(horizontal: false, vertical: true)
@@ -211,10 +211,10 @@ struct SWPageHeader: View {
                 .clipShape(RoundedRectangle(cornerRadius: DS.rLg, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(DS.title())
                     .foregroundColor(DS.textEmphasize)
-                Text(subtitle)
+                Text(LocalizedStringKey(subtitle))
                     .font(DS.caption())
                     .foregroundColor(DS.textSubtle)
                     .lineLimit(2)
@@ -262,12 +262,12 @@ struct SWSettingsRow<Trailing: View>: View {
                 .clipShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(DS.bodyLg())
                     .foregroundColor(DS.textStrong)
                     .lineLimit(1)
                 if let subtitle {
-                    Text(subtitle)
+                    Text(LocalizedStringKey(subtitle))
                         .font(DS.caption())
                         .foregroundColor(DS.textSubtle)
                         .fixedSize(horizontal: false, vertical: true)
@@ -322,11 +322,11 @@ struct SWEmptyState: View {
                 .background(DS.primaryContainer)
                 .clipShape(RoundedRectangle(cornerRadius: DS.rLg, style: .continuous))
 
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(DS.title())
                 .foregroundColor(DS.textStrong)
 
-            Text(message)
+            Text(LocalizedStringKey(message))
                 .font(DS.body())
                 .foregroundColor(DS.textSubtle)
                 .multilineTextAlignment(.center)
@@ -353,7 +353,7 @@ struct SWFilterChipLabel: View {
     let isSelected: Bool
 
     var body: some View {
-        Text(title)
+        Text(LocalizedStringKey(title))
             .font(DS.caption())
             .foregroundColor(isSelected ? DS.primaryDeep : DS.textSecondary)
             .lineLimit(1)

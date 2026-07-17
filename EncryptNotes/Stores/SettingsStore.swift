@@ -14,9 +14,9 @@ enum MacTheme: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .green: return "绿色"
-        case .pink: return "粉色"
-        case .cyan: return "青色"
+        case .green: return "Green"
+        case .pink: return "Pink"
+        case .cyan: return "Cyan"
         }
     }
 }
@@ -31,9 +31,9 @@ enum IOSAppIconChoice: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .primary: return "粉色"
-        case .cyan: return "青色"
-        case .green: return "绿色"
+        case .primary: return "Pink"
+        case .cyan: return "Cyan"
+        case .green: return "Green"
         }
     }
 
@@ -85,6 +85,7 @@ final class SettingsStore: ObservableObject {
     static let defaultMacEditorLineHeightMultiple: Double = 1.5
     static let macEditorLineHeightRange: ClosedRange<Double> = 1.2...2.0
     static let defaultMacTheme: MacTheme = .pink
+    static let defaultAppLanguage: AppLanguage = .system
     static let macThemeDefaultsKey = "SNMacTheme"
     static let macRecentNotesLimitOptions = [5, 10, 15]
     static let defaultMacRecentNotesLimit = 5
@@ -174,6 +175,13 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    @Published var appLanguage: AppLanguage {
+        didSet {
+            defaults.set(appLanguage.rawValue, forKey: Keys.appLanguage)
+            NotificationCenter.default.post(name: .appLanguageDidChange, object: nil)
+        }
+    }
+
     @Published var macRecentNotesLimit: Int {
         didSet {
             let clamped = Self.clampedRecentNotesLimit(macRecentNotesLimit)
@@ -257,6 +265,7 @@ final class SettingsStore: ObservableObject {
         self.excludeHexColorsFromTags = defaults.object(forKey: Keys.excludeHexColorsFromTags) as? Bool ?? true
         self.maintenanceLoggingEnabled = defaults.object(forKey: Keys.maintenanceLoggingEnabled) as? Bool ?? false
         self.macTheme = MacTheme(rawValue: defaults.string(forKey: Self.macThemeDefaultsKey) ?? "") ?? Self.defaultMacTheme
+        self.appLanguage = AppLanguage(rawValue: defaults.string(forKey: Keys.appLanguage) ?? "") ?? Self.defaultAppLanguage
         let storedRecentNotesLimit = defaults.integer(forKey: Keys.macRecentNotesLimit)
         self.macRecentNotesLimit = storedRecentNotesLimit > 0
             ? Self.clampedRecentNotesLimit(storedRecentNotesLimit)
@@ -292,6 +301,7 @@ final class SettingsStore: ObservableObject {
         excludeHexColorsFromTags = true
         maintenanceLoggingEnabled = false
         macTheme = Self.defaultMacTheme
+        appLanguage = Self.defaultAppLanguage
         macRecentNotesLimit = Self.defaultMacRecentNotesLimit
         iOSAppIconName = nil
         #if os(macOS)
@@ -323,6 +333,7 @@ final class SettingsStore: ObservableObject {
         excludeHexColorsFromTags = true
         maintenanceLoggingEnabled = false
         macTheme = Self.defaultMacTheme
+        appLanguage = Self.defaultAppLanguage
         macRecentNotesLimit = Self.defaultMacRecentNotesLimit
         pinNewNotesByDefault = Self.defaultPinNewNotes
         lockEncryptedNotesOnSleep = Self.defaultLockEncryptedNotesOnSleep
@@ -410,6 +421,7 @@ final class SettingsStore: ObservableObject {
         static let autoRenameNotesOnSave = "SNAutoRenameNotesOnSave"
         static let excludeHexColorsFromTags = "SNExcludeHexColorsFromTags"
         static let maintenanceLoggingEnabled = "SNMaintenanceLoggingEnabled"
+        static let appLanguage = "SNAppLanguage"
         static let macRecentNotesLimit = "SNMacRecentNotesLimit"
         static let iOSAppIconName = "SNIOSAppIconName"
         #if os(macOS)
@@ -421,4 +433,8 @@ final class SettingsStore: ObservableObject {
         static let hideMacIntroOnLaunch = "SNHideMacIntroOnLaunch"
         #endif
     }
+}
+
+extension Notification.Name {
+    static let appLanguageDidChange = Notification.Name("SNAppLanguageDidChange")
 }

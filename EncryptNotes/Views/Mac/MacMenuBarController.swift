@@ -18,7 +18,6 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
 
     private var allNotesWindow: NSWindow?
     private var trashWindow: NSWindow?
-    private var settingsWindow: NSWindow?
     private var componentCatalogWindow: NSWindow?
     private var introWindow: NSWindow?
 
@@ -67,6 +66,12 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
             name: .macActivateMenuBarMenu,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleLanguageDidChange),
+            name: .appLanguageDidChange,
+            object: nil
+        )
     }
 
     deinit {
@@ -86,7 +91,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         } else {
             statusItem?.length = NSStatusItem.variableLength
             button.image = nil
-            button.title = "别"
+            button.title = "SN"
             button.imagePosition = .noImage
         }
     }
@@ -100,7 +105,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
 
         let newNoteShortcut = shortcutStore.newNoteShortcut
         let newNoteItem = NSMenuItem(
-            title: "新建笔记",
+            title: L10n.string("New Note"),
             action: #selector(handleNewNote),
             keyEquivalent: newNoteShortcut.keyEquivalent
         )
@@ -113,7 +118,7 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         if case .loading = vaultStore.state {
-            let loadingItem = NSMenuItem(title: "正在加载笔记…", action: nil, keyEquivalent: "")
+            let loadingItem = NSMenuItem(title: L10n.string("Loading Notes…"), action: nil, keyEquivalent: "")
             loadingItem.isEnabled = false
             menu.addItem(loadingItem)
         } else {
@@ -125,20 +130,22 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
             }
 
             if recentItems.isEmpty {
-                let emptyItem = NSMenuItem(title: "暂无笔记", action: nil, keyEquivalent: "")
+                let emptyItem = NSMenuItem(title: L10n.string("No Notes"), action: nil, keyEquivalent: "")
                 emptyItem.isEnabled = false
                 menu.addItem(emptyItem)
             }
         }
 
-        let allNotesItem = NSMenuItem(title: "全部笔记(\(vaultStore.totalNoteCount))...", action: #selector(showAllNotes), keyEquivalent: "")
+        let allNotesItem = NSMenuItem(title: L10n.string("All Notes (%lld)…", Int64(vaultStore.totalNoteCount)), action: #selector(showAllNotes), keyEquivalent: "")
         allNotesItem.target = self
         menu.addItem(allNotesItem)
 
         menu.addItem(.separator())
 
         let trashItem = NSMenuItem(
-            title: "回收站\(vaultStore.trashCount > 0 ? "(\(vaultStore.trashCount))…" : "")",
+            title: vaultStore.trashCount > 0
+                ? L10n.string("Trash (%lld)…", Int64(vaultStore.trashCount))
+                : L10n.string("Trash"),
             action: #selector(showTrash),
             keyEquivalent: ""
         )
@@ -147,14 +154,14 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        let settingsItem = NSMenuItem(title: "设置…", action: #selector(showSettings), keyEquivalent: ",")
+        let settingsItem = NSMenuItem(title: L10n.string("Settings…"), action: #selector(showSettings), keyEquivalent: ",")
         settingsItem.keyEquivalentModifierMask = [.command]
         settingsItem.target = self
         menu.addItem(settingsItem)
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "退出", action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: L10n.string("Quit"), action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
     }
@@ -271,14 +278,14 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
 
     func openAllNotesWindow() {
         if allNotesWindow == nil {
-            let hostingView = NSHostingView(rootView: AllNotesView())
+            let hostingView = NSHostingView(rootView: AppLocalizedRoot { AllNotesView() })
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 640, height: 720),
                 styleMask: [.titled, .closable, .resizable, .unifiedTitleAndToolbar, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
-            window.title = "全部笔记"
+            window.title = L10n.string("All Notes")
             window.contentView = hostingView
             if !window.setFrameUsingName(Self.allNotesFrameAutosaveName) {
                 window.center()
@@ -303,14 +310,14 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
 
     func openTrashWindow() {
         if trashWindow == nil {
-            let hostingView = NSHostingView(rootView: TrashView())
+            let hostingView = NSHostingView(rootView: AppLocalizedRoot { TrashView() })
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 640, height: 720),
                 styleMask: [.titled, .closable, .resizable, .unifiedTitleAndToolbar, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
-            window.title = "回收站"
+            window.title = L10n.string("Trash")
             window.contentView = hostingView
             if !window.setFrameUsingName(Self.trashFrameAutosaveName) {
                 window.center()
@@ -330,40 +337,19 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
     }
 
     func openSettingsWindow(selectedTab: MacSettingsView.Tab = .general) {
-        let rootView = MacSettingsView(selectedTab: selectedTab)
-        if settingsWindow == nil {
-            let hostingView = NSHostingView(rootView: rootView)
-            let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 640, height: 660),
-                styleMask: [.titled, .closable],
-                backing: .buffered,
-                defer: false
-            )
-            window.title = "设置"
-            window.contentView = hostingView
-            window.contentMinSize = NSSize(width: 640, height: 660)
-            window.contentMaxSize = NSSize(width: 640, height: 660)
-            window.center()
-            window.isReleasedWhenClosed = false
-            window.delegate = self
-            settingsWindow = window
-        } else {
-            settingsWindow?.contentView = NSHostingView(rootView: rootView)
-        }
-        settingsWindow?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        MacMainMenuController.shared.openSettings(selectedTab: selectedTab)
     }
 
     func openComponentCatalogWindow() {
         if componentCatalogWindow == nil {
-            let hostingView = NSHostingView(rootView: MacComponentCatalogView())
+            let hostingView = NSHostingView(rootView: AppLocalizedRoot { MacComponentCatalogView() })
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 760, height: 720),
                 styleMask: [.titled, .closable, .resizable, .unifiedTitleAndToolbar, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
-            window.title = "查看组件"
+            window.title = L10n.string("View Components")
             window.contentView = hostingView
             window.contentMinSize = NSSize(width: 680, height: 560)
             window.center()
@@ -426,8 +412,10 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
                 backing: .buffered,
                 defer: false
             )
-            let hostingView = NSHostingView(rootView: MacIntroView {
-                window.close()
+            let hostingView = NSHostingView(rootView: AppLocalizedRoot {
+                MacIntroView {
+                    window.close()
+                }
             })
             window.title = ""
             window.contentView = hostingView
@@ -457,10 +445,20 @@ final class MacMenuBarController: NSObject, NSMenuDelegate {
 
     private func showError(message: String) {
         let alert = NSAlert()
-        alert.messageText = "出错了"
+        alert.messageText = L10n.string("Something Went Wrong")
         alert.informativeText = message
-        alert.addButton(withTitle: "确定")
+        alert.addButton(withTitle: L10n.string("OK"))
         alert.runModal()
+    }
+
+    @objc private func handleLanguageDidChange() {
+        if let menu = statusItem?.menu {
+            buildMenu(menu)
+        }
+        allNotesWindow?.title = L10n.string("All Notes")
+        trashWindow?.title = L10n.string("Trash")
+        componentCatalogWindow?.title = L10n.string("View Components")
+        MacMainMenuController.shared.installMainMenu()
     }
 }
 
@@ -471,8 +469,6 @@ extension MacMenuBarController: NSWindowDelegate {
             allNotesWindow = nil
         } else if window == trashWindow {
             trashWindow = nil
-        } else if window == settingsWindow {
-            settingsWindow = nil
         } else if window == componentCatalogWindow {
             componentCatalogWindow = nil
         } else if window == introWindow {

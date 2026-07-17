@@ -32,7 +32,7 @@ nonisolated enum NoteListOrdering {
 }
 
 nonisolated enum NoteTitleFormatter {
-    static let emptyTitle = "临时笔记"
+    static let emptyTitle = "Untitled Note"
     static let generatedTitleMaxLength = 20
 
     static func displayTitle(from body: String, emptyTitle: String = Self.emptyTitle) -> String {
