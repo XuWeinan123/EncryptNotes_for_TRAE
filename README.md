@@ -17,8 +17,6 @@
   <a href="https://github.com/XuWeinan123/EncryptNotes_for_TRAE/issues">反馈问题</a>
 </p>
 
-![Seal Note 关于页面](docs/images/seal-note-about.png)
-
 ## 为什么是 Seal Note
 
 - **快速捕捉**：macOS 菜单栏常驻，通过全局快捷键随时唤起悬浮便签。
@@ -26,19 +24,6 @@
 - **安心加密**：可选择仅加密敏感笔记的正文；加解密均在设备端完成。
 - **自然同步**：优先使用 iCloud Drive，同一 Apple Account 下跨设备同步；iCloud 不可用时回退到本地存储。
 - **原生体验**：SwiftUI 与 AppKit 构建，支持 Markdown 编辑/预览、搜索、标签、回收站、主题与自定义快捷键。
-
-## 产品界面
-
-<table>
-  <tr>
-    <td width="50%"><img src="docs/images/seal-note-about.png" alt="Seal Note 产品介绍"></td>
-    <td width="50%"><img src="docs/images/seal-note-settings.png" alt="Seal Note 设置"></td>
-  </tr>
-  <tr>
-    <td align="center">产品介绍与核心能力</td>
-    <td align="center">原生 macOS 设置与主题</td>
-  </tr>
-</table>
 
 ## 平台与要求
 
