@@ -66,7 +66,7 @@ final class VaultStore: ObservableObject {
     private let cryptoService = CryptoService.shared
     private let keychainStore = KeychainStore.shared
     private let keyManager = VaultKeyManager.shared
-    private let settings = SettingsStore.shared
+    private let settings: SettingsStore
 
     private var vaultId: String?
     private var currentKey: CryptoKit.SymmetricKey?
@@ -115,8 +115,9 @@ final class VaultStore: ObservableObject {
         case explicit(CryptoKit.SymmetricKey?)
     }
 
-    init(storage: VaultStorage? = nil) {
+    init(storage: VaultStorage? = nil, settings: SettingsStore? = nil) {
         self.storage = storage ?? (ICloudVaultStorage.shared.isAvailable ? ICloudVaultStorage.shared : LocalFallbackStorage.shared)
+        self.settings = settings ?? .shared
     }
 
     #if DEBUG
@@ -140,6 +141,11 @@ final class VaultStore: ObservableObject {
     #endif
 
     var isKeyLoaded: Bool {
+        #if DEBUG
+        if currentKey != nil {
+            return true
+        }
+        #endif
         #if os(macOS)
         if case .available = macKeyStatus {
             return true
@@ -1045,6 +1051,11 @@ final class VaultStore: ObservableObject {
     }
 
     private func currentEncryptionKey() throws -> CryptoKit.SymmetricKey {
+        #if DEBUG
+        if let currentKey {
+            return currentKey
+        }
+        #endif
         #if os(macOS)
         return try loadConfiguredKeyFile()
         #else
@@ -1060,6 +1071,31 @@ final class VaultStore: ObservableObject {
         }
         #endif
     }
+
+    #if os(macOS)
+    /// Loads encrypted note bodies for an authorized CLI request without changing
+    /// the UI's locked/decrypted note state.
+    func encryptedNotesForCLI() throws -> [Note] {
+        let key = try currentEncryptionKey()
+        return try noteIndex.entries.compactMap { entry in
+            guard entry.mode == .encrypted, entry.location == .notes else {
+                return nil
+            }
+            guard let url = Self.urlForEntry(entry, storage: storage) else {
+                throw StorageError.fileNotFound
+            }
+            let file = try storage.loadMarkdownFile(at: url)
+            let body = try cryptoService.decryptMarkdownBody(file.body, using: key)
+            return Note(
+                id: entry.noteId,
+                body: body,
+                createdAt: file.createdAt,
+                updatedAt: file.updatedAt,
+                isEncrypted: true
+            )
+        }
+    }
+    #endif
 
     #if os(macOS)
     private func loadConfiguredKeyFile() throws -> CryptoKit.SymmetricKey {

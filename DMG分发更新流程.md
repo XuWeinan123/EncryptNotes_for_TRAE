@@ -42,7 +42,8 @@ xcodebuild archive \
 检查是否同时包含 Apple Silicon 和 Intel 架构：
 
 ```bash
-file "$ARCHIVE/Products/Applications/EncryptNotesMac.app/Contents/MacOS/EncryptNotesMac"
+file "$ARCHIVE/Products/Applications/Seal Note.app/Contents/MacOS/Seal Note"
+file "$ARCHIVE/Products/Applications/Seal Note.app/Contents/Helpers/sealnote"
 ```
 
 应看到类似结果：
@@ -92,9 +93,12 @@ xcodebuild -exportArchive \
 
 ```bash
 codesign --verify --deep --strict --verbose=2 \
-  "$EXPORT_DIR/EncryptNotesMac.app"
+  "$EXPORT_DIR/Seal Note.app"
 
-codesign -dvvv "$EXPORT_DIR/EncryptNotesMac.app"
+codesign --verify --strict --verbose=2 \
+  "$EXPORT_DIR/Seal Note.app/Contents/Helpers/sealnote"
+
+codesign -dvvv "$EXPORT_DIR/Seal Note.app"
 ```
 
 应看到：
@@ -139,7 +143,7 @@ xcodebuild -exportArchive \
 成功时会显示：
 
 ```text
-Uploaded EncryptNotesMac
+Uploaded Seal Note
 ** EXPORT SUCCEEDED **
 ```
 
@@ -150,7 +154,7 @@ Uploaded EncryptNotesMac
 ```bash
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
 xcrun stapler staple \
-  "$EXPORT_DIR/EncryptNotesMac.app"
+  "$EXPORT_DIR/Seal Note.app"
 ```
 
 如果出现 `Record not found`，说明 Apple 仍在处理，等待约 20–60 秒后重试。
@@ -166,7 +170,7 @@ The staple and validate action worked!
 ```bash
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
 xcrun stapler validate \
-  "$EXPORT_DIR/EncryptNotesMac.app"
+  "$EXPORT_DIR/Seal Note.app"
 ```
 
 ## 7. 制作 DMG
@@ -178,7 +182,7 @@ DMG="dist/Seal-Note-${VERSION}.dmg"
 rm -rf "$DMG_ROOT"
 mkdir -p "$DMG_ROOT" dist
 
-cp -R "$EXPORT_DIR/EncryptNotesMac.app" "$DMG_ROOT/"
+cp -R "$EXPORT_DIR/Seal Note.app" "$DMG_ROOT/"
 ln -s /Applications "$DMG_ROOT/Applications"
 
 rm -f "$DMG"
@@ -193,7 +197,7 @@ hdiutil create \
 
 DMG 中会包含：
 
-- `EncryptNotesMac.app`
+- `Seal Note.app`
 - `Applications` 快捷方式
 
 用户打开 DMG 后，只需把 App 拖入 Applications。
@@ -215,7 +219,7 @@ hdiutil attach -readonly -nobrowse "$DMG"
 验证镜像内部的 App：
 
 ```bash
-APP="/Volumes/Seal Note/EncryptNotesMac.app"
+APP="/Volumes/Seal Note/Seal Note.app"
 
 codesign --verify --deep --strict --verbose=2 "$APP"
 
@@ -223,7 +227,9 @@ xcrun stapler validate "$APP"
 
 spctl -a -t exec -vv "$APP"
 
-file "$APP/Contents/MacOS/EncryptNotesMac"
+file "$APP/Contents/MacOS/Seal Note"
+file "$APP/Contents/Helpers/sealnote"
+codesign --verify --strict --verbose=2 "$APP/Contents/Helpers/sealnote"
 ```
 
 关键结果应为：
@@ -254,6 +260,8 @@ ls -lh "$DMG"
 - [ ] 同时包含 `arm64` 和 `x86_64`
 - [ ] 使用 Developer ID Application 签名
 - [ ] 使用 Production iCloud profile
+- [ ] `Contents/Helpers/sealnote` 已内嵌且签名有效
+- [ ] App 与 CLI 的 App Group entitlement 一致
 - [ ] Apple 公证成功
 - [ ] 公证票据已经 staple
 - [ ] DMG 内有 Applications 快捷方式

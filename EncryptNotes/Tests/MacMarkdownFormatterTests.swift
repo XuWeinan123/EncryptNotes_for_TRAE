@@ -323,6 +323,28 @@ final class MacMarkdownFormatterTests: XCTestCase {
         XCTAssertEqual(result?.text, "- hello\n- ")
     }
 
+    func testBulletListReturnBeforeContentSplitsAndKeepsBothMarkers() {
+        let text = "* 第一行内容"
+        let result = MacMarkdownFormatter.continueListIfNeeded(
+            in: text,
+            selection: NSRange(location: 2, length: 0)
+        )
+
+        XCTAssertEqual(result?.text, "* \n* 第一行内容")
+        XCTAssertEqual(result?.selection, NSRange(location: 5, length: 0))
+    }
+
+    func testNumberedListReturnBeforeContentSplitsAndRenumbersFollowingItem() {
+        let text = "1. 第一行\n2. 第二行"
+        let result = MacMarkdownFormatter.continueListIfNeeded(
+            in: text,
+            selection: NSRange(location: 3, length: 0)
+        )
+
+        XCTAssertEqual(result?.text, "1. \n2. 第一行\n3. 第二行")
+        XCTAssertEqual(result?.selection, NSRange(location: 7, length: 0))
+    }
+
     func testTaskListReturnContinuesWithUncheckedMarker() {
         let text = "- [ ] first task"
         let result = MacMarkdownFormatter.continueListIfNeeded(

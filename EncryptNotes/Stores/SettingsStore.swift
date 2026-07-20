@@ -93,6 +93,8 @@ final class SettingsStore: ObservableObject {
     static let defaultPinNewNotes = true
     static let defaultLockEncryptedNotesOnSleep = true
     static let defaultLockUnpinnedEncryptedNotesOnBackground = true
+    static let defaultCLIAccessEnabled = false
+    static let defaultCLIEncryptedAccessEnabled = false
     #endif
 
     private let defaults: UserDefaults
@@ -226,6 +228,14 @@ final class SettingsStore: ObservableObject {
     @Published var hideMacIntroOnLaunch: Bool {
         didSet { defaults.set(hideMacIntroOnLaunch, forKey: Keys.hideMacIntroOnLaunch) }
     }
+
+    @Published private(set) var cliAccessEnabled: Bool {
+        didSet { defaults.set(cliAccessEnabled, forKey: Keys.cliAccessEnabled) }
+    }
+
+    @Published private(set) var cliEncryptedAccessEnabled: Bool {
+        didSet { defaults.set(cliEncryptedAccessEnabled, forKey: Keys.cliEncryptedAccessEnabled) }
+    }
     #endif
 
     init(defaults: UserDefaults = .standard, keychainStore: KeychainStore? = nil) {
@@ -274,6 +284,15 @@ final class SettingsStore: ObservableObject {
             self.vaultKeyFileReference = nil
         }
         self.hideMacIntroOnLaunch = defaults.object(forKey: Keys.hideMacIntroOnLaunch) as? Bool ?? false
+        let storedCLIAccess = defaults.object(forKey: Keys.cliAccessEnabled) as? Bool
+            ?? Self.defaultCLIAccessEnabled
+        self.cliAccessEnabled = storedCLIAccess
+        let storedEncryptedCLIAccess = defaults.object(forKey: Keys.cliEncryptedAccessEnabled) as? Bool
+            ?? Self.defaultCLIEncryptedAccessEnabled
+        self.cliEncryptedAccessEnabled = storedCLIAccess && storedEncryptedCLIAccess
+        if !storedCLIAccess && storedEncryptedCLIAccess {
+            defaults.set(false, forKey: Keys.cliEncryptedAccessEnabled)
+        }
         #endif
     }
 
@@ -301,6 +320,7 @@ final class SettingsStore: ObservableObject {
         lockUnpinnedEncryptedNotesOnBackground = Self.defaultLockUnpinnedEncryptedNotesOnBackground
         clearVaultKeyFileReference()
         hideMacIntroOnLaunch = false
+        setCLIAccessEnabled(false)
         #endif
     }
 
@@ -328,6 +348,7 @@ final class SettingsStore: ObservableObject {
         lockEncryptedNotesOnSleep = Self.defaultLockEncryptedNotesOnSleep
         lockUnpinnedEncryptedNotesOnBackground = Self.defaultLockUnpinnedEncryptedNotesOnBackground
         hideMacIntroOnLaunch = false
+        setCLIAccessEnabled(false)
     }
     #endif
 
@@ -347,6 +368,17 @@ final class SettingsStore: ObservableObject {
         } catch {
             throw error
         }
+    }
+
+    func setCLIAccessEnabled(_ isEnabled: Bool) {
+        if !isEnabled {
+            cliEncryptedAccessEnabled = false
+        }
+        cliAccessEnabled = isEnabled
+    }
+
+    func setCLIEncryptedAccessEnabled(_ isEnabled: Bool) {
+        cliEncryptedAccessEnabled = cliAccessEnabled && isEnabled
     }
 
     func saveVaultKeyFileReference(for url: URL, keyId: String? = nil, keyFingerprint: String? = nil) throws {
@@ -419,6 +451,8 @@ final class SettingsStore: ObservableObject {
         static let lockUnpinnedEncryptedNotesOnBackground = "SNLockUnpinnedEncryptedNotesOnBackground"
         static let vaultKeyFileReference = "SNVaultKeyFileReference"
         static let hideMacIntroOnLaunch = "SNHideMacIntroOnLaunch"
+        static let cliAccessEnabled = "SNCLIAccessEnabled"
+        static let cliEncryptedAccessEnabled = "SNCLIEncryptedAccessEnabled"
         #endif
     }
 }

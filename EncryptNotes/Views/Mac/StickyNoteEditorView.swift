@@ -263,6 +263,12 @@ struct StickyNoteEditorView: View {
                 .help(viewModel.didCopy ? "已复制" : "复制")
 
                 Menu {
+                    Button(action: { viewModel.beginRenaming() }) {
+                        Label("重命名…", systemImage: "pencil")
+                    }
+
+                    Divider()
+
                     Button(action: { viewModel.fitWindowToContent() }) {
                         Label("适应内容", systemImage: "arrow.up.left.and.arrow.down.right")
                     }
@@ -1228,6 +1234,49 @@ final class StickyNoteEditorViewModel: ObservableObject {
 
     func togglePin() {
         isPinned.toggle()
+    }
+
+    func beginRenaming() {
+        guard !isPreview else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "重命名笔记"
+        alert.informativeText = "标题只影响列表、菜单和文件名，不会改写正文。"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "保存")
+        alert.addButton(withTitle: "取消")
+
+        let titleField = NSTextField(
+            string: vaultStore.displayTitle(for: note, emptyTitle: "")
+        )
+        titleField.placeholderString = "标题"
+        titleField.frame = NSRect(x: 0, y: 0, width: 320, height: 24)
+        titleField.selectText(nil)
+        alert.accessoryView = titleField
+
+        let handleResponse: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            guard let cleanedTitle = NoteTitleFormatter.sanitizedGeneratedTitle(titleField.stringValue) else {
+                self.syncStore.setFailed(message: "请输入有效标题。")
+                return
+            }
+
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    try await self.vaultStore.renameNote(self.note, title: cleanedTitle)
+                    self.syncStore.setSaved()
+                } catch {
+                    self.syncStore.setFailed(message: "重命名失败：\(error.localizedDescription)")
+                }
+            }
+        }
+
+        if let window = NSApp.keyWindow {
+            alert.beginSheetModal(for: window, completionHandler: handleResponse)
+        } else {
+            handleResponse(alert.runModal())
+        }
     }
 
     func toggleEncryptionLock() {

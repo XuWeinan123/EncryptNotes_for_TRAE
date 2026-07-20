@@ -8,6 +8,7 @@ struct MacSettingsView: View {
         case general
         case editor
         case shortcuts
+        case cli
         case key
         case about
     }
@@ -15,9 +16,12 @@ struct MacSettingsView: View {
     @ObservedObject private var shortcutStore = ShortcutStore.shared
     @ObservedObject private var vaultStore = VaultStore.shared
     @ObservedObject private var settings = SettingsStore.shared
+    @ObservedObject private var cliService = CLIServiceCoordinator.shared
     @State private var selectedTab: Tab
     @State private var recordingAction: MacShortcutRecordingAction?
     @State private var settingsErrorMessage: String?
+    @State private var isShowingCLIEnableConfirmation = false
+    @State private var isShowingCLIEncryptedAccessConfirmation = false
     #if DEBUG
     @State private var isShowingRestoreDefaultsConfirmation = false
     #endif
@@ -45,6 +49,12 @@ struct MacSettingsView: View {
                     Label("快捷键", systemImage: "keyboard")
                 }
                 .tag(Tab.shortcuts)
+
+            cliTab
+                .tabItem {
+                    Label("命令行", systemImage: "terminal")
+                }
+                .tag(Tab.cli)
 
             keyTab
                 .tabItem {
@@ -74,6 +84,30 @@ struct MacSettingsView: View {
             Button("确定", role: .cancel) {}
         } message: {
             Text(settingsErrorMessage ?? "无法保存这个设置。")
+        }
+        .confirmationDialog(
+            "启用命令行访问？",
+            isPresented: $isShowingCLIEnableConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("启用 CLI") {
+                settings.setCLIAccessEnabled(true)
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("启用后，本机同一用户下的 AI 或其他进程可以读取、搜索、创建、修改明文笔记，并将笔记移入应用废纸篓。只应向你信任的工具开放，用完后请及时关闭。")
+        }
+        .confirmationDialog(
+            "允许 CLI 访问加密笔记？",
+            isPresented: $isShowingCLIEncryptedAccessConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("允许访问", role: .destructive) {
+                settings.setCLIEncryptedAccessEnabled(true)
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("开启后，AI 或其他本机进程可以读取、全文搜索、修改加密笔记，并创建新的加密笔记。密钥不会通过 CLI 返回，但已解密正文会离开 Seal Note 界面。")
         }
         #if DEBUG
         .confirmationDialog(
@@ -142,6 +176,84 @@ struct MacSettingsView: View {
                     .labelsHidden()
                     .tint(DS.primary)
                 }
+            }
+        }
+    }
+
+    private var cliTab: some View {
+        panelStack {
+            macPanel("访问权限") {
+                toggleRow(
+                    "启用命令行访问",
+                    subtitle: "仅在 Seal Note 正在运行时可用，默认关闭。",
+                    systemImage: "terminal",
+                    isOn: cliAccessBinding
+                )
+
+                SWRowDivider()
+
+                toggleRow(
+                    "允许访问加密笔记",
+                    subtitle: settings.cliAccessEnabled
+                        ? "允许读取、全文搜索、创建和修改当前可解锁的加密笔记。"
+                        : "请先启用命令行访问。",
+                    systemImage: "lock.open",
+                    isOn: cliEncryptedAccessBinding
+                )
+                .disabled(!settings.cliAccessEnabled)
+            }
+
+            macPanel("服务状态") {
+                SWSettingsRow(
+                    cliServiceStatusTitle,
+                    subtitle: cliServiceStatusSubtitle,
+                    systemImage: cliServiceStatusIcon,
+                    tint: cliServiceStatusTint
+                ) {
+                    if case .failed = cliService.state {
+                        Button("重试") {
+                            cliService.applySettings()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
+                    }
+                }
+            }
+
+            macPanel("安装命令") {
+                SWSettingsRow(
+                    "内置 sealnote",
+                    subtitle: cliExecutablePath,
+                    systemImage: "apple.terminal"
+                ) {
+                    HStack(spacing: DS.s2) {
+                        Button {
+                            copyToPasteboard(cliExecutablePath)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
+                        .help("复制完整路径")
+
+                        Button("复制安装命令") {
+                            copyToPasteboard(cliInstallCommand)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
+                    }
+                }
+            }
+
+            macPanel("风险说明") {
+                Label(
+                    "CLI 授权面向当前 macOS 用户，而不是某一个 AI。任何能以该用户身份运行 sealnote 的进程，都可以使用你开启的权限。服务只监听本机，不会把笔记或密钥上传给开发者。",
+                    systemImage: "exclamationmark.shield"
+                )
+                .font(DS.caption())
+                .foregroundStyle(DS.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, DS.s1)
             }
         }
     }
@@ -626,6 +738,100 @@ struct MacSettingsView: View {
                 }
             }
         )
+    }
+
+    private var cliAccessBinding: Binding<Bool> {
+        Binding(
+            get: { settings.cliAccessEnabled },
+            set: { isEnabled in
+                if isEnabled {
+                    isShowingCLIEnableConfirmation = true
+                } else {
+                    settings.setCLIAccessEnabled(false)
+                }
+            }
+        )
+    }
+
+    private var cliEncryptedAccessBinding: Binding<Bool> {
+        Binding(
+            get: { settings.cliEncryptedAccessEnabled },
+            set: { isEnabled in
+                if isEnabled {
+                    isShowingCLIEncryptedAccessConfirmation = true
+                } else {
+                    settings.setCLIEncryptedAccessEnabled(false)
+                }
+            }
+        )
+    }
+
+    private var cliServiceStatusTitle: String {
+        switch cliService.state {
+        case .disabled:
+            return settings.cliAccessEnabled ? "等待启动" : "CLI 已关闭"
+        case .starting:
+            return "正在启动"
+        case .listening:
+            return "CLI 已就绪"
+        case .failed:
+            return "CLI 启动失败"
+        }
+    }
+
+    private var cliServiceStatusSubtitle: String {
+        switch cliService.state {
+        case .disabled:
+            return settings.cliAccessEnabled
+                ? "笔记仓库准备完成后会自动启动。"
+                : "启用后 sealnote 才能连接这个 App。"
+        case .starting:
+            return "正在建立仅限本机的认证通道。"
+        case .listening(let port):
+            return "仅监听 127.0.0.1:\(port)，退出 Seal Note 后立即失效。"
+        case .failed(let message):
+            return message
+        }
+    }
+
+    private var cliServiceStatusIcon: String {
+        switch cliService.state {
+        case .listening:
+            return "checkmark.circle.fill"
+        case .failed:
+            return "exclamationmark.triangle"
+        case .starting:
+            return "hourglass"
+        case .disabled:
+            return "terminal"
+        }
+    }
+
+    private var cliServiceStatusTint: Color {
+        switch cliService.state {
+        case .listening:
+            return DS.primaryDeep
+        case .failed:
+            return DS.destructive
+        default:
+            return DS.textSubtle
+        }
+    }
+
+    private var cliExecutablePath: String {
+        Bundle.main.bundleURL
+            .appendingPathComponent("Contents/Helpers/sealnote", isDirectory: false)
+            .path
+    }
+
+    private var cliInstallCommand: String {
+        let quotedPath = cliExecutablePath.replacingOccurrences(of: "'", with: "'\\''")
+        return "sudo ln -sf '\(quotedPath)' /usr/local/bin/sealnote"
+    }
+
+    private func copyToPasteboard(_ value: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(value, forType: .string)
     }
 
     private var settingsErrorBinding: Binding<Bool> {

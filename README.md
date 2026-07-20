@@ -73,6 +73,32 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
   build
 ```
 
+## 命令行访问（macOS）
+
+Seal Note 随 App 提供 `sealnote` 命令行工具，用于让本机 AI 或自动化读取、搜索、创建、更新笔记，并将笔记移入应用废纸篓。CLI 默认关闭，必须先在“设置 → 命令行”中启用；加密笔记还需要单独开启高风险授权。Seal Note 必须保持运行，CLI 不会直接修改 Markdown 或索引文件。
+
+设置页会显示当前 App 内的实际 CLI 路径，并可复制安装命令。App 位于 `/Applications` 时等价于：
+
+```bash
+sudo ln -sf '/Applications/Seal Note.app/Contents/Helpers/sealnote' /usr/local/bin/sealnote
+```
+
+常用命令：
+
+```bash
+sealnote status
+sealnote list --limit 20
+sealnote search '项目' --tag '#工作'
+sealnote get <note-id>
+printf '%s' '新的笔记正文' | sealnote create
+printf '%s' '更新后的正文' | sealnote update <note-id> --if-revision <revision>
+sealnote trash <note-id> --if-revision <revision>
+```
+
+结果默认输出版本化 JSON。`list`、`search` 和 `get` 会返回用于并发保护的 `revision`；更新或移入废纸篓必须携带最新 revision。正文只从 stdin 读取，避免写入 shell history。v1 不提供永久删除、清空废纸篓或恢复命令。
+
+CLI 服务只监听 `127.0.0.1`，使用每次 App 启动时重新生成的会话令牌，并通过 App Group 将端点交给已签名的内置 CLI。关闭 CLI 或退出 Seal Note 后令牌立即失效。任何能以当前 macOS 用户身份执行 `sealnote` 的进程都能使用已开启的权限，因此只应向可信工具开放。
+
 ## 项目结构
 
 ```text

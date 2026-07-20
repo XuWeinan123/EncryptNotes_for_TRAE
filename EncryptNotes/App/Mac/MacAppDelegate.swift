@@ -24,6 +24,7 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
 
         Task {
             await VaultStore.shared.initialize()
+            CLIServiceCoordinator.shared.vaultDidBecomeReady()
             VaultExternalChangeMonitor.shared.start()
             #if DEBUG
             if CommandLine.arguments.contains("--open-recent-note"),
@@ -46,6 +47,7 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         StickyNoteWindowManager.shared.closeAllWindows()
         VaultExternalChangeMonitor.shared.stop()
+        CLIServiceCoordinator.shared.stop()
         shortcutStore.unregisterHotKeys()
         privacyLockCoordinator.stop()
     }

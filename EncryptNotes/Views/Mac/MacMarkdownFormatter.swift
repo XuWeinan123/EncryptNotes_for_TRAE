@@ -186,7 +186,14 @@ final class MacMarkdownFormatter {
         let currentLine = nsText.substring(with: NSRange(location: lineStart, length: lineLengthToCursor))
         guard let marker = ListMarker(line: currentLine) else { return nil }
 
-        if marker.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let fullLineRange = lineContentRange(from: lineRange, in: nsText)
+        let contentAfterCursor = nsText.substring(with: NSRange(
+            location: cursor,
+            length: max(0, NSMaxRange(fullLineRange) - cursor)
+        ))
+
+        if marker.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           contentAfterCursor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let newText = nsText.substring(to: lineStart) + nsText.substring(from: cursor)
             let adjustedText: String
             if let number = marker.number, let delimiter = marker.delimiter {
