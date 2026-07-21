@@ -28,7 +28,7 @@
 ### 1.1 仓库与工程组织
 
 - 不新开仓库。
-- 在当前 `EncryptNotes.xcodeproj` 中新增 macOS App Target：建议命名为 `EncryptNotesMac`。
+- 在当前 `SealNote.xcodeproj` 中新增 macOS App Target：命名为 `SealNoteMac`。
 - macOS App 使用原生 SwiftUI macOS target，不优先使用 Catalyst。
 - iOS 与 macOS 共用核心代码，平台 UI 分离。
 - macOS 最低系统版本：macOS 14.0。
@@ -86,11 +86,11 @@ iCloud Drive / Seal Note /
 ### 2.1 短期落地结构
 
 ```text
-EncryptNotes/
+SealNote/
   App/
-    EncryptNotesApp.swift                 # 现有 iOS 入口
+    SealNoteApp.swift                     # 现有 iOS 入口
     Mac/
-      EncryptNotesMacApp.swift            # 新增 macOS 入口
+      SealNoteMacApp.swift                # 新增 macOS 入口
       MacAppDelegate.swift                # 菜单栏、Dock 隐藏、全局快捷键注册
   Models/                                 # iOS/macOS 共享
   Crypto/                                 # iOS/macOS 共享
@@ -144,7 +144,7 @@ Tests/
 
 新增 macOS App Target：
 
-- Product Name：`EncryptNotesMac`
+- Product Name：`SealNoteMac`
 - Bundle ID：建议 `com.xuweinan.sealnote`
 - Deployment Target：macOS 14.0
 - App Sandbox：开启
@@ -157,7 +157,7 @@ Tests/
 新增文件：
 
 ```text
-EncryptNotes/EncryptNotesMac.entitlements
+SealNote/SealNoteMac.entitlements
 ```
 
 至少包含：
@@ -201,9 +201,9 @@ App 启动后只显示菜单栏图标，不显示 Dock 图标。菜单栏是 v0.
 ### 文件建议
 
 ```text
-EncryptNotes/App/Mac/EncryptNotesMacApp.swift
-EncryptNotes/App/Mac/MacAppDelegate.swift
-EncryptNotes/Views/Mac/MacMenuBarController.swift
+SealNote/App/Mac/SealNoteMacApp.swift
+SealNote/App/Mac/MacAppDelegate.swift
+SealNote/Views/Mac/MacMenuBarController.swift
 ```
 
 ### 功能
@@ -253,8 +253,8 @@ EncryptNotes/Views/Mac/MacMenuBarController.swift
 ### 文件建议
 
 ```text
-EncryptNotes/Stores/ShortcutStore.swift
-EncryptNotes/Views/Mac/MacSettingsView.swift
+SealNote/Stores/ShortcutStore.swift
+SealNote/Views/Mac/MacSettingsView.swift
 ```
 
 ### 默认快捷键
@@ -288,10 +288,10 @@ EncryptNotes/Views/Mac/MacSettingsView.swift
 ### 文件建议
 
 ```text
-EncryptNotes/Stores/MacNoteWindowStore.swift
-EncryptNotes/Views/Mac/StickyNoteWindow.swift
-EncryptNotes/Views/Mac/StickyNoteEditorView.swift
-EncryptNotes/Views/Mac/LockedStickyNoteView.swift
+SealNote/Stores/MacNoteWindowStore.swift
+SealNote/Views/Mac/StickyNoteWindow.swift
+SealNote/Views/Mac/StickyNoteEditorView.swift
+SealNote/Views/Mac/LockedStickyNoteView.swift
 ```
 
 ### 数据结构建议
@@ -347,8 +347,8 @@ struct MacNoteWindowState: Codable, Equatable {
 ### 文件建议
 
 ```text
-EncryptNotes/Views/Mac/StickyNoteEditorView.swift
-EncryptNotes/Stores/MacEditorAutosaveStore.swift
+SealNote/Views/Mac/StickyNoteEditorView.swift
+SealNote/Stores/MacEditorAutosaveStore.swift
 ```
 
 ### 实现建议
@@ -476,8 +476,8 @@ EncryptNotes/Stores/MacEditorAutosaveStore.swift
 ### 文件建议
 
 ```text
-EncryptNotes/Views/Mac/KeyFileImportView.swift
-EncryptNotes/Views/Mac/KeyFileExportView.swift
+SealNote/Views/Mac/KeyFileImportView.swift
+SealNote/Views/Mac/KeyFileExportView.swift
 ```
 
 ### 加载流程
@@ -522,8 +522,8 @@ EncryptNotes/Views/Mac/KeyFileExportView.swift
 ### 文件建议
 
 ```text
-EncryptNotes/Views/Mac/AllNotesWindow.swift
-EncryptNotes/Views/Mac/AllNotesListView.swift
+SealNote/Views/Mac/AllNotesWindow.swift
+SealNote/Views/Mac/AllNotesListView.swift
 ```
 
 ### 功能范围
@@ -563,8 +563,8 @@ EncryptNotes/Views/Mac/AllNotesListView.swift
 ### 文件建议
 
 ```text
-EncryptNotes/Views/Mac/TrashWindow.swift
-EncryptNotes/Views/Mac/TrashListView.swift
+SealNote/Views/Mac/TrashWindow.swift
+SealNote/Views/Mac/TrashListView.swift
 ```
 
 ### 规则
@@ -706,19 +706,19 @@ MacSettingsStore
 
 ```bash
 # iOS 现有构建
-xcodebuild -project EncryptNotes.xcodeproj -scheme EncryptNotes \
+xcodebuild -project SealNote.xcodeproj -scheme SealNote \
   -destination 'generic/platform=iOS Simulator' build
 
 # macOS 构建，新增 scheme 后使用
-xcodebuild -project EncryptNotes.xcodeproj -scheme EncryptNotesMac \
+xcodebuild -project SealNote.xcodeproj -scheme SealNoteMac \
   -destination 'platform=macOS' build
 
 # iOS 单元测试
-xcodebuild -project EncryptNotes.xcodeproj -scheme EncryptNotes \
+xcodebuild -project SealNote.xcodeproj -scheme SealNote \
   -destination 'platform=iOS Simulator,name=iPhone 15' test
 
 # macOS 测试，新增 test target/scheme 后使用
-xcodebuild -project EncryptNotes.xcodeproj -scheme EncryptNotesMac \
+xcodebuild -project SealNote.xcodeproj -scheme SealNoteMac \
   -destination 'platform=macOS' test
 ```
 
@@ -757,8 +757,8 @@ App 能在 macOS 启动，菜单栏出现入口，默认不显示 Dock 图标。
 
 ### 任务
 
-- 新增 `EncryptNotesMac` target。
-- 新增 `EncryptNotesMac.entitlements`。
+- 新增 `SealNoteMac` target。
+- 新增 `SealNoteMac.entitlements`。
 - 配置 iCloud container。
 - 新增 macOS App 入口。
 - 实现菜单栏基础菜单。
@@ -944,11 +944,11 @@ window.makeKeyAndOrderFront(nil)
 1. 先读：
    - `AGENTS.md`
    - `Seal Note_macOS_PRD_v0.1.md`
-   - `EncryptNotes/Storage/VaultStorage.swift`
-   - `EncryptNotes/Storage/ICloudVaultStorage.swift`
-   - `EncryptNotes/Stores/VaultStore.swift`
-   - `EncryptNotes/Crypto/CryptoService.swift`
-   - `EncryptNotes/Crypto/KeychainStore.swift`
+   - `SealNote/Storage/VaultStorage.swift`
+   - `SealNote/Storage/ICloudVaultStorage.swift`
+   - `SealNote/Stores/VaultStore.swift`
+   - `SealNote/Crypto/CryptoService.swift`
+   - `SealNote/Crypto/KeychainStore.swift`
 2. 不要改变 iCloud 文件后缀和目录结构。
 3. 不要把加密笔记正文、预览、摘要、标签、搜索索引写到外层 JSON。
 4. macOS UI 可以重新做，但数据层尽量复用现有实现。

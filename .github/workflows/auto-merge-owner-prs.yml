@@ -126,7 +126,7 @@ jobs:
           mergeable_state = os.environ["MERGEABLE_STATE"]
 
           message = EmailMessage()
-          message["Subject"] = f"[EncryptNotes] PR #{pr_number} has merge conflicts"
+          message["Subject"] = f"[SealNote] PR #{pr_number} has merge conflicts"
           message["From"] = os.environ["MAIL_FROM"]
           message["To"] = os.environ["MAIL_TO"]
           message.set_content(

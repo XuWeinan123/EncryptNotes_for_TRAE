@@ -21,11 +21,12 @@ private struct CLILocalError: Error, LocalizedError {
 
 private let helpText = """
 Usage:
+  sealnote guide
   sealnote status
   sealnote list [--limit N] [--offset N]
   sealnote search <query> [--tag <tag>] [--limit N] [--offset N]
   sealnote get <note-id> [--body-only]
-  sealnote create [--encrypted] [--allow-empty] < body.md
+  sealnote create [--allow-empty] < body.md
   sealnote update <note-id> --if-revision <revision> [--allow-empty] < body.md
   sealnote trash <note-id> --if-revision <revision>
 """
@@ -36,6 +37,13 @@ private func parseInvocation(_ rawArguments: [String]) throws -> ParsedInvocatio
     }
     if command == "help" || command == "--help" || command == "-h" {
         print(helpText)
+        exit(0)
+    }
+    if command == "guide" {
+        guard rawArguments.count == 1 else {
+            throw CLIUsageError(message: "guide does not accept arguments.")
+        }
+        print(SealNoteAIGuide.markdown)
         exit(0)
     }
 
@@ -120,8 +128,11 @@ private func parseInvocation(_ rawArguments: [String]) throws -> ParsedInvocatio
         while !values.isEmpty {
             let option = values.removeFirst()
             switch option {
-            case "--encrypted":
-                requestArguments.encrypted = true
+            // Encrypted-note CLI access is temporarily hidden for
+            // product-positioning reasons. Keep the parser branch ready for a
+            // possible future reintroduction.
+//            case "--encrypted":
+//                requestArguments.encrypted = true
             case "--allow-empty":
                 requestArguments.allowEmpty = true
             default:

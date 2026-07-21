@@ -14,7 +14,7 @@ for icon_name in Icon2 Icon3; do
     mkdir -p "${icon_output}"
 
     "${DEVELOPER_DIR}/usr/bin/actool" \
-        "${SRCROOT}/EncryptNotes/${icon_name}.icon" \
+        "${SRCROOT}/SealNote/${icon_name}.icon" \
         --compile "${icon_output}" \
         --output-format human-readable-text \
         --output-partial-info-plist "${partial_plist}" \

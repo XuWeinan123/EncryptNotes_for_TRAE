@@ -3,8 +3,8 @@ set -euo pipefail
 
 MODE="${1:-run}"
 APP_NAME="Seal Note"
-PROJECT="EncryptNotes.xcodeproj"
-SCHEME="EncryptNotesMac"
+PROJECT="SealNote.xcodeproj"
+SCHEME="SealNoteMac"
 CODE_SIGNING_ALLOWED="${CODE_SIGNING_ALLOWED:-YES}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

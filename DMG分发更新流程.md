@@ -16,8 +16,8 @@
 ```bash
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
 xcodebuild \
-  -project EncryptNotes.xcodeproj \
-  -scheme EncryptNotesMac \
+  -project SealNote.xcodeproj \
+  -scheme SealNoteMac \
   -configuration Release \
   -showBuildSettings |
 rg 'MARKETING_VERSION|CURRENT_PROJECT_VERSION'
@@ -31,8 +31,8 @@ ARCHIVE="/tmp/SealNote-${VERSION}.xcarchive"
 
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
 xcodebuild archive \
-  -project EncryptNotes.xcodeproj \
-  -scheme EncryptNotesMac \
+  -project SealNote.xcodeproj \
+  -scheme SealNoteMac \
   -configuration Release \
   -destination 'generic/platform=macOS' \
   -archivePath "$ARCHIVE" \
