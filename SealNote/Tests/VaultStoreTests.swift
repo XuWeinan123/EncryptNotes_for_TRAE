@@ -1176,6 +1176,543 @@ final class VaultStoreTests: XCTestCase {
         SettingsStore.shared.resetForTesting()
     }
     #endif
+
+    // MARK: - Phase 2: stable vault identity (P0-1)
+
+    #if os(iOS)
+    @MainActor
+    func testVaultIdSurvivesRelaunch() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("vaultid_relaunch_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let settings = SettingsStore(defaults: UserDefaults(suiteName: "relaunch_\(UUID().uuidString)")!)
+        settings.hasSeededDefaultNotes = true
+        let keyStore = InMemoryKeyStore()
+
+        let storeA = VaultStore(storage: storage, settings: settings, keyStore: keyStore)
+        await storeA.initialize()
+        try await storeA.createKey()
+        _ = try await storeA.createNote(body: "机密内容", isEncrypted: true)
+        XCTAssertEqual(storeA.decryptedNotes.count, 1)
+
+        // A brand-new store over the SAME storage/settings/keyStore = an app relaunch.
+        let storeB = VaultStore(storage: storage, settings: settings, keyStore: keyStore)
+        await storeB.initialize()
+        XCTAssertEqual(storeB.decryptedNotes.count, 1)
+        XCTAssertEqual(storeB.decryptedNotes.first?.body, "机密内容")
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
+    func testLegacyKeychainAdoption() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("legacy_adopt_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let settings = SettingsStore(defaults: UserDefaults(suiteName: "legacy_\(UUID().uuidString)")!)
+        settings.hasSeededDefaultNotes = true
+
+        let keyManager = VaultKeyManager.shared
+        let key = keyManager.generateKey()
+        let vaultKey = keyManager.generateVaultKey(key: key)
+        let legacyId = "legacy-\(UUID().uuidString)"
+        let keyStore = InMemoryKeyStore()
+        try keyStore.saveKey(vaultKey.keyMaterial, forVaultId: legacyId,
+                             keyId: vaultKey.keyId, keyFingerprint: try keyManager.keyFingerprint(vaultKey))
+
+        // One encrypted note on disk (encrypted with the legacy key), no vault.json / no cache.
+        let noteId = UUID().uuidString
+        let cipher = try CryptoService.shared.encryptMarkdownBody("旧密文", using: key)
+        let mdFile = MarkdownNoteFile(noteId: noteId, createdAt: Date(), updatedAt: Date(), title: "旧笔记", body: cipher)
+        try storage.saveMarkdownFile(mdFile, at: tmpDir.appendingPathComponent("旧笔记.md"))
+        try storage.saveIndex(NoteIndex(entries: [
+            NoteIndexEntry(noteId: noteId, fileName: "旧笔记.md", mode: .encrypted, location: .notes)
+        ]))
+
+        let store = VaultStore(storage: storage, settings: settings, keyStore: keyStore)
+        await store.initialize()
+
+        XCTAssertEqual(store.decryptedNotes.count, 1)
+        XCTAssertEqual(store.decryptedNotes.first?.body, "旧密文")
+        let descriptorData = try Data(contentsOf: tmpDir.appendingPathComponent(".meta/vault.json"))
+        let descriptor = try JSONDecoder.default.decode(VaultDescriptor.self, from: descriptorData)
+        XCTAssertEqual(descriptor.vaultId, legacyId)
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
+    func testVaultDescriptorDisagreementPrefersStorage() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("descriptor_disagree_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let defaults = UserDefaults(suiteName: "disagree_\(UUID().uuidString)")!
+
+        let idA = "vault-A-\(UUID().uuidString)"
+        let idB = "vault-B-\(UUID().uuidString)"
+        // vault.json (authoritative) says A.
+        let metaDir = tmpDir.appendingPathComponent(".meta")
+        try FileManager.default.createDirectory(at: metaDir, withIntermediateDirectories: true)
+        let descriptorA = VaultDescriptor(vaultId: idA, createdAt: Date(), schemaVersion: 1)
+        try JSONEncoder.default.encode(descriptorA).write(to: metaDir.appendingPathComponent("vault.json"))
+        // The cache says B and the key lives under B.
+        defaults.set(idB, forKey: VaultIdentityStore.vaultIdDefaultsKey)
+        let keyManager = VaultKeyManager.shared
+        let vaultKey = keyManager.generateVaultKey(key: keyManager.generateKey())
+        let keyStore = InMemoryKeyStore()
+        try keyStore.saveKey(vaultKey.keyMaterial, forVaultId: idB,
+                             keyId: vaultKey.keyId, keyFingerprint: try keyManager.keyFingerprint(vaultKey))
+
+        let settings = SettingsStore(defaults: defaults)
+        settings.hasSeededDefaultNotes = true
+        let store = VaultStore(storage: storage, settings: settings, keyStore: keyStore)
+        await store.initialize()
+
+        XCTAssertTrue(keyStore.hasKey(forVaultId: idA))
+        XCTAssertFalse(keyStore.hasKey(forVaultId: idB))
+        XCTAssertEqual(defaults.string(forKey: VaultIdentityStore.vaultIdDefaultsKey), idA)
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
+    func testNeedsKeyExportPersists() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("needexport_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let defaults = UserDefaults(suiteName: "needexport_\(UUID().uuidString)")!
+        let keyStore = InMemoryKeyStore()
+
+        let settingsA = SettingsStore(defaults: defaults)
+        settingsA.hasSeededDefaultNotes = true
+        let storeA = VaultStore(storage: storage, settings: settingsA, keyStore: keyStore)
+        await storeA.initialize()
+        try await storeA.createKey()
+        XCTAssertTrue(storeA.needsKeyExport)
+
+        // Fresh settings instance over the same suite proves the flag round-trips through UserDefaults.
+        let storeB = VaultStore(storage: storage, settings: SettingsStore(defaults: defaults), keyStore: keyStore)
+        await storeB.initialize()
+        XCTAssertTrue(storeB.needsKeyExport)
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
+    func testNonValidatingCandidateMintsFreshId() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("nonvalidating_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let settings = SettingsStore(defaults: UserDefaults(suiteName: "nonvalidating_\(UUID().uuidString)")!)
+        settings.hasSeededDefaultNotes = true
+
+        let keyManager = VaultKeyManager.shared
+        let realKey = keyManager.generateKey()
+        // A keychain candidate whose key does NOT decrypt the note.
+        let wrongVaultKey = keyManager.generateVaultKey(key: keyManager.generateKey())
+        let candidateId = "candidate-\(UUID().uuidString)"
+        let keyStore = InMemoryKeyStore()
+        try keyStore.saveKey(wrongVaultKey.keyMaterial, forVaultId: candidateId,
+                             keyId: wrongVaultKey.keyId, keyFingerprint: try keyManager.keyFingerprint(wrongVaultKey))
+
+        let noteId = UUID().uuidString
+        let cipher = try CryptoService.shared.encryptMarkdownBody("秘密", using: realKey)
+        let mdFile = MarkdownNoteFile(noteId: noteId, createdAt: Date(), updatedAt: Date(), title: "x", body: cipher)
+        try storage.saveMarkdownFile(mdFile, at: tmpDir.appendingPathComponent("x.md"))
+        try storage.saveIndex(NoteIndex(entries: [
+            NoteIndexEntry(noteId: noteId, fileName: "x.md", mode: .encrypted, location: .notes)
+        ]))
+
+        let store = VaultStore(storage: storage, settings: settings, keyStore: keyStore)
+        await store.initialize()
+
+        // Non-validating candidate is NOT adopted; a fresh id is minted instead.
+        let descriptorData = try Data(contentsOf: tmpDir.appendingPathComponent(".meta/vault.json"))
+        let descriptor = try JSONDecoder.default.decode(VaultDescriptor.self, from: descriptorData)
+        XCTAssertNotEqual(descriptor.vaultId, candidateId)
+        // The candidate key is left inert (never deleted).
+        XCTAssertTrue(keyStore.hasKey(forVaultId: candidateId))
+        // The note stays locked.
+        XCTAssertEqual(store.decryptedNotes.count, 0)
+        XCTAssertTrue(store.lockedEncryptedNotes.contains { $0.id == noteId })
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    // MARK: - Phase 3: cloud-placeholder safety (P0-2)
+
+    @MainActor
+    func testClearEmptyReadableNotesSkipsCloudOnly() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("clear_cloudonly_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+
+        // An undownloaded iCloud placeholder: empty body, tracked as cloud-only.
+        // Without the guard, clearEmptyReadableNotes would try to delete it (empty body)
+        // and throw fileNotFound; the guard must skip it entirely.
+        let cloudOnly = Note(id: "cloud-1", body: "", createdAt: Date(), updatedAt: Date(), isEncrypted: false)
+        store.configureForTesting(
+            vaultId: "clear-cloudonly-vault",
+            plainNotes: [cloudOnly],
+            cloudOnlyPlainNoteIDs: ["cloud-1"]
+        )
+
+        let cleared = try await store.clearEmptyReadableNotes()
+
+        XCTAssertEqual(cleared, 0)
+        XCTAssertTrue(store.plainNotes.contains { $0.id == "cloud-1" })
+        XCTAssertTrue(store.isCloudOnly(cloudOnly))
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
+    func testExportSkipsCloudOnlyAndCountsThem() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("export_cloudonly_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage)
+
+        let real = Note(id: "real-1", body: "真实内容", createdAt: Date(), updatedAt: Date(), isEncrypted: false)
+        let cloudOnly = Note(id: "cloud-1", body: "", createdAt: Date(), updatedAt: Date(), isEncrypted: false)
+        store.configureForTesting(
+            vaultId: "export-cloudonly-vault",
+            plainNotes: [real, cloudOnly],
+            cloudOnlyPlainNoteIDs: ["cloud-1"]
+        )
+
+        let result = try store.exportReadableNotesAsZip()
+
+        XCTAssertEqual(result.exportedCount, 1)   // only the downloaded note
+        XCTAssertEqual(result.skippedCount, 1)    // the cloud-only placeholder counted, not exported
+
+        try? FileManager.default.removeItem(at: result.url)
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    // MARK: - Phase 4: storage-root pinning (P0-3)
+
+    @MainActor
+    func testResolveStorageTable() {
+        var r = VaultStore.resolveStorage(pinned: nil, iCloudAvailable: true)
+        XCTAssertTrue(r.storage is ICloudVaultStorage); XCTAssertEqual(r.pin, "icloud"); XCTAssertFalse(r.mismatch)
+
+        r = VaultStore.resolveStorage(pinned: nil, iCloudAvailable: false)
+        XCTAssertTrue(r.storage is LocalFallbackStorage); XCTAssertEqual(r.pin, "local"); XCTAssertFalse(r.mismatch)
+
+        r = VaultStore.resolveStorage(pinned: "icloud", iCloudAvailable: true)
+        XCTAssertTrue(r.storage is ICloudVaultStorage); XCTAssertEqual(r.pin, "icloud"); XCTAssertFalse(r.mismatch)
+
+        // Pinned to iCloud but unavailable: temporary local fallback, pin unchanged, mismatch flagged.
+        r = VaultStore.resolveStorage(pinned: "icloud", iCloudAvailable: false)
+        XCTAssertTrue(r.storage is LocalFallbackStorage); XCTAssertEqual(r.pin, "icloud"); XCTAssertTrue(r.mismatch)
+
+        // Pinned to local: iCloud reappearing does NOT auto-switch.
+        r = VaultStore.resolveStorage(pinned: "local", iCloudAvailable: true)
+        XCTAssertTrue(r.storage is LocalFallbackStorage); XCTAssertEqual(r.pin, "local"); XCTAssertFalse(r.mismatch)
+
+        r = VaultStore.resolveStorage(pinned: "local", iCloudAvailable: false)
+        XCTAssertTrue(r.storage is LocalFallbackStorage); XCTAssertEqual(r.pin, "local"); XCTAssertFalse(r.mismatch)
+    }
+
+    @MainActor
+    func testHasVaultDataDetectsNotesTrashAndIndex() throws {
+        let fm = FileManager.default
+        let empty = fm.temporaryDirectory.appendingPathComponent("hvd_empty_\(UUID().uuidString)")
+        try fm.createDirectory(at: empty, withIntermediateDirectories: true)
+        XCTAssertFalse(VaultStore.hasVaultData(at: empty))
+
+        let withMd = fm.temporaryDirectory.appendingPathComponent("hvd_md_\(UUID().uuidString)")
+        try fm.createDirectory(at: withMd, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: withMd.appendingPathComponent("note.md"))
+        XCTAssertTrue(VaultStore.hasVaultData(at: withMd))
+
+        let withIndex = fm.temporaryDirectory.appendingPathComponent("hvd_idx_\(UUID().uuidString)")
+        try fm.createDirectory(at: withIndex, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: withIndex.appendingPathComponent("notes.json"))
+        XCTAssertTrue(VaultStore.hasVaultData(at: withIndex))
+
+        [empty, withMd, withIndex].forEach { try? fm.removeItem(at: $0) }
+    }
+
+    @MainActor
+    func testMergeVaultDataMergesUniqueAndRenamesCollisions() throws {
+        let fm = FileManager.default
+        let srcDir = fm.temporaryDirectory.appendingPathComponent("merge_src_\(UUID().uuidString)")
+        let dstDir = fm.temporaryDirectory.appendingPathComponent("merge_dst_\(UUID().uuidString)")
+        let source = try TemporaryStorage(baseURL: srcDir)
+        let dest = try TemporaryStorage(baseURL: dstDir)
+
+        // Source: a unique note + one that collides with an existing dest note.
+        try source.saveMarkdownFile(
+            MarkdownNoteFile(noteId: "u1", createdAt: Date(), updatedAt: Date(), title: "唯一", body: "unique body"),
+            at: srcDir.appendingPathComponent("u1.md"))
+        try source.saveMarkdownFile(
+            MarkdownNoteFile(noteId: "c1", createdAt: Date(), updatedAt: Date(), title: "冲突", body: "local version"),
+            at: srcDir.appendingPathComponent("c1.md"))
+        try source.saveIndex(NoteIndex(entries: [
+            NoteIndexEntry(noteId: "u1", fileName: "u1.md", mode: .plain, location: .notes),
+            NoteIndexEntry(noteId: "c1", fileName: "c1.md", mode: .plain, location: .notes)
+        ]))
+        try dest.saveMarkdownFile(
+            MarkdownNoteFile(noteId: "c1", createdAt: Date(), updatedAt: Date(), title: "云端", body: "cloud version"),
+            at: dstDir.appendingPathComponent("c1.md"))
+        try dest.saveIndex(NoteIndex(entries: [
+            NoteIndexEntry(noteId: "c1", fileName: "c1.md", mode: .plain, location: .notes)
+        ]))
+
+        let result = try VaultStore.mergeVaultData(from: source, into: dest)
+
+        XCTAssertEqual(result.merged, 1)
+        XCTAssertEqual(result.conflicted, 1)
+
+        let destIndex = try XCTUnwrap(dest.loadIndex())
+        XCTAssertEqual(destIndex.entries.count, 3)          // original c1 + merged u1 + renamed copy
+        XCTAssertNotNil(destIndex.entry(for: "u1"))
+        XCTAssertNotNil(destIndex.entry(for: "c1"))         // cloud original preserved
+        let copyEntry = try XCTUnwrap(destIndex.entries.first { $0.noteId != "u1" && $0.noteId != "c1" })
+        let copyFile = try dest.loadMarkdownFile(at: dstDir.appendingPathComponent(copyEntry.fileName))
+        XCTAssertTrue((copyFile.title ?? "").contains("本机副本"))
+        XCTAssertEqual(copyFile.body, "local version")
+
+        // Local originals removed only after verified read-back.
+        let sourceIndex = try XCTUnwrap(source.loadIndex())
+        XCTAssertTrue(sourceIndex.entries.isEmpty)
+        XCTAssertFalse(fm.fileExists(atPath: srcDir.appendingPathComponent("u1.md").path))
+        XCTAssertFalse(fm.fileExists(atPath: srcDir.appendingPathComponent("c1.md").path))
+
+        [srcDir, dstDir].forEach { try? fm.removeItem(at: $0) }
+    }
+
+    // MARK: - Phase 5: serialized writes + visible conflicts (P0/P1-2)
+
+    @MainActor
+    func testConflictProducesVisibleConflictNote() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("conflict_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage, settings: SettingsStore(defaults: UserDefaults(suiteName: "conflict_\(UUID().uuidString)")!))
+        store.configureForTesting(vaultId: "conflict-vault")
+
+        let note = try await store.createNote(body: "MEM_ORIGINAL", isEncrypted: false)
+
+        // Simulate an external device writing a newer, different version to the same file.
+        let entry0 = try XCTUnwrap(storage.loadIndex()?.entry(for: note.id))
+        let bumped = MarkdownNoteFile(
+            noteId: note.id,
+            createdAt: note.createdAt,
+            updatedAt: note.updatedAt.addingTimeInterval(10),
+            title: "远端标题",
+            body: "DISK_NEWER"
+        )
+        try storage.saveMarkdownFile(bumped, at: tmpDir.appendingPathComponent(entry0.fileName))
+
+        // Save our (stale) memory version — this is the conflict.
+        try await store.updateNote(note, body: "MEM_UPDATED")
+
+        // Both versions survive: original updated in place, disk version kept as a copy.
+        XCTAssertEqual(store.plainNotes.count, 2)
+        XCTAssertTrue(store.plainNotes.contains { $0.id == note.id && $0.body == "MEM_UPDATED" })
+        let conflict = try XCTUnwrap(store.plainNotes.first { $0.id != note.id })
+        XCTAssertEqual(conflict.body, "DISK_NEWER")
+
+        let index = try XCTUnwrap(storage.loadIndex())
+        XCTAssertEqual(index.entries.count, 2)
+        let conflictEntry = try XCTUnwrap(index.entry(for: conflict.id))
+        let conflictFile = try storage.loadMarkdownFile(at: tmpDir.appendingPathComponent(conflictEntry.fileName))
+        XCTAssertTrue((conflictFile.title ?? "").contains("冲突副本"))
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
+    func testConcurrentUpdatesAllPersist() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("concurrent_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let store = VaultStore(storage: storage, settings: SettingsStore(defaults: UserDefaults(suiteName: "concurrent_\(UUID().uuidString)")!))
+        store.configureForTesting(vaultId: "concurrent-vault")
+
+        var notes: [Note] = []
+        for i in 0..<10 {
+            notes.append(try await store.createNote(body: "note-\(i)-v0", isEncrypted: false))
+        }
+
+        await withThrowingTaskGroup(of: Void.self) { group in
+            for (i, note) in notes.enumerated() {
+                group.addTask { @MainActor in
+                    try await store.updateNote(note, body: "note-\(i)-final")
+                }
+            }
+            try? await group.waitForAll()
+        }
+
+        // Every note's file ended with its own last write — no lost or crossed updates.
+        let index = try XCTUnwrap(storage.loadIndex())
+        for (i, note) in notes.enumerated() {
+            let entry = try XCTUnwrap(index.entry(for: note.id))
+            let file = try storage.loadMarkdownFile(at: tmpDir.appendingPathComponent(entry.fileName))
+            XCTAssertEqual(file.body, "note-\(i)-final")
+        }
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    // MARK: - Phase 6: non-destructive session lock (P0-4)
+
+    @MainActor
+    func testLockSessionKeepsKeychainKey() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("locksession_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let settings = SettingsStore(defaults: UserDefaults(suiteName: "locksession_\(UUID().uuidString)")!)
+        settings.hasSeededDefaultNotes = true
+        let keyStore = InMemoryKeyStore()
+        let store = VaultStore(storage: storage, settings: settings, keyStore: keyStore)
+        await store.initialize()
+        try await store.createKey()
+        _ = try await store.createNote(body: "机密", isEncrypted: true)
+        XCTAssertEqual(store.decryptedNotes.count, 1)
+        XCTAssertEqual(keyStore.allVaultIdCandidates().count, 1)
+
+        await store.lockSession()
+        XCTAssertTrue(store.decryptedNotes.isEmpty)
+        XCTAssertEqual(store.lockedEncryptedNotes.count, 1)
+        XCTAssertEqual(keyStore.allVaultIdCandidates().count, 1)   // Keychain key intact
+
+        try await store.unlockSession()
+        XCTAssertEqual(store.decryptedNotes.count, 1)
+        XCTAssertTrue(store.lockedEncryptedNotes.isEmpty)
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    @MainActor
+    func testHandleEnterForegroundNeverDeletesKey() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("foreground_\(UUID().uuidString)")
+        let storage = try TemporaryStorage(baseURL: tmpDir)
+        let settings = SettingsStore(defaults: UserDefaults(suiteName: "foreground_\(UUID().uuidString)")!)
+        settings.hasSeededDefaultNotes = true
+        let keyStore = InMemoryKeyStore()
+        let store = VaultStore(storage: storage, settings: settings, keyStore: keyStore)
+        await store.initialize()
+        try await store.createKey()
+        _ = try await store.createNote(body: "机密", isEncrypted: true)
+
+        // The old code silently deleted the key here when this flag was set.
+        settings.autoUnloadKeyOnForeground = true
+        await store.handleEnterForeground()
+        XCTAssertEqual(keyStore.allVaultIdCandidates().count, 1)
+        XCTAssertEqual(store.decryptedNotes.count, 1)
+
+        settings.autoUnloadKeyOnForeground = false
+        await store.handleEnterForeground()
+        XCTAssertEqual(keyStore.allVaultIdCandidates().count, 1)
+
+        try? FileManager.default.removeItem(at: tmpDir)
+    }
+
+    // MARK: - Phase 7: reliable debounced autosave (P0-5)
+
+    private func makeNote(_ id: String = "n", body: String = "") -> Note {
+        Note(id: id, body: body, createdAt: Date(), updatedAt: Date(), isEncrypted: false)
+    }
+
+    @MainActor
+    func testEditorSessionBurstCoalescesToOneSave() async throws {
+        var saves: [String] = []
+        let note = makeNote()
+        let session = EditorSession(
+            initialNote: note, debounceInterval: 0.05,
+            create: { _, _ in nil },
+            update: { n, b in saves.append(b); return n },
+            convert: { n, _, _ in n },
+            discardEmpty: { _, _ in }
+        )
+        for i in 0..<10 { session.noteDidChange(body: "v\(i)", isEncrypted: false) }
+        await session.flush(reason: .close)
+        XCTAssertEqual(saves, ["v9"])   // exactly one save, newest body
+    }
+
+    @MainActor
+    func testEditorSessionEditDuringSaveTriggersSecondSave() async throws {
+        var saves: [String] = []
+        var updateCount = 0
+        var firstContinuation: CheckedContinuation<Void, Never>?
+        let note = makeNote()
+        let session = EditorSession(
+            initialNote: note, debounceInterval: 0.05,
+            create: { _, _ in nil },
+            update: { n, b in
+                updateCount += 1
+                if updateCount == 1 { await withCheckedContinuation { firstContinuation = $0 } }
+                saves.append(b)
+                return n
+            },
+            convert: { n, _, _ in n },
+            discardEmpty: { _, _ in }
+        )
+        session.noteDidChange(body: "A", isEncrypted: false)
+        let flushTask = Task { await session.flush(reason: .close) }
+        while firstContinuation == nil { await Task.yield() }
+        session.noteDidChange(body: "B", isEncrypted: false)   // newer edit mid-save
+        firstContinuation?.resume()
+        await flushTask.value
+        XCTAssertEqual(saves, ["A", "B"])   // regression for the old `guard !isSaving`
+    }
+
+    @MainActor
+    func testEditorSessionFlushWaitsForAllSaves() async throws {
+        var saved = ""
+        let note = makeNote()
+        let session = EditorSession(
+            initialNote: note, debounceInterval: 10,   // long, so only flush drives the save
+            create: { _, _ in nil },
+            update: { n, b in saved = b; return n },
+            convert: { n, _, _ in n },
+            discardEmpty: { _, _ in }
+        )
+        session.noteDidChange(body: "final", isEncrypted: false)
+        XCTAssertTrue(session.hasUnsavedChanges)
+        await session.flush(reason: .close)
+        XCTAssertFalse(session.hasUnsavedChanges)
+        XCTAssertEqual(saved, "final")
+    }
+
+    @MainActor
+    func testEditorSessionCloseIsIdempotent() async throws {
+        var createCount = 0
+        var discardCount = 0
+        let session = EditorSession(
+            initialNote: nil, debounceInterval: 10, autoDiscardEmpty: { true },
+            create: { b, _ in createCount += 1; return Note(id: "c", body: b, createdAt: Date(), updatedAt: Date(), isEncrypted: false) },
+            update: { n, _ in n },
+            convert: { n, _, _ in n },
+            discardEmpty: { _, _ in discardCount += 1 }
+        )
+        session.noteDidChange(body: "hello", isEncrypted: false)
+        await session.close()
+        await session.close()
+        XCTAssertEqual(createCount, 1)
+        XCTAssertLessThanOrEqual(discardCount, 1)
+    }
+
+    @MainActor
+    func testEditorSessionCreateModeSemantics() async throws {
+        var createCount = 0
+        var updateCount = 0
+        let session = EditorSession(
+            initialNote: nil, debounceInterval: 10,
+            create: { b, _ in createCount += 1; return Note(id: "c", body: b, createdAt: Date(), updatedAt: Date(), isEncrypted: false) },
+            update: { n, b in updateCount += 1; return Note(id: n.id, body: b, createdAt: n.createdAt, updatedAt: Date(), isEncrypted: n.isEncrypted) },
+            convert: { n, _, _ in n },
+            discardEmpty: { _, _ in }
+        )
+        session.noteDidChange(body: "   ", isEncrypted: false)   // empty → no create
+        await session.flush(reason: .close)
+        XCTAssertEqual(createCount, 0)
+
+        session.noteDidChange(body: "hi", isEncrypted: false)    // non-empty → create once
+        await session.flush(reason: .close)
+        XCTAssertEqual(createCount, 1)
+
+        session.noteDidChange(body: "hi there", isEncrypted: false)   // then update
+        await session.flush(reason: .close)
+        XCTAssertEqual(createCount, 1)
+        XCTAssertEqual(updateCount, 1)
+    }
+    #endif
 }
 
 private final class TemporaryStorage: VaultStorage, @unchecked Sendable {
@@ -1248,4 +1785,48 @@ private final class TemporaryStorage: VaultStorage, @unchecked Sendable {
         let data = try file.render()
         try data.write(to: url, options: .atomic)
     }
+}
+
+/// In-memory `KeyStore` fake so VaultStore key lifecycle can be tested without the
+/// real Keychain. Shared by reference, so it survives across VaultStore instances
+/// (used to simulate app relaunch over the same vault).
+@MainActor
+final class InMemoryKeyStore: KeyStore {
+    private var keys: [String: String] = [:]
+    private var keyIds: [String: String] = [:]
+    private var fingerprints: [String: String] = [:]
+
+    init(seedVaultId: String? = nil, keyMaterial: String? = nil) {
+        if let seedVaultId, let keyMaterial {
+            keys[seedVaultId] = keyMaterial
+        }
+    }
+
+    func saveKey(_ keyMaterial: String, forVaultId vaultId: String, keyId: String?, keyFingerprint: String?) throws {
+        keys[vaultId] = keyMaterial
+        if let keyId { keyIds[vaultId] = keyId }
+        if let keyFingerprint { fingerprints[vaultId] = keyFingerprint }
+    }
+
+    func loadKey(forVaultId vaultId: String) throws -> String {
+        guard let material = keys[vaultId] else { throw KeychainError.notFound }
+        return material
+    }
+
+    func loadKeyId(forVaultId vaultId: String) -> String? { keyIds[vaultId] }
+    func loadKeyFingerprint(forVaultId vaultId: String) -> String? { fingerprints[vaultId] }
+
+    func saveKeyMetadata(keyId: String?, keyFingerprint: String, forVaultId vaultId: String) throws {
+        if let keyId { keyIds[vaultId] = keyId }
+        fingerprints[vaultId] = keyFingerprint
+    }
+
+    func deleteKey(forVaultId vaultId: String) throws {
+        keys[vaultId] = nil
+        keyIds[vaultId] = nil
+        fingerprints[vaultId] = nil
+    }
+
+    func hasKey(forVaultId vaultId: String) -> Bool { keys[vaultId] != nil }
+    func allVaultIdCandidates() -> [String] { Array(keys.keys) }
 }

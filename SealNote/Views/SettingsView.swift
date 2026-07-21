@@ -768,7 +768,6 @@ private struct KeyManagementView: View {
 
 private struct PrivacySettingsView: View {
     @StateObject private var settings = SettingsStore.shared
-    @StateObject private var vaultStore = VaultStore.shared
 
     var body: some View {
         SWPanelStack {
@@ -779,47 +778,19 @@ private struct PrivacySettingsView: View {
                         .tint(DS.primary)
                 }
                 SWRowDivider()
-                SWSettingsRow("重新打开 App 时自动移除本机密钥", subtitle: autoUnloadKeySubtitle, systemImage: "lock.rotation") {
-                    Toggle("", isOn: autoUnloadKeyBinding)
+                SWSettingsRow("离开 App 后锁定加密笔记", subtitle: "回到 App 时需重新验证（Face ID / 密码）才能查看加密笔记", systemImage: "lock.rotation") {
+                    Toggle("", isOn: $settings.lockSessionOnBackground)
                         .labelsHidden()
                         .tint(DS.primary)
-                        .disabled(vaultStore.encryptedEntryCount > 0)
                 }
             }
         }
         .navigationTitle("隐私保护")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { disableAutoUnloadIfNeeded() }
-        .onChange(of: vaultStore.encryptedEntryCount) { _, _ in
-            disableAutoUnloadIfNeeded()
-        }
-    }
-
-    private var autoUnloadKeyBinding: Binding<Bool> {
-        Binding(
-            get: { settings.autoUnloadKeyOnForeground && vaultStore.encryptedEntryCount == 0 },
-            set: { settings.autoUnloadKeyOnForeground = $0 && vaultStore.encryptedEntryCount == 0 }
-        )
-    }
-
-    private var autoUnloadKeySubtitle: String {
-        if vaultStore.encryptedEntryCount > 0 {
-            return "存在加密笔记时不可自动移除"
-        }
-        return "再次进入 App 后会移除本机 Keychain 中的密钥"
     }
 
     private var privacyFooter: String {
-        if vaultStore.encryptedEntryCount > 0 {
-            return "移除本机密钥前，需要先在“密钥与加密”中处理所有加密笔记。"
-        }
-        return "自动移除只会清掉这台设备上的本机密钥，不会删除已导出的 .snkey 文件。"
-    }
-
-    private func disableAutoUnloadIfNeeded() {
-        if vaultStore.encryptedEntryCount > 0 {
-            settings.autoUnloadKeyOnForeground = false
-        }
+        "锁定只会清除内存中的密钥，不会删除本机 Keychain 里的密钥；下次验证成功后即可继续查看加密笔记。"
     }
 }
 
@@ -845,6 +816,22 @@ private struct DataSettingsView: View {
                         Task { await vaultStore.refreshFromStorage() }
                     }
                     .font(DS.caption())
+                }
+                if vaultStore.strandedLocalDataDetected {
+                    SWRowDivider()
+                    Button {
+                        Task { try? await vaultStore.mergeLocalDataIntoICloud() }
+                    } label: {
+                        SWSettingsRow(
+                            "合并本机笔记到 iCloud",
+                            subtitle: "把 iCloud 退出登录期间保存在本机的笔记合并进来",
+                            systemImage: "arrow.triangle.merge",
+                            tint: DS.link
+                        ) {
+                            EmptyView()
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
             }
 

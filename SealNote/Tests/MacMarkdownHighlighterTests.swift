@@ -3,6 +3,9 @@ import XCTest
 #if os(macOS)
 import AppKit
 #endif
+#if os(iOS)
+import UIKit
+#endif
 
 final class MacMarkdownHighlighterTests: XCTestCase {
 
@@ -352,4 +355,52 @@ final class MacMarkdownHighlighterTests: XCTestCase {
         }
         XCTAssertTrue(specialRoles.isEmpty, "==x== should not produce special roles, got \(specialRoles)")
     }
+
+    #if os(iOS)
+    // MARK: - Phase 8: incremental iOS highlighting (P1-1)
+
+    func testApplyIOSHighlightingMatchesFullRenderWithinDirtyRange() {
+        // Resolve to concrete RGBA — SwiftUI-derived dynamic UIColor instances don't
+        // compare `==` even when they represent the same color.
+        func rgba(_ color: UIColor?) -> String? {
+            guard let color else { return nil }
+            let c = color.resolvedColor(with: UITraitCollection(userInterfaceStyle: .light))
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            c.getRed(&r, green: &g, blue: &b, alpha: &a)
+            return String(format: "%.3f,%.3f,%.3f,%.3f", r, g, b, a)
+        }
+
+        // ASCII only: NSTextStorage.endEditing() runs attribute fixup that substitutes a
+        // CJK font for Chinese glyphs, which a plain NSMutableAttributedString never does —
+        // that would make fonts (not colors) diverge. Color is the real highlighting signal.
+        let text = "# Heading\n**bold** plain text\n`code` end"
+        let full = MacMarkdownHighlighter.makeIOSHighlightedAttributedString(text: text, fontSize: 16, lineHeightMultiple: 1.3)
+        let storage = NSTextStorage(string: text)
+        let length = (text as NSString).length
+        MacMarkdownHighlighter.applyIOSHighlighting(
+            to: storage, text: text,
+            dirtyRange: NSRange(location: 0, length: length),
+            fontSize: 16, lineHeightMultiple: 1.3
+        )
+        for i in 0..<length {
+            let incremental = storage.attribute(.foregroundColor, at: i, effectiveRange: nil) as? UIColor
+            let fullRender = full.attribute(.foregroundColor, at: i, effectiveRange: nil) as? UIColor
+            XCTAssertEqual(rgba(incremental), rgba(fullRender), "foregroundColor mismatch at index \(i)")
+        }
+    }
+
+    func testApplyIOSHighlightingLeavesOutsideRangeUntouched() {
+        let text = "line one\nline two"
+        let storage = NSTextStorage(string: text)
+        // Sentinel attribute outside the dirty range.
+        storage.addAttribute(.foregroundColor, value: UIColor.red, range: NSRange(location: 0, length: 4))
+        MacMarkdownHighlighter.applyIOSHighlighting(
+            to: storage, text: text,
+            dirtyRange: NSRange(location: 9, length: 8),   // only the second line
+            fontSize: 16, lineHeightMultiple: 1.3
+        )
+        let color = storage.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? UIColor
+        XCTAssertEqual(color, UIColor.red, "attributes outside the dirty range must survive")
+    }
+    #endif
 }

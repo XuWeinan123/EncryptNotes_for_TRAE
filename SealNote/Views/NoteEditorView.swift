@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 #if os(iOS)
 import UIKit
@@ -19,6 +20,7 @@ struct NoteEditorView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var vaultStore = VaultStore.shared
     @StateObject private var settings = SettingsStore.shared
+    @StateObject private var session: EditorSession
 
     @State private var noteBody: String = ""
     @State private var isEncrypted: Bool = false
@@ -54,7 +56,7 @@ struct NoteEditorView: View {
     }
 
     private var hasUnsavedChanges: Bool {
-        noteBody != lastSavedBody || isEncrypted != lastSavedEncrypted
+        session.hasUnsavedChanges
     }
 
     init(
@@ -78,6 +80,25 @@ struct NoteEditorView: View {
             _lastSavedEncrypted = State(initialValue: note.isEncrypted)
             _didConfigureInitialState = State(initialValue: true)
         }
+
+        let editingNote: Note? = { if case .edit(let note) = mode { return note } else { return nil } }()
+        _session = StateObject(wrappedValue: EditorSession(
+            initialNote: editingNote,
+            initialBody: editingNote?.body ?? initialBody,
+            initialEncrypted: editingNote?.isEncrypted ?? false,
+            autoDiscardEmpty: { SettingsStore.shared.autoDeleteEmptyNotes },
+            create: onSave,
+            update: { note, body in
+                try await VaultStore.shared.updateNote(note, body: body)
+                return VaultStore.shared.readableNotes.first(where: { $0.id == note.id }) ?? note
+            },
+            convert: { note, body, mode in
+                try await VaultStore.shared.updateNoteMode(note, body: body, mode: mode)
+            },
+            discardEmpty: { note, body in
+                try await VaultStore.shared.discardEmptyNote(note, body: body)
+            }
+        ))
     }
 
     var body: some View {
@@ -177,12 +198,25 @@ struct NoteEditorView: View {
                 }
             }
             .onAppear { configureInitialState() }
+            .onChange(of: noteBody) { _, _ in
+                guard didConfigureInitialState else { return }
+                session.noteDidChange(body: noteBody, isEncrypted: isEncrypted)
+            }
+            .onChange(of: isEncrypted) { _, _ in
+                guard didConfigureInitialState else { return }
+                session.noteDidChange(body: noteBody, isEncrypted: isEncrypted)
+            }
+            .onChange(of: session.isSaving) { _, saving in isSaving = saving }
+            .onChange(of: session.persistedNote) { _, note in persistedNote = note }
+            .onChange(of: session.lastSaveError) { _, err in
+                if let err { errorMessage = err; showError = true }
+            }
             .onDisappear {
                 persistBeforeViewDisappears()
             }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase != .active && !shouldSkipDisappearPersistence {
-                    persistCurrentSnapshot()
+                    flushInBackground()
                 }
             }
             .alert("删除这条笔记？", isPresented: $showDeleteConfirmation) {
@@ -224,18 +258,21 @@ struct NoteEditorView: View {
 
     @ViewBuilder
     private var editorBody: some View {
+        #if os(iOS)
+        // Self-scrolling UITextView fills the space above the format bar — no outer
+        // ScrollView / sizeThatFits measurement (P1-1).
+        NoteTextView(
+            text: $noteBody,
+            selectedRange: $editorSelection,
+            placeholder: "写下想法，支持 Markdown 和 #标签",
+            fontSize: CGFloat(settings.macEditorFontSize),
+            lineHeightMultiple: CGFloat(settings.macEditorLineHeightMultiple)
+        )
+        .frame(maxWidth: DS.contentMax)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        #else
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                #if os(iOS)
-                NoteTextView(
-                    text: $noteBody,
-                    selectedRange: $editorSelection,
-                    placeholder: "写下想法，支持 Markdown 和 #标签",
-                    fontSize: CGFloat(settings.macEditorFontSize),
-                    lineHeightMultiple: CGFloat(settings.macEditorLineHeightMultiple)
-                )
-                    .frame(maxWidth: .infinity, minHeight: 400, alignment: .topLeading)
-                #else
                 ZStack(alignment: .topLeading) {
                     if noteBody.isEmpty {
                         Text("随便写点什么吧")
@@ -251,12 +288,12 @@ struct NoteEditorView: View {
                         .padding(DS.cardPadding)
                 }
                 .frame(minHeight: 360)
-                #endif
             }
             .padding(DS.cardPadding)
             .frame(maxWidth: DS.contentMax, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
         }
+        #endif
     }
 
     #if os(iOS)
@@ -351,6 +388,27 @@ struct NoteEditorView: View {
         persistCurrentSnapshot(dismissAfterSave: true, discardEmptyIfNeeded: true)
     }
 
+    /// Flush pending edits when leaving the foreground, protected by a background task so
+    /// the write survives the iOS suspension window (P0-5).
+    private func flushInBackground() {
+        #if os(iOS)
+        var bgTask: UIBackgroundTaskIdentifier = .invalid
+        bgTask = UIApplication.shared.beginBackgroundTask {
+            if bgTask != .invalid {
+                UIApplication.shared.endBackgroundTask(bgTask)
+                bgTask = .invalid
+            }
+        }
+        Task {
+            await session.flush(reason: .background)
+            if bgTask != .invalid {
+                UIApplication.shared.endBackgroundTask(bgTask)
+                bgTask = .invalid
+            }
+        }
+        #endif
+    }
+
     private func persistBeforeViewDisappears() {
         guard didConfigureInitialState else { return }
         guard !shouldSkipDisappearPersistence else { return }
@@ -385,74 +443,16 @@ struct NoteEditorView: View {
             if dismissAfterSave { dismiss() }
             return
         }
-
-        guard !isSaving else { return }
-
-        if discardEmptyIfNeeded,
-           shouldDiscardEmptyExistingNote,
-           let noteToDiscard = currentPersistedNote {
-            isSaving = true
-            do {
-                try await vaultStore.discardEmptyNote(noteToDiscard, body: noteBody)
-                didDiscardEmptyNote = true
-                shouldSkipDisappearPersistence = true
-                lastSavedBody = noteBody
-                lastSavedEncrypted = isEncrypted
-                isSaving = false
-                if dismissAfterSave {
-                    dismiss()
-                }
-            } catch {
-                isSaving = false
-                errorMessage = "丢弃空白笔记失败：\(error.localizedDescription)"
-                showError = true
-            }
-            return
+        // The EditorSession is the sole writer (debounced, one-in-flight, newest wins).
+        if discardEmptyIfNeeded {
+            await session.close()   // flush pending edits + apply the auto-discard-empty rule
+        } else {
+            await session.flush(reason: .background)
         }
-
-        let bodySnapshot = noteBody
-        let encryptedSnapshot = isEncrypted
-        let trimmedBody = bodySnapshot.trimmingCharacters(in: .whitespacesAndNewlines)
-        let noteToUpdate = currentPersistedNote
-        let shouldCreate = noteToUpdate == nil && !trimmedBody.isEmpty
-        let shouldUpdate = noteToUpdate != nil && hasUnsavedChanges
-
-        guard shouldCreate || shouldUpdate else {
-            if dismissAfterSave { dismiss() }
-            return
-        }
-
-        isSaving = true
-        do {
-            if let noteToUpdate {
-                let updatedNote: Note
-                if noteToUpdate.isEncrypted != encryptedSnapshot {
-                    updatedNote = try await vaultStore.updateNoteMode(
-                        noteToUpdate,
-                        body: bodySnapshot,
-                        mode: encryptedSnapshot ? .encrypted : .plain
-                    )
-                } else {
-                    try await vaultStore.updateNote(noteToUpdate, body: bodySnapshot)
-                    updatedNote = vaultStore.readableNotes.first(where: { $0.id == noteToUpdate.id }) ?? noteToUpdate
-                }
-                persistedNote = updatedNote
-            } else if let createdNote = try await onSave(bodySnapshot, encryptedSnapshot) {
-                persistedNote = createdNote
-            }
-
-            lastSavedBody = bodySnapshot
-            lastSavedEncrypted = encryptedSnapshot
-            isSaving = false
-
-            if dismissAfterSave {
-                dismiss()
-            }
-        } catch {
-            isSaving = false
-            errorMessage = error.localizedDescription
-            showError = true
-        }
+        persistedNote = session.persistedNote
+        lastSavedBody = noteBody
+        lastSavedEncrypted = isEncrypted
+        if dismissAfterSave { dismiss() }
     }
 
     private func copyNoteText() {
@@ -483,25 +483,23 @@ struct NoteEditorView: View {
     }
 
     private func convertCurrentNote(to mode: NoteMode) {
-        guard let note = currentPersistedNote else { return }
+        guard currentPersistedNote != nil else { return }
         if mode == .encrypted && !vaultStore.isKeyLoaded {
             showFirstKeyPrompt = true
             return
         }
-        isSaving = true
+        // Flush + convert in place; the editor stays open (P0-5 — no dismiss).
         Task {
             do {
-                let updated = try await vaultStore.updateNoteMode(note, body: noteBody, mode: mode)
-                persistedNote = updated
-                isEncrypted = updated.isEncrypted
-                lastSavedBody = noteBody
-                lastSavedEncrypted = updated.isEncrypted
-                dismiss()
+                try await session.convertMode(to: mode)
+                if let converted = session.persistedNote {
+                    persistedNote = converted
+                    isEncrypted = converted.isEncrypted
+                }
             } catch {
                 errorMessage = error.localizedDescription
                 showError = true
             }
-            isSaving = false
         }
     }
 
@@ -608,10 +606,12 @@ private class PlaceholderTextView: UITextView {
         isEditable = true
         isSelectable = true
         backgroundColor = .clear
-        isScrollEnabled = false
-        showsVerticalScrollIndicator = false
+        isScrollEnabled = true
+        showsVerticalScrollIndicator = true
         showsHorizontalScrollIndicator = false
-        alwaysBounceVertical = false
+        alwaysBounceVertical = true
+        keyboardDismissMode = .interactive
+        isFindInteractionEnabled = true
         autocapitalizationType = .sentences
         smartDashesType = .no
         smartQuotesType = .no
@@ -684,6 +684,26 @@ private class PlaceholderTextView: UITextView {
         updatePlaceholderVisibility()
     }
 
+    /// Re-highlight only the paragraph around the caret, in place — no `setAttributedString`
+    /// per keystroke (P1-1). Spans are computed globally so fences/tables stay correct.
+    func applyIncrementalHighlighting() {
+        let ns = text as NSString
+        typingAttributes = MacMarkdownHighlighter.iosTypingAttributes(
+            fontSize: editorFontSize,
+            lineHeightMultiple: editorLineHeightMultiple
+        )
+        guard ns.length > 0 else { return }
+        let caret = min(max(0, selectedRange.location), ns.length)
+        let dirtyRange = ns.paragraphRange(for: NSRange(location: caret, length: 0))
+        MacMarkdownHighlighter.applyIOSHighlighting(
+            to: textStorage,
+            text: text,
+            dirtyRange: dirtyRange,
+            fontSize: editorFontSize,
+            lineHeightMultiple: editorLineHeightMultiple
+        )
+    }
+
     func usesStyle(fontSize: CGFloat, lineHeightMultiple: CGFloat) -> Bool {
         editorFontSize == fontSize && editorLineHeightMultiple == lineHeightMultiple
     }
@@ -733,13 +753,6 @@ private struct NoteTextView: UIViewRepresentable {
         return textView
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: PlaceholderTextView, context: Context) -> CGSize? {
-        let width = proposal.width ?? UIScreen.main.bounds.width - DS.cardPadding * 2
-        let fittingSize = CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
-        let measuredSize = uiView.sizeThatFits(fittingSize)
-        return CGSize(width: width, height: max(400, measuredSize.height))
-    }
-
     func updateUIView(_ uiView: PlaceholderTextView, context: Context) {
         uiView.placeholder = placeholder
         let styleChanged = !uiView.usesStyle(
@@ -775,6 +788,10 @@ private struct NoteTextView: UIViewRepresentable {
             self.selectedRange = selectedRange
         }
 
+        // ponytail: single threshold + debounce
+        private static let largeDocThreshold = 30_000
+        private var highlightWorkItem: DispatchWorkItem?
+
         func textViewDidChange(_ textView: UITextView) {
             guard !isUpdating else { return }
             isUpdating = true
@@ -787,16 +804,23 @@ private struct NoteTextView: UIViewRepresentable {
                 isUpdating = false
                 return
             }
-            if let textView = textView as? PlaceholderTextView {
-                textView.applyMarkdownHighlighting(
-                    text: newText,
-                    selectedRange: newSelection,
-                    fontSize: textView.editorFontSize,
-                    lineHeightMultiple: textView.editorLineHeightMultiple
-                )
+            if let ptv = textView as? PlaceholderTextView {
+                scheduleIncrementalHighlight(for: ptv)
+                ptv.updatePlaceholderVisibility()
             }
-            (textView as? PlaceholderTextView)?.updatePlaceholderVisibility()
             isUpdating = false
+        }
+
+        private func scheduleIncrementalHighlight(for textView: PlaceholderTextView) {
+            highlightWorkItem?.cancel()
+            if (textView.text as NSString).length <= Self.largeDocThreshold {
+                textView.applyIncrementalHighlighting()
+            } else {
+                // Large document: debounce; typing still shows via typingAttributes meanwhile.
+                let work = DispatchWorkItem { [weak textView] in textView?.applyIncrementalHighlighting() }
+                highlightWorkItem = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+            }
         }
 
         func textView(
@@ -854,3 +878,138 @@ private struct NoteTextView: UIViewRepresentable {
     }
 }
 #endif
+
+/// Owns the editor's autosave lifecycle (P0-5): debounced saves so edits survive an app
+/// kill, a single in-flight save where the newest revision always wins (no dropped
+/// concurrent saves), an idempotent `close()`, and mode conversion that never dismisses.
+/// Persistence is injected as closures so the logic is testable without a store.
+@MainActor
+final class EditorSession: ObservableObject {
+    enum FlushReason { case debounce, background, close, convert, delete }
+
+    @Published private(set) var persistedNote: Note?
+    @Published private(set) var isSaving: Bool = false
+    @Published var lastSaveError: String?
+
+    private let debounceInterval: TimeInterval
+    private let autoDiscardEmpty: () -> Bool
+    private let create: (String, Bool) async throws -> Note?
+    private let update: (Note, String) async throws -> Note
+    private let convert: (Note, String, NoteMode) async throws -> Note
+    private let discardEmpty: (Note, String) async throws -> Void
+
+    private var currentBody: String
+    private var currentEncrypted: Bool
+    private var revision = 0
+    private var savedRevision = 0
+    private var debounceTask: Task<Void, Never>?
+    private var drainTask: Task<Void, Never>?
+    private var closeRequested = false
+
+    init(
+        initialNote: Note?,
+        initialBody: String = "",
+        initialEncrypted: Bool = false,
+        debounceInterval: TimeInterval = 0.5,
+        autoDiscardEmpty: @escaping () -> Bool = { false },
+        create: @escaping (String, Bool) async throws -> Note?,
+        update: @escaping (Note, String) async throws -> Note,
+        convert: @escaping (Note, String, NoteMode) async throws -> Note,
+        discardEmpty: @escaping (Note, String) async throws -> Void
+    ) {
+        self.persistedNote = initialNote
+        self.currentBody = initialBody
+        self.currentEncrypted = initialEncrypted
+        self.debounceInterval = debounceInterval
+        self.autoDiscardEmpty = autoDiscardEmpty
+        self.create = create
+        self.update = update
+        self.convert = convert
+        self.discardEmpty = discardEmpty
+    }
+
+    var hasUnsavedChanges: Bool { revision != savedRevision }
+
+    func noteDidChange(body: String, isEncrypted: Bool) {
+        currentBody = body
+        currentEncrypted = isEncrypted
+        revision += 1
+        debounceTask?.cancel()
+        let interval = debounceInterval
+        debounceTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            await self.flush(reason: .debounce)
+        }
+    }
+
+    /// Persist until `savedRevision == revision`. A single drain loop does the saving;
+    /// concurrent callers await the same drain, so there is never a double-save.
+    func flush(reason: FlushReason) async {
+        debounceTask?.cancel()
+        if savedRevision == revision { return }
+        let task: Task<Void, Never>
+        if let drainTask {
+            task = drainTask
+        } else {
+            let created = Task { [weak self] in
+                guard let self else { return }
+                await self.drainLoop()
+            }
+            drainTask = created
+            task = created
+        }
+        await task.value
+    }
+
+    private func drainLoop() async {
+        isSaving = true
+        while savedRevision != revision {
+            let target = revision
+            let body = currentBody
+            let encrypted = currentEncrypted
+            do {
+                if let note = persistedNote {
+                    if note.isEncrypted != encrypted {
+                        persistedNote = try await convert(note, body, encrypted ? .encrypted : .plain)
+                    } else {
+                        persistedNote = try await update(note, body)
+                    }
+                } else if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    // Create-mode with nothing to save: mark caught up, create nothing.
+                } else {
+                    persistedNote = try await create(body, encrypted)
+                }
+                savedRevision = max(savedRevision, target)
+                lastSaveError = nil
+            } catch {
+                lastSaveError = error.localizedDescription
+                break   // leave savedRevision behind; a later change/flush retries
+            }
+        }
+        isSaving = false
+        drainTask = nil
+    }
+
+    /// Idempotent. Flushes pending edits, then applies the auto-discard-empty rule.
+    func close() async {
+        guard !closeRequested else { return }
+        closeRequested = true
+        debounceTask?.cancel()
+        await flush(reason: .close)
+        if autoDiscardEmpty(),
+           let note = persistedNote,
+           currentBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            try? await discardEmpty(note, currentBody)
+            persistedNote = nil
+        }
+    }
+
+    /// Flush pending edits, then convert the note's mode. Never dismisses (P0-5).
+    func convertMode(to mode: NoteMode) async throws {
+        await flush(reason: .convert)
+        guard let note = persistedNote else { return }
+        persistedNote = try await convert(note, currentBody, mode)
+        savedRevision = revision
+    }
+}

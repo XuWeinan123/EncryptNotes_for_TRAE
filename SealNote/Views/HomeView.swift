@@ -99,6 +99,17 @@ struct HomeView: View {
                 ShareSheet(items: [url])
             }
         }
+        .alert("发现本机笔记", isPresented: Binding(
+            get: { vaultStore.strandedLocalDataDetected },
+            set: { if !$0 { vaultStore.dismissStrandedDataPrompt() } }
+        )) {
+            Button("合并到 iCloud") {
+                Task { try? await vaultStore.mergeLocalDataIntoICloud() }
+            }
+            Button("暂不", role: .cancel) { vaultStore.dismissStrandedDataPrompt() }
+        } message: {
+            Text("检测到本机存储中还有笔记，可能是 iCloud 退出登录期间创建的。是否合并到当前 iCloud 保险库？重复的笔记会保留为「本机副本」。")
+        }
         .alert("保存密钥", isPresented: $vaultStore.needsKeyExport) {
             Button("立即保存") { exportKeyFile() }
             Button("稍后", role: .cancel) { vaultStore.needsKeyExport = false }
@@ -396,6 +407,10 @@ struct HomeView: View {
                     syncErrorBanner(message)
                 }
 
+                if vaultStore.storageRootMismatch {
+                    syncErrorBanner("iCloud 暂时不可用，正在临时使用本机存储。iCloud 恢复后会自动切回，笔记不会丢失。")
+                }
+
                 tagChips
 
                 if !filteredItems.isEmpty {
@@ -532,6 +547,7 @@ struct HomeView: View {
 
             let emptyCount = vaultStore.readableNotes.filter {
                 !$0.isEncrypted && $0.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    && !vaultStore.isCloudOnly($0)
             }.count
             if emptyCount > 0 {
                 SWStatusBadge(

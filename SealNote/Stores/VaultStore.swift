@@ -60,13 +60,31 @@ final class VaultStore: ObservableObject {
     @Published var selectedTag: String?
     @Published var searchText: String = ""
     @Published var lastError: String?
-    @Published var needsKeyExport: Bool = false
+    @Published var needsKeyExport: Bool = false {
+        didSet { settings.needsKeyExportPending = needsKeyExport }
+    }
+
+    #if os(iOS)
+    /// True when the vault is pinned to iCloud but iCloud is unavailable this launch,
+    /// so we're temporarily using local storage instead (P0-3).
+    @Published private(set) var storageRootMismatch: Bool = false
+    /// True when the vault is on iCloud but a local fallback vault still holds notes
+    /// written while iCloud was signed out (P0-3).
+    @Published private(set) var strandedLocalDataDetected: Bool = false
+    #endif
 
     private let storage: VaultStorage
     private let cryptoService = CryptoService.shared
-    private let keychainStore = KeychainStore.shared
+    private let keyStore: KeyStore
     private let keyManager = VaultKeyManager.shared
     private let settings: SettingsStore
+    private let identityStore: VaultIdentityStore
+    /// True when `storage` was picked by `resolveStorage` (real app) rather than
+    /// injected by a test — gates the pin/mismatch/stranded bookkeeping.
+    private let usesResolvedStorage: Bool
+    /// Serial off-main lane for all disk mutations, so concurrent saves neither
+    /// interleave on disk nor block the main actor (P0/P1-2).
+    private let fileIO = VaultFileIO()
 
     private var vaultId: String?
     private var currentKey: CryptoKit.SymmetricKey?
@@ -115,9 +133,21 @@ final class VaultStore: ObservableObject {
         case explicit(CryptoKit.SymmetricKey?)
     }
 
-    init(storage: VaultStorage? = nil, settings: SettingsStore? = nil) {
-        self.storage = storage ?? (ICloudVaultStorage.shared.isAvailable ? ICloudVaultStorage.shared : LocalFallbackStorage.shared)
-        self.settings = settings ?? .shared
+    init(storage: VaultStorage? = nil, settings: SettingsStore? = nil, keyStore: KeyStore = KeychainStore.shared) {
+        let resolvedSettings = settings ?? .shared
+        if let storage {
+            self.storage = storage
+            self.usesResolvedStorage = false
+        } else {
+            self.storage = Self.resolveStorage(
+                pinned: resolvedSettings.pinnedStorageRoot,
+                iCloudAvailable: ICloudVaultStorage.shared.isAvailable
+            ).storage
+            self.usesResolvedStorage = true
+        }
+        self.settings = resolvedSettings
+        self.keyStore = keyStore
+        self.identityStore = VaultIdentityStore(defaults: resolvedSettings.userDefaults, keyStore: keyStore)
     }
 
     #if DEBUG
@@ -127,7 +157,8 @@ final class VaultStore: ObservableObject {
         decryptedNotes: [Note] = [],
         plainNotes: [Note] = [],
         lockedEncryptedNotes: [EncryptedNoteInfo] = [],
-        trashNotes: [TrashNote] = []
+        trashNotes: [TrashNote] = [],
+        cloudOnlyPlainNoteIDs: Set<String> = []
     ) {
         self.vaultId = vaultId
         self.currentKey = key
@@ -137,6 +168,9 @@ final class VaultStore: ObservableObject {
         self.trashNotes = trashNotes
         self.noteIndex = NoteIndex()
         self.state = .ready
+        #if os(iOS)
+        self.cloudOnlyPlainNoteIDs = cloudOnlyPlainNoteIDs
+        #endif
     }
     #endif
 
@@ -191,7 +225,7 @@ final class VaultStore: ObservableObject {
     #if os(iOS)
     var hasKeyReference: Bool {
         guard let vId = vaultId else { return false }
-        return keychainStore.hasKey(forVaultId: vId)
+        return keyStore.hasKey(forVaultId: vId)
     }
 
     var iosKeyStatus: IOSVaultKeyStatus {
@@ -330,7 +364,7 @@ final class VaultStore: ObservableObject {
               let url = Self.urlForEntry(entry, storage: storage) else {
             return note
         }
-        let mdFile = try storage.loadMarkdownFile(at: url)
+        let mdFile = try await fileIO.perform { [storage] in try storage.loadMarkdownFile(at: url) }
         let loaded = Note(
             id: mdFile.noteId,
             body: mdFile.body,
@@ -351,9 +385,28 @@ final class VaultStore: ObservableObject {
             let prepared = try await Task.detached(priority: .userInitiated) { [storage] in
                 try await Self.prepareIndex(storage: storage, fallbackIndex: NoteIndex(), initializeStorage: true)
             }.value
-            let vId = vaultId ?? UUID().uuidString
-            vaultId = vId
             noteIndex = prepared.index
+            vaultId = identityStore.resolveVaultId(
+                containerURL: storage.containerURL,
+                index: noteIndex,
+                validate: { [weak self] candidate in
+                    self?.canDecryptExistingEncryptedNote(withCandidate: candidate) ?? false
+                }
+            )
+            needsKeyExport = settings.needsKeyExportPending
+            #if os(iOS)
+            if usesResolvedStorage {
+                let resolution = Self.resolveStorage(
+                    pinned: settings.pinnedStorageRoot,
+                    iCloudAvailable: ICloudVaultStorage.shared.isAvailable
+                )
+                settings.pinnedStorageRoot = resolution.pin
+                storageRootMismatch = resolution.mismatch
+                if isUsingICloudStorage, let localContainer = LocalFallbackStorage.shared.containerURL {
+                    strandedLocalDataDetected = Self.hasVaultData(at: localContainer)
+                }
+            }
+            #endif
             reportMissingIndexedFiles(prepared.removedMissingFiles)
 
             let loadedPendingDownloadKeys = await loadAllNotes()
@@ -665,7 +718,7 @@ final class VaultStore: ObservableObject {
             loadedKey = nil
             #else
             if let vId = vaultId,
-               let keyMaterial = try? keychainStore.loadKey(forVaultId: vId),
+               let keyMaterial = try? keyStore.loadKey(forVaultId: vId),
                let key = try? keyManager.keyFromBase64(keyMaterial) {
                 loadedKey = key
             } else {
@@ -885,6 +938,123 @@ final class VaultStore: ObservableObject {
             ? container.appendingPathComponent(fileName)
             : container.appendingPathComponent(location.rawValue).appendingPathComponent(fileName)
     }
+
+    // MARK: - Storage-root pinning (P0-3)
+
+    /// Decide which storage root to use, honoring the user's pin so the vault never
+    /// silently forks between iCloud and local. Pure given `iCloudAvailable`.
+    /// - Returns: the storage to use, the pin to persist, and whether we fell back to
+    ///   local against an iCloud pin (a mismatch the UI should surface).
+    nonisolated static func resolveStorage(pinned: String?, iCloudAvailable: Bool)
+        -> (storage: VaultStorage, pin: String, mismatch: Bool) {
+        switch pinned {
+        case "local":
+            // User pinned local; iCloud reappearing must not auto-switch.
+            return (LocalFallbackStorage.shared, "local", false)
+        case "icloud":
+            if iCloudAvailable {
+                return (ICloudVaultStorage.shared, "icloud", false)
+            }
+            // Pinned to iCloud but unavailable this launch: read/write local as a
+            // temporary fallback WITHOUT changing the pin, and flag the mismatch.
+            return (LocalFallbackStorage.shared, "icloud", true)
+        default:
+            // No pin yet: pick and pin.
+            return iCloudAvailable
+                ? (ICloudVaultStorage.shared, "icloud", false)
+                : (LocalFallbackStorage.shared, "local", false)
+        }
+    }
+
+    /// Whether a vault root already holds note data — used to detect notes stranded in
+    /// a local fallback vault while the app is otherwise on iCloud.
+    nonisolated static func hasVaultData(at rootURL: URL) -> Bool {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: rootURL.appendingPathComponent("notes.json").path) { return true }
+        if let rootFiles = try? fm.contentsOfDirectory(atPath: rootURL.path),
+           rootFiles.contains(where: { $0.hasSuffix(".md") }) {
+            return true
+        }
+        let trash = rootURL.appendingPathComponent("trash")
+        if let trashFiles = try? fm.contentsOfDirectory(atPath: trash.path),
+           trashFiles.contains(where: { $0.hasSuffix(".md") }) {
+            return true
+        }
+        return false
+    }
+
+    /// Move notes from `source` into `dest`, copy-verify-then-delete. A note whose id
+    /// already exists in `dest` is imported as a fresh note titled "…（本机副本）"; a
+    /// unique note keeps its id. Local originals are removed only after a verified
+    /// read-back. Operates on two `VaultStorage` instances so it is directly testable.
+    nonisolated static func mergeVaultData(from source: VaultStorage, into dest: VaultStorage) throws -> (merged: Int, conflicted: Int) {
+        guard dest.containerURL != nil else { throw StorageError.iCloudUnavailable }
+        var destIndex = (try? dest.loadIndex()) ?? NoteIndex()
+        var sourceIndex = (try? source.loadIndex()) ?? NoteIndex()
+        var merged = 0
+        var conflicted = 0
+
+        for entry in sourceIndex.entries where entry.location == .notes {
+            guard let srcURL = urlForEntry(entry, storage: source),
+                  let mdFile = try? source.loadMarkdownFile(at: srcURL) else { continue }
+
+            let collision = destIndex.entry(for: entry.noteId) != nil
+            let destNoteId = collision ? UUID().uuidString : entry.noteId
+            let destFileName = collision ? "\(destNoteId).md" : entry.fileName
+            let destTitle: String?
+            if collision {
+                let base = mdFile.title ?? NoteTitleFormatter.displayTitle(fromFileName: entry.fileName, emptyTitle: "")
+                destTitle = base.isEmpty ? "（本机副本）" : "\(base)（本机副本）"
+            } else {
+                destTitle = mdFile.title
+            }
+            guard let destURL = urlForFileName(destFileName, storage: dest) else { continue }
+
+            let destFile = MarkdownNoteFile(
+                noteId: destNoteId,
+                createdAt: mdFile.createdAt,
+                updatedAt: mdFile.updatedAt,
+                title: destTitle,
+                body: mdFile.body
+            )
+            do {
+                try dest.saveMarkdownFile(destFile, at: destURL)
+                let readBack = try dest.loadMarkdownFile(at: destURL)
+                guard readBack.body == mdFile.body else { continue }   // verify before delete
+            } catch {
+                continue
+            }
+            destIndex.upsert(NoteIndexEntry(noteId: destNoteId, fileName: destFileName, mode: entry.mode, location: .notes))
+            try? source.permanentlyDeleteFile(at: srcURL)
+            sourceIndex.removeEntry(for: entry.noteId)
+
+            if collision { conflicted += 1 } else { merged += 1 }
+        }
+        try? dest.saveIndex(destIndex)
+        try? source.saveIndex(sourceIndex)
+        return (merged, conflicted)
+    }
+
+    #if os(iOS)
+    /// User-initiated: merge notes that were stranded in the local fallback vault
+    /// (written while iCloud was signed out) into the active iCloud vault.
+    @discardableResult
+    func mergeLocalDataIntoICloud() async throws -> (merged: Int, conflicted: Int) {
+        guard let iCloud = storage as? ICloudVaultStorage else { throw StorageError.iCloudUnavailable }
+        let result = try await Task.detached(priority: .userInitiated) {
+            try Self.mergeVaultData(from: LocalFallbackStorage.shared, into: iCloud)
+        }.value
+        strandedLocalDataDetected = false
+        await reloadAllNotes()
+        return result
+    }
+
+    /// Dismiss the stranded-data prompt for this launch. The data is re-detected on the
+    /// next launch while it still exists, so the user is reminded until they merge.
+    func dismissStrandedDataPrompt() {
+        strandedLocalDataDetected = false
+    }
+    #endif
 
     nonisolated private static func uniqueFileName(
         for body: String,
@@ -1258,7 +1428,8 @@ final class VaultStore: ObservableObject {
 
     func openEncryptedNote(_ info: EncryptedNoteInfo) async throws -> Note {
         let key = try currentEncryptionKey()
-        let mdFile = try storage.loadMarkdownFile(at: info.url)
+        let url = info.url
+        let mdFile = try await fileIO.perform { [storage] in try storage.loadMarkdownFile(at: url) }
         let decryptedBody: String
         do {
             decryptedBody = try cryptoService.decryptMarkdownBody(mdFile.body, using: key)
@@ -1299,7 +1470,7 @@ final class VaultStore: ObservableObject {
             throw VaultKeyFileError.keyMismatch
         }
 
-        return try saveReadableNote(
+        return try await saveReadableNote(
             Note(
                 id: mdFile.noteId,
                 body: decryptedBody,
@@ -1454,7 +1625,7 @@ final class VaultStore: ObservableObject {
         currentKey = nil
         #else
         if let vId = vaultId {
-            try keychainStore.deleteKey(forVaultId: vId)
+            try keyStore.deleteKey(forVaultId: vId)
         }
         currentKey = nil
         #endif
@@ -1467,12 +1638,11 @@ final class VaultStore: ObservableObject {
         guard !hasEncryptedEntries else {
             throw VaultKeyFileError.encryptedNotesExist
         }
-        let vId = vaultId ?? UUID().uuidString
-        vaultId = vId
+        guard let vId = vaultId else { throw VaultError.notReady }
 
         let key = keyManager.generateKey()
         let vaultKey = keyManager.generateVaultKey(key: key)
-        try keychainStore.saveKey(
+        try keyStore.saveKey(
             vaultKey.keyMaterial,
             forVaultId: vId,
             keyId: vaultKey.keyId,
@@ -1501,7 +1671,7 @@ final class VaultStore: ObservableObject {
         settings.preferredNoteMode = .encrypted
         return true
         #else
-        let vId = vaultId ?? UUID().uuidString
+        guard let vId = vaultId else { throw VaultError.notReady }
         guard url.pathExtension.lowercased() == "snkey" else {
             throw VaultKeyFileError.unsupportedFileExtension
         }
@@ -1540,13 +1710,12 @@ final class VaultStore: ObservableObject {
         }
         try validateIOSKeyAgainstExistingEncryptedNote(key)
 
-        try keychainStore.saveKey(
+        try keyStore.saveKey(
             vaultKey.keyMaterial,
             forVaultId: vId,
             keyId: vaultKey.keyId,
             keyFingerprint: try keyManager.keyFingerprint(vaultKey)
         )
-        vaultId = vId
         currentKey = key
 
         await reloadAllNotes(keyReloadMode: .explicit(key))
@@ -1574,7 +1743,7 @@ final class VaultStore: ObservableObject {
             throw VaultKeyFileError.encryptedNotesExist
         }
         guard let vId = vaultId else { return }
-        try keychainStore.deleteKey(forVaultId: vId)
+        try keyStore.deleteKey(forVaultId: vId)
         currentKey = nil
         decryptedNotes = []
 
@@ -1592,20 +1761,37 @@ final class VaultStore: ObservableObject {
     }
 
     #if os(iOS)
+    /// Non-destructive session lock: forget the in-memory key and re-project encrypted
+    /// notes to "locked", leaving the Keychain key intact (P0-4). Reverse of `unlockSession()`.
+    func lockSession() async {
+        currentKey = nil
+        decryptedNotes = []
+        await reloadAllNotes(keyReloadMode: .explicit(nil))
+    }
+
+    /// Reload the key from the Keychain and decrypt the vault again.
+    func unlockSession() async throws {
+        let key = try loadStoredIOSKey()
+        currentKey = key
+        await reloadAllNotes(keyReloadMode: .explicit(key))
+    }
+    #endif
+
+    #if os(iOS)
     private func loadStoredIOSKey() throws -> CryptoKit.SymmetricKey {
         guard let vId = vaultId else { throw KeychainError.notFound }
-        let keyMaterial = try keychainStore.loadKey(forVaultId: vId)
+        let keyMaterial = try keyStore.loadKey(forVaultId: vId)
         let key = try keyManager.keyFromBase64(keyMaterial)
         let fingerprint = try keyManager.keyMaterialFingerprint(keyMaterial)
 
-        if let storedFingerprint = keychainStore.loadKeyFingerprint(forVaultId: vId),
+        if let storedFingerprint = keyStore.loadKeyFingerprint(forVaultId: vId),
            storedFingerprint != fingerprint {
             throw VaultKeyFileError.keyReplaced
         }
 
-        if keychainStore.loadKeyFingerprint(forVaultId: vId) == nil {
-            try? keychainStore.saveKeyMetadata(
-                keyId: keychainStore.loadKeyId(forVaultId: vId),
+        if keyStore.loadKeyFingerprint(forVaultId: vId) == nil {
+            try? keyStore.saveKeyMetadata(
+                keyId: keyStore.loadKeyId(forVaultId: vId),
                 keyFingerprint: fingerprint,
                 forVaultId: vId
             )
@@ -1632,10 +1818,30 @@ final class VaultStore: ObservableObject {
     }
     #endif
 
+    /// Whether the Keychain key stored under `candidate` decrypts an existing
+    /// encrypted note. Used by `VaultIdentityStore` to validate a legacy vault id
+    /// before adopting it. Cross-platform signature; only iOS can validate.
+    private func canDecryptExistingEncryptedNote(withCandidate candidate: String) -> Bool {
+        #if os(iOS)
+        guard let keyMaterial = try? keyStore.loadKey(forVaultId: candidate),
+              let key = try? keyManager.keyFromBase64(keyMaterial) else {
+            return false
+        }
+        do {
+            try validateIOSKeyAgainstExistingEncryptedNote(key)
+            return true
+        } catch {
+            return false
+        }
+        #else
+        return false
+        #endif
+    }
+
     func resetKey() async throws {
         guard let vId = vaultId else { throw VaultError.notReady }
 
-        try keychainStore.deleteKey(forVaultId: vId)
+        try keyStore.deleteKey(forVaultId: vId)
 
         let encEntries = noteIndex.entries.filter { $0.mode == .encrypted }
         for entry in encEntries {
@@ -1648,7 +1854,7 @@ final class VaultStore: ObservableObject {
 
         let key = keyManager.generateKey()
         let vaultKey = keyManager.generateVaultKey(key: key)
-        try keychainStore.saveKey(
+        try keyStore.saveKey(
             vaultKey.keyMaterial,
             forVaultId: vId,
             keyId: vaultKey.keyId,
@@ -1756,7 +1962,7 @@ final class VaultStore: ObservableObject {
         let keyMaterial = keyManager.keyToBase64(key)
         let keyId: String
         #if os(iOS)
-        keyId = vaultId.flatMap { keychainStore.loadKeyId(forVaultId: $0) } ?? UUID().uuidString
+        keyId = vaultId.flatMap { keyStore.loadKeyId(forVaultId: $0) } ?? UUID().uuidString
         #else
         keyId = settings.vaultKeyFileReference?.keyId ?? UUID().uuidString
         #endif
@@ -1845,7 +2051,7 @@ final class VaultStore: ObservableObject {
     func updateNote(_ note: Note, body: String, renameIfUntitled: Bool = true) async throws {
         guard let _ = vaultId else { throw VaultError.notReady }
         let latestNote = readableNotes.first(where: { $0.id == note.id }) ?? note
-        _ = try saveReadableNote(
+        _ = try await saveReadableNote(
             latestNote,
             body: body,
             mode: latestNote.isEncrypted ? .encrypted : .plain,
@@ -1859,7 +2065,7 @@ final class VaultStore: ObservableObject {
         guard let _ = vaultId else { throw VaultError.notReady }
         let latestNote = readableNotes.first(where: { $0.id == note.id }) ?? note
         let fileMode: NoteFileMode = mode == .encrypted ? .encrypted : .plain
-        return try saveReadableNote(
+        return try await saveReadableNote(
             latestNote,
             body: body,
             mode: fileMode,
@@ -1871,7 +2077,7 @@ final class VaultStore: ObservableObject {
         guard let _ = vaultId else { throw VaultError.notReady }
         _ = try currentEncryptionKey()
         let latestNote = readableNotes.first(where: { $0.id == note.id }) ?? note
-        return try saveReadableNote(latestNote, body: body, mode: .encrypted, sourceUpdatedAt: note.updatedAt)
+        return try await saveReadableNote(latestNote, body: body, mode: .encrypted, sourceUpdatedAt: note.updatedAt)
     }
 
     func decryptEncryptedNoteBody(_ note: Note) async throws -> String {
@@ -1881,7 +2087,7 @@ final class VaultStore: ObservableObject {
               let url = Self.urlForEntry(entry, storage: storage) else {
             throw StorageError.fileNotFound
         }
-        let mdFile = try storage.loadMarkdownFile(at: url)
+        let mdFile = try await fileIO.perform { [storage] in try storage.loadMarkdownFile(at: url) }
         return try cryptoService.decryptMarkdownBody(mdFile.body, using: key)
     }
 
@@ -1891,125 +2097,39 @@ final class VaultStore: ObservableObject {
         return try cryptoService.decryptMarkdownBody(file.body, using: resolvedKey)
     }
 
+    // ponytail: single global IO lane; per-note lanes only if profiling demands
     private func saveReadableNote(
         _ note: Note,
         body: String,
         mode: NoteFileMode,
         sourceUpdatedAt: Date? = nil,
         renameIfUntitled: Bool = true
-    ) throws -> (note: Note, ciphertext: String) {
+    ) async throws -> (note: Note, ciphertext: String) {
         let now = Date()
         let isEncrypted = mode == .encrypted
-        let encryptionKey: CryptoKit.SymmetricKey?
-        let finalBody: String
-        if isEncrypted {
-            let key = try currentEncryptionKey()
-            encryptionKey = key
-            finalBody = try cryptoService.encryptMarkdownBody(body, using: key)
-        } else {
-            encryptionKey = nil
-            finalBody = body
-        }
+        // Resolve the key on the main actor (throws if missing); the actual disk work
+        // runs off-main on the serial IO lane.
+        let encryptionKey: CryptoKit.SymmetricKey? = isEncrypted ? try currentEncryptionKey() : nil
+        let indexSnapshot = noteIndex
+        let autoRename = settings.autoRenameNotesOnSave
 
-        guard let currentEntry = noteIndex.entry(for: note.id),
-              let currentURL = Self.urlForEntry(currentEntry, storage: storage) else {
-            throw StorageError.iCloudUnavailable
-        }
-
-        let diskFile = try? storage.loadMarkdownFile(at: currentURL)
-        let stableTitle = Self.stableExistingTitle(for: currentEntry, mdFile: diskFile)
-        let shouldRename = settings.autoRenameNotesOnSave || (stableTitle == nil && renameIfUntitled)
-        let existingTitle = settings.autoRenameNotesOnSave ? nil : stableTitle
-        let newFileName = shouldRename
-            ? Self.uniqueFileName(
-                for: body,
+        let outcome = try await fileIO.perform { [storage] in
+            try Self.executeSave(
+                note: note,
+                body: body,
+                mode: mode,
+                sourceUpdatedAt: sourceUpdatedAt,
+                renameIfUntitled: renameIfUntitled,
+                autoRename: autoRename,
+                encryptionKey: encryptionKey,
                 storage: storage,
-                currentFileName: currentEntry.fileName
+                index: indexSnapshot,
+                now: now
             )
-            : currentEntry.fileName
-        guard let targetURL = Self.urlForFileName(newFileName, storage: storage) else {
-            throw StorageError.iCloudUnavailable
         }
 
-        if let diskFile {
-            let baselineUpdatedAt = sourceUpdatedAt ?? note.updatedAt
-            let diskIsNewer = diskFile.updatedAt.timeIntervalSince(baselineUpdatedAt) > 1
-            let diskBody = try logicalBody(for: diskFile, key: encryptionKey)
-            let bodyDiffers = diskBody != note.body
-            MaintenanceLogStore.shared.record("note_save_conflict_check", fields: [
-                "note_id": note.id,
-                "current_file": currentURL.lastPathComponent,
-                "target_file": targetURL.lastPathComponent,
-                "mode": mode.rawValue,
-                "source_updated_at": sourceUpdatedAt.map { ISO8601DateFormatter().string(from: $0) },
-                "memory_updated_at": ISO8601DateFormatter().string(from: note.updatedAt),
-                "disk_updated_at": ISO8601DateFormatter().string(from: diskFile.updatedAt),
-                "disk_is_newer": diskIsNewer,
-                "body_differs": bodyDiffers,
-                "body_bytes": body.utf8.count
-            ])
-            if diskIsNewer && bodyDiffers {
-                let conflictURL = try storage.createConflictCopy(for: currentURL)
-                MaintenanceLogStore.shared.record("note_save_conflict_detected", fields: [
-                    "note_id": note.id,
-                    "source_updated_at": sourceUpdatedAt.map { ISO8601DateFormatter().string(from: $0) },
-                    "memory_updated_at": ISO8601DateFormatter().string(from: note.updatedAt),
-                    "disk_updated_at": ISO8601DateFormatter().string(from: diskFile.updatedAt),
-                    "conflict_file": conflictURL.lastPathComponent
-                ])
-            }
-        }
-
-        let mdFile = MarkdownNoteFile(
-            noteId: note.id,
-            createdAt: note.createdAt,
-            updatedAt: now,
-            title: existingTitle ?? (shouldRename ? Self.title(for: body) : nil),
-            body: finalBody
-        )
-        try storage.saveMarkdownFile(mdFile, at: targetURL)
-
-        if currentURL != targetURL && FileManager.default.fileExists(atPath: currentURL.path) {
-            try? storage.permanentlyDeleteFile(at: currentURL)
-        }
-
-        if let entry = noteIndex.entry(for: note.id) {
-            noteIndex.upsert(NoteIndexEntry(
-                noteId: entry.noteId,
-                fileName: newFileName,
-                mode: mode,
-                location: entry.location,
-                deletedAt: entry.deletedAt,
-                purgeAfter: entry.purgeAfter,
-                originalLocation: entry.originalLocation
-            ))
-        } else {
-            noteIndex.upsert(NoteIndexEntry(
-                noteId: note.id,
-                fileName: newFileName,
-                mode: mode,
-                location: .notes
-            ))
-        }
-        try storage.saveIndex(noteIndex)
-        MaintenanceLogStore.shared.record("note_saved", fields: [
-            "note_id": note.id,
-            "file": newFileName,
-            "mode": mode.rawValue,
-            "renamed": currentURL != targetURL,
-            "source_updated_at": sourceUpdatedAt.map { ISO8601DateFormatter().string(from: $0) },
-            "saved_updated_at": ISO8601DateFormatter().string(from: now),
-            "body_bytes": body.utf8.count
-        ])
-
-        let updatedNote = Note(
-            id: note.id,
-            body: body,
-            createdAt: note.createdAt,
-            updatedAt: now,
-            isEncrypted: isEncrypted
-        )
-
+        noteIndex = outcome.updatedIndex
+        let updatedNote = outcome.updatedNote
         if isEncrypted {
             plainNotes.removeAll { $0.id == note.id }
             if let index = decryptedNotes.firstIndex(where: { $0.id == note.id }) {
@@ -2026,7 +2146,167 @@ final class VaultStore: ObservableObject {
             }
         }
         lockedEncryptedNotes.removeAll { $0.id == note.id }
-        return (updatedNote, finalBody)
+
+        // Surface the disk version that would otherwise be silently overwritten as a
+        // real, visible note (P1-2).
+        if let conflict = outcome.conflictNote {
+            if conflict.isEncrypted {
+                decryptedNotes.insert(conflict, at: 0)
+            } else {
+                plainNotes.insert(conflict, at: 0)
+            }
+        }
+
+        return (updatedNote, outcome.finalBody)
+    }
+
+    nonisolated struct SaveOutcome: Sendable {
+        let updatedIndex: NoteIndex
+        let updatedNote: Note
+        let finalBody: String
+        let conflictNote: Note?
+    }
+
+    /// Off-main disk work for a save: conflict check, conflict-preserve, write, delete
+    /// stale file, persist index. Pure over its inputs so the serial IO lane can run it.
+    nonisolated private static func executeSave(
+        note: Note,
+        body: String,
+        mode: NoteFileMode,
+        sourceUpdatedAt: Date?,
+        renameIfUntitled: Bool,
+        autoRename: Bool,
+        encryptionKey: CryptoKit.SymmetricKey?,
+        storage: VaultStorage,
+        index inputIndex: NoteIndex,
+        now: Date
+    ) throws -> SaveOutcome {
+        var index = inputIndex
+        let isEncrypted = mode == .encrypted
+        let finalBody: String
+        if isEncrypted {
+            guard let key = encryptionKey else { throw CryptoError.keyNotFound }
+            finalBody = try CryptoService.shared.encryptMarkdownBody(body, using: key)
+        } else {
+            finalBody = body
+        }
+
+        guard let currentEntry = index.entry(for: note.id),
+              let currentURL = urlForEntry(currentEntry, storage: storage) else {
+            throw StorageError.iCloudUnavailable
+        }
+
+        func decryptedIfPossible(_ file: MarkdownNoteFile) -> String {
+            guard file.isEncrypted, let key = encryptionKey else { return file.body }
+            return (try? CryptoService.shared.decryptMarkdownBody(file.body, using: key)) ?? file.body
+        }
+
+        let diskFile = try? storage.loadMarkdownFile(at: currentURL)
+        let stableTitle = stableExistingTitle(for: currentEntry, mdFile: diskFile)
+        let shouldRename = autoRename || (stableTitle == nil && renameIfUntitled)
+        let existingTitle = autoRename ? nil : stableTitle
+        let newFileName = shouldRename
+            ? uniqueFileName(for: body, storage: storage, currentFileName: currentEntry.fileName)
+            : currentEntry.fileName
+        guard let targetURL = urlForFileName(newFileName, storage: storage) else {
+            throw StorageError.iCloudUnavailable
+        }
+
+        var conflictNote: Note?
+        if let diskFile {
+            let baselineUpdatedAt = sourceUpdatedAt ?? note.updatedAt
+            let diskIsNewer = diskFile.updatedAt.timeIntervalSince(baselineUpdatedAt) > 1
+            let diskLogical = decryptedIfPossible(diskFile)
+            let bodyDiffers = diskLogical != note.body
+            MaintenanceLogStore.shared.record("note_save_conflict_check", fields: [
+                "note_id": note.id,
+                "current_file": currentURL.lastPathComponent,
+                "target_file": targetURL.lastPathComponent,
+                "mode": mode.rawValue,
+                "disk_is_newer": diskIsNewer,
+                "body_differs": bodyDiffers,
+                "body_bytes": body.utf8.count
+            ])
+            if diskIsNewer && bodyDiffers {
+                // Keep the disk version as a visible "conflict copy" note instead of
+                // overwriting it into an invisible conflicts/ folder.
+                let conflictId = UUID().uuidString
+                let baseTitle = diskFile.title
+                    ?? NoteTitleFormatter.displayTitle(fromFileName: currentEntry.fileName, emptyTitle: "")
+                let formatter = DateFormatter()
+                formatter.dateFormat = "yyyy-MM-dd HH:mm"
+                let suffix = "（冲突副本 \(formatter.string(from: now))）"
+                let conflictTitle = baseTitle.isEmpty ? suffix : "\(baseTitle)\(suffix)"
+                let conflictFileName = "\(conflictId).md"
+                if let conflictURL = urlForFileName(conflictFileName, storage: storage) {
+                    let conflictFile = MarkdownNoteFile(
+                        noteId: conflictId,
+                        createdAt: diskFile.createdAt,
+                        updatedAt: diskFile.updatedAt,
+                        title: conflictTitle,
+                        body: diskFile.body    // raw disk body — keeps encryption
+                    )
+                    try? storage.saveMarkdownFile(conflictFile, at: conflictURL)
+                    index.upsert(NoteIndexEntry(noteId: conflictId, fileName: conflictFileName, mode: currentEntry.mode, location: .notes))
+                    conflictNote = Note(
+                        id: conflictId,
+                        body: decryptedIfPossible(conflictFile),
+                        createdAt: diskFile.createdAt,
+                        updatedAt: diskFile.updatedAt,
+                        isEncrypted: currentEntry.mode == .encrypted
+                    )
+                    MaintenanceLogStore.shared.record("note_save_conflict_preserved", fields: [
+                        "note_id": note.id,
+                        "conflict_note_id": conflictId,
+                        "conflict_file": conflictFileName
+                    ])
+                }
+            }
+        }
+
+        let mdFile = MarkdownNoteFile(
+            noteId: note.id,
+            createdAt: note.createdAt,
+            updatedAt: now,
+            title: existingTitle ?? (shouldRename ? title(for: body) : nil),
+            body: finalBody
+        )
+        try storage.saveMarkdownFile(mdFile, at: targetURL)
+
+        if currentURL != targetURL && FileManager.default.fileExists(atPath: currentURL.path) {
+            try? storage.permanentlyDeleteFile(at: currentURL)
+        }
+
+        if let entry = index.entry(for: note.id) {
+            index.upsert(NoteIndexEntry(
+                noteId: entry.noteId,
+                fileName: newFileName,
+                mode: mode,
+                location: entry.location,
+                deletedAt: entry.deletedAt,
+                purgeAfter: entry.purgeAfter,
+                originalLocation: entry.originalLocation
+            ))
+        } else {
+            index.upsert(NoteIndexEntry(noteId: note.id, fileName: newFileName, mode: mode, location: .notes))
+        }
+        try storage.saveIndex(index)
+        MaintenanceLogStore.shared.record("note_saved", fields: [
+            "note_id": note.id,
+            "file": newFileName,
+            "mode": mode.rawValue,
+            "renamed": currentURL != targetURL,
+            "body_bytes": body.utf8.count
+        ])
+
+        let updatedNote = Note(
+            id: note.id,
+            body: body,
+            createdAt: note.createdAt,
+            updatedAt: now,
+            isEncrypted: isEncrypted
+        )
+        return SaveOutcome(updatedIndex: index, updatedNote: updatedNote, finalBody: finalBody, conflictNote: conflictNote)
     }
 
     func renameNote(_ note: Note, title: String, limitsLength: Bool = true) async throws {
@@ -2140,8 +2420,14 @@ final class VaultStore: ObservableObject {
     }
 
     func clearEmptyReadableNotes() async throws -> Int {
-        let emptyNotes = readableNotes.filter {
-            $0.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let emptyNotes = readableNotes.filter { note in
+            guard note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+            #if os(iOS)
+            // A cloud-only placeholder has an empty body only because its content
+            // hasn't downloaded yet — deleting it would lose the real note (P0-2).
+            if isCloudOnly(note) { return false }
+            #endif
+            return true
         }
         for note in emptyNotes {
             try await deleteNote(note)
@@ -2347,13 +2633,14 @@ final class VaultStore: ObservableObject {
         for item in items {
             switch item {
             case .readable(let note):
-                if !note.isEncrypted {
+                if note.isEncrypted || isCloudOnly(note) {
+                    // Encrypted, or a not-yet-downloaded cloud placeholder (empty body) — skip (P0-2).
+                    skipped += 1
+                } else {
                     let copiedBody = settings.copyAddsParagraphSpacing
                         ? MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: note.body)
                         : note.body
                     plainBodies.append(copiedBody)
-                } else {
-                    skipped += 1
                 }
             case .locked:
                 skipped += 1
@@ -2367,8 +2654,17 @@ final class VaultStore: ObservableObject {
     #endif
 
     func exportReadableNotesAsZip() throws -> (url: URL, exportedCount: Int, skippedCount: Int) {
-        let plainOnly = plainNotes.sorted { $0.updatedAt > $1.updatedAt }
-        let skippedCount = decryptedNotes.count + lockedEncryptedNotes.count
+        let sortedPlain = plainNotes.sorted { $0.updatedAt > $1.updatedAt }
+        #if os(iOS)
+        // Cloud-only placeholders have empty bodies until downloaded — exporting them
+        // would ship blank files, so skip and count them (no on-the-fly download). (P0-2)
+        let plainOnly = sortedPlain.filter { !isCloudOnly($0) }
+        let cloudOnlySkipped = sortedPlain.count - plainOnly.count
+        #else
+        let plainOnly = sortedPlain
+        let cloudOnlySkipped = 0
+        #endif
+        let skippedCount = decryptedNotes.count + lockedEncryptedNotes.count + cloudOnlySkipped
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
@@ -2412,14 +2708,9 @@ final class VaultStore: ObservableObject {
     }
 
     func handleEnterForeground() async {
+        // Never destroys the key. Non-destructive session unlock happens via
+        // AppLockStore.unlock() (Face ID / passcode) → unlockSession() (P0-4).
         await purgeExpiredTrash()
-        #if os(macOS)
-        return
-        #else
-        if settings.autoUnloadKeyOnForeground {
-            try? await unloadKey()
-        }
-        #endif
     }
 }
 
@@ -2496,5 +2787,14 @@ nonisolated enum VaultKeyFileError: Error, LocalizedError, Equatable {
         case .keyDownloadPending:
             return "密钥仍在从 iCloud 下载，请稍后再试。"
         }
+    }
+}
+
+/// Serial IO lane. Actor methods are mutually exclusive and `op` runs synchronously
+/// inside `perform` (no suspension), so disk mutations never interleave and never run
+/// on the main actor (P0/P1-2).
+actor VaultFileIO {
+    func perform<T: Sendable>(_ op: @Sendable () throws -> T) async throws -> T {
+        try op()
     }
 }

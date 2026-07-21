@@ -263,9 +263,11 @@ final class ICloudVaultStorage: VaultStorage, @unchecked Sendable {
         let tempURL = url.appendingPathExtension("tmp")
         try data.write(to: tempURL, options: .atomic)
         if FileManager.default.fileExists(atPath: url.path) {
-            try FileManager.default.removeItem(at: url)
+            // Atomic replace — never a window where the destination file is absent (P1-2).
+            _ = try FileManager.default.replaceItemAt(url, withItemAt: tempURL)
+        } else {
+            try FileManager.default.moveItem(at: tempURL, to: url)
         }
-        try FileManager.default.moveItem(at: tempURL, to: url)
     }
 
     private func readUbiquitousData(at url: URL, timeout: TimeInterval) throws -> Data {

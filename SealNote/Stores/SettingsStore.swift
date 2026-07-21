@@ -108,8 +108,17 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(hideContentOnBackground, forKey: Keys.hideContentOnBackground) }
     }
 
+    // ponytail: dead setting — retained only because tests reference it; the destructive
+    // foreground auto-unload it drove was removed in favor of lockSession (P0-4).
     @Published var autoUnloadKeyOnForeground: Bool {
         didSet { defaults.set(autoUnloadKeyOnForeground, forKey: Keys.autoUnloadKeyOnForeground) }
+    }
+
+    /// When set, encrypted notes are locked (the in-memory key is forgotten, Keychain
+    /// untouched) each time the app leaves the foreground, requiring re-authentication on
+    /// return (P0-4). Default off.
+    @Published var lockSessionOnBackground: Bool {
+        didSet { defaults.set(lockSessionOnBackground, forKey: Keys.lockSessionOnBackground) }
     }
 
     @Published var hasSeenFirstKeyPrompt: Bool {
@@ -118,6 +127,25 @@ final class SettingsStore: ObservableObject {
 
     @Published var hasSeededDefaultNotes: Bool {
         didSet { defaults.set(hasSeededDefaultNotes, forKey: Keys.hasSeededDefaultNotes) }
+    }
+
+    /// Persisted mirror of `VaultStore.needsKeyExport` so the "save your key" prompt
+    /// survives relaunch until the user actually exports (P0-1).
+    @Published var needsKeyExportPending: Bool {
+        didSet { defaults.set(needsKeyExportPending, forKey: Keys.needsKeyExportPending) }
+    }
+
+    /// Which storage root the vault is pinned to: "icloud", "local", or nil (not yet
+    /// decided). Pinning stops the vault from silently forking to local when iCloud
+    /// briefly disappears, and back again (P0-3).
+    @Published var pinnedStorageRoot: String? {
+        didSet {
+            if let pinnedStorageRoot {
+                defaults.set(pinnedStorageRoot, forKey: Keys.pinnedStorageRoot)
+            } else {
+                defaults.removeObject(forKey: Keys.pinnedStorageRoot)
+            }
+        }
     }
 
     @Published var macEditorFontSize: Double {
@@ -244,8 +272,11 @@ final class SettingsStore: ObservableObject {
         self.preferredNoteMode = NoteMode(rawValue: defaults.string(forKey: Keys.preferredNoteMode) ?? "") ?? .plain
         self.hideContentOnBackground = defaults.object(forKey: Keys.hideContentOnBackground) as? Bool ?? true
         self.autoUnloadKeyOnForeground = defaults.object(forKey: Keys.autoUnloadKeyOnForeground) as? Bool ?? false
+        self.lockSessionOnBackground = defaults.object(forKey: Keys.lockSessionOnBackground) as? Bool ?? false
         self.hasSeenFirstKeyPrompt = defaults.bool(forKey: Keys.hasSeenFirstKeyPrompt)
         self.hasSeededDefaultNotes = defaults.bool(forKey: Keys.hasSeededDefaultNotes)
+        self.needsKeyExportPending = defaults.bool(forKey: Keys.needsKeyExportPending)
+        self.pinnedStorageRoot = defaults.string(forKey: Keys.pinnedStorageRoot)
 
         let storedFontSize = defaults.double(forKey: Keys.macEditorFontSize)
         if storedFontSize > 0 {
@@ -303,13 +334,20 @@ final class SettingsStore: ObservableObject {
         #endif
     }
 
+    /// The backing store, exposed so vault-identity caching (SNVaultId) shares the
+    /// same (test-injectable) UserDefaults instance as the rest of settings.
+    var userDefaults: UserDefaults { defaults }
+
     /// 用于测试：重置为默认值。
     func resetForTesting() {
         preferredNoteMode = .plain
         hideContentOnBackground = true
         autoUnloadKeyOnForeground = false
+        lockSessionOnBackground = false
         hasSeenFirstKeyPrompt = false
         hasSeededDefaultNotes = false
+        needsKeyExportPending = false
+        pinnedStorageRoot = nil
         macEditorFontSize = Self.defaultMacEditorFontSize
         macEditorLineHeightMultiple = Self.defaultMacEditorLineHeightMultiple
         copyAddsParagraphSpacing = false
@@ -341,6 +379,7 @@ final class SettingsStore: ObservableObject {
         preferredNoteMode = .plain
         hideContentOnBackground = true
         autoUnloadKeyOnForeground = false
+        lockSessionOnBackground = false
         hasSeenFirstKeyPrompt = false
         macEditorFontSize = Self.defaultMacEditorFontSize
         macEditorLineHeightMultiple = Self.defaultMacEditorLineHeightMultiple
@@ -440,8 +479,11 @@ final class SettingsStore: ObservableObject {
         static let preferredNoteMode = "SNPreferredNoteMode"
         static let hideContentOnBackground = "SNHideContentOnBackground"
         static let autoUnloadKeyOnForeground = "SNAutoUnloadKeyOnForeground"
+        static let lockSessionOnBackground = "SNLockSessionOnBackground"
         static let hasSeenFirstKeyPrompt = "SNHasSeenFirstKeyPrompt"
         static let hasSeededDefaultNotes = "SNHasSeededDefaultNotes"
+        static let needsKeyExportPending = "SNNeedsKeyExportPending"
+        static let pinnedStorageRoot = "SNPinnedStorageRoot"
         static let macEditorFontSize = "SNMacEditorFontSize"
         static let macEditorLineHeightMultiple = "SNMacEditorLineHeightMultiple"
         static let copyAddsParagraphSpacing = "SNCopyAddsParagraphSpacing"

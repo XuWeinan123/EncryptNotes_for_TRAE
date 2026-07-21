@@ -943,6 +943,44 @@ extension MacMarkdownHighlighter {
         return mutable
     }
 
+    /// Re-highlight only `dirtyRange` in place. Spans are still computed over the FULL
+    /// text (so fenced code / tables stay globally correct), but attributes are written
+    /// only within the dirty range via `setAttributes`/`addAttributes` — no character
+    /// mutation and no `setAttributedString`, so typing stays cheap. (P1-1)
+    static func applyIOSHighlighting(
+        to textStorage: NSTextStorage,
+        text: String,
+        dirtyRange: NSRange,
+        fontSize: CGFloat,
+        lineHeightMultiple: CGFloat = 1.3
+    ) {
+        let fullLength = (textStorage.string as NSString).length
+        let applyRange = NSIntersectionRange(dirtyRange, NSRange(location: 0, length: fullLength))
+        guard applyRange.length > 0 else { return }
+
+        let bodyFont = UIFont.systemFont(ofSize: fontSize)
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineHeightMultiple = lineHeightMultiple
+        let baseAttributes: [NSAttributedString.Key: Any] = [
+            .font: bodyFont,
+            .foregroundColor: UIColor(DS.textBody),
+            .paragraphStyle: paragraphStyle
+        ]
+
+        textStorage.beginEditing()
+        textStorage.setAttributes(baseAttributes, range: applyRange)
+        for span in highlight(text) {
+            let intersection = NSIntersectionRange(span.range, applyRange)
+            guard intersection.length > 0 else { continue }
+            var attrs = iosAttributes(for: span.role, fontSize: fontSize)
+            if attrs[.paragraphStyle] == nil {
+                attrs[.paragraphStyle] = paragraphStyle
+            }
+            textStorage.addAttributes(attrs, range: intersection)
+        }
+        textStorage.endEditing()
+    }
+
     static func iosTypingAttributes(fontSize: CGFloat, lineHeightMultiple: CGFloat = 1.3) -> [NSAttributedString.Key: Any] {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.lineHeightMultiple = lineHeightMultiple

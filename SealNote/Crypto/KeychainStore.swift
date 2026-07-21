@@ -19,7 +19,22 @@ enum KeychainError: Error, LocalizedError {
     }
 }
 
-final class KeychainStore {
+/// Test seam over the Keychain-backed key store so VaultStore can be driven with
+/// an in-memory fake in unit tests. Conformed by `KeychainStore`.
+protocol KeyStore: AnyObject {
+    func saveKey(_ keyMaterial: String, forVaultId vaultId: String, keyId: String?, keyFingerprint: String?) throws
+    func loadKey(forVaultId vaultId: String) throws -> String
+    func loadKeyId(forVaultId vaultId: String) -> String?
+    func loadKeyFingerprint(forVaultId vaultId: String) -> String?
+    func saveKeyMetadata(keyId: String?, keyFingerprint: String, forVaultId vaultId: String) throws
+    func deleteKey(forVaultId vaultId: String) throws
+    func hasKey(forVaultId vaultId: String) -> Bool
+    /// Every account under the service that holds key material (i.e. excluding the
+    /// `.key_id` / `.key_fingerprint` metadata accounts). Used to adopt a legacy vault id.
+    func allVaultIdCandidates() -> [String]
+}
+
+final class KeychainStore: KeyStore {
     static let shared = KeychainStore()
 
     private let service = "com.xuweinan.sealnote"
@@ -137,6 +152,29 @@ final class KeychainStore {
         } catch {
             return false
         }
+    }
+
+    func allVaultIdCandidates() -> [String] {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+            kSecReturnAttributes as String: true
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let items = result as? [[String: Any]] else {
+            return []
+        }
+
+        var ids: [String] = []
+        for item in items {
+            guard let account = item[kSecAttrAccount as String] as? String else { continue }
+            if account.hasSuffix(".key_id") || account.hasSuffix(".key_fingerprint") { continue }
+            ids.append(account)
+        }
+        return ids
     }
 
     func clearAll() throws {
