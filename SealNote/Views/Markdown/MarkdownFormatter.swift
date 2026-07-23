@@ -26,7 +26,7 @@ struct MacMarkdownCodeFenceCompletionResult: Equatable {
     let selection: NSRange
 }
 
-final class MacMarkdownFormatter {
+final class MarkdownFormatter {
 
     static func webURL(fromClipboardString value: String?) -> String? {
         guard let value else { return nil }

@@ -12,7 +12,7 @@ final class MacMarkdownHighlighterTests: XCTestCase {
     // Helpers
 
     private func spans(_ text: String) -> [MarkdownHighlightSpan] {
-        MacMarkdownHighlighter.highlight(text)
+        MarkdownHighlighter.highlight(text)
     }
 
     private func hasRole(_ role: MarkdownHighlightRole, in spans: [MarkdownHighlightSpan], text: String, substring: String) -> Bool {
@@ -161,26 +161,26 @@ final class MacMarkdownHighlighterTests: XCTestCase {
 
     #if os(macOS)
     func testHeadingHighlightDoesNotChangePointSize() {
-        let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: "### 标题", fontSize: 14)
+        let attributed = MarkdownHighlighter.makeHighlightedAttributedString(text: "### 标题", fontSize: 14)
         let font = attributed.attribute(.font, at: 4, effectiveRange: nil) as? NSFont
         XCTAssertEqual(font?.pointSize, 14)
     }
 
     func testInlineCodeHighlightDoesNotChangePointSize() {
-        let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: "`code`", fontSize: 14)
+        let attributed = MarkdownHighlighter.makeHighlightedAttributedString(text: "`code`", fontSize: 14)
         let font = attributed.attribute(.font, at: 1, effectiveRange: nil) as? NSFont
         XCTAssertEqual(font?.pointSize, 14)
     }
 
     func testCodeBlockContentHasNoBackground() {
         let text = "```markdown\nlet x = 1\n```\n"
-        let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: text, fontSize: 14)
+        let attributed = MarkdownHighlighter.makeHighlightedAttributedString(text: text, fontSize: 14)
         let contentIndex = (text as NSString).range(of: "let x = 1").location
         XCTAssertNil(attributed.attribute(.backgroundColor, at: contentIndex, effectiveRange: nil))
     }
 
     func testParagraphLineHeightUsesMultiplier() {
-        let style = MacMarkdownHighlighter.paragraphStyle(size: 14, multiple: 1.5)
+        let style = MarkdownHighlighter.paragraphStyle(size: 14, multiple: 1.5)
         XCTAssertEqual(style.minimumLineHeight, ceil(14 * 1.5))
         XCTAssertEqual(style.maximumLineHeight, ceil(14 * 1.5))
     }
@@ -195,13 +195,13 @@ final class MacMarkdownHighlighterTests: XCTestCase {
 
         let fullTextView = NSTextView()
         fullTextView.string = text
-        fullTextView.font = MacMarkdownHighlighter.bodyFont(size: 14)
-        MacMarkdownHighlighter.applyMarkdownHighlighting(to: fullTextView, lineHeightMultiple: 1.25)
+        fullTextView.font = MarkdownHighlighter.bodyFont(size: 14)
+        MarkdownHighlighter.applyMarkdownHighlighting(to: fullTextView, lineHeightMultiple: 1.25)
 
         let limitedTextView = NSTextView()
         limitedTextView.string = text
-        limitedTextView.font = MacMarkdownHighlighter.bodyFont(size: 14)
-        MacMarkdownHighlighter.applyMarkdownHighlighting(
+        limitedTextView.font = MarkdownHighlighter.bodyFont(size: 14)
+        MarkdownHighlighter.applyMarkdownHighlighting(
             to: limitedTextView,
             lineHeightMultiple: 1.25,
             limitedTo: editedRange
@@ -288,7 +288,7 @@ final class MacMarkdownHighlighterTests: XCTestCase {
 
     #if os(macOS)
     func testHTMLCommentUsesGreenTextColor() {
-        let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: "<!--待办-->", fontSize: 14)
+        let attributed = MarkdownHighlighter.makeHighlightedAttributedString(text: "<!--待办-->", fontSize: 14)
         let color = attributed.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
         XCTAssertEqual(color, NSColor.systemGreen)
     }
@@ -374,10 +374,10 @@ final class MacMarkdownHighlighterTests: XCTestCase {
         // CJK font for Chinese glyphs, which a plain NSMutableAttributedString never does —
         // that would make fonts (not colors) diverge. Color is the real highlighting signal.
         let text = "# Heading\n**bold** plain text\n`code` end"
-        let full = MacMarkdownHighlighter.makeIOSHighlightedAttributedString(text: text, fontSize: 16, lineHeightMultiple: 1.3)
+        let full = MarkdownHighlighter.makeIOSHighlightedAttributedString(text: text, fontSize: 16, lineHeightMultiple: 1.3)
         let storage = NSTextStorage(string: text)
         let length = (text as NSString).length
-        MacMarkdownHighlighter.applyIOSHighlighting(
+        MarkdownHighlighter.applyIOSHighlighting(
             to: storage, text: text,
             dirtyRange: NSRange(location: 0, length: length),
             fontSize: 16, lineHeightMultiple: 1.3
@@ -394,7 +394,7 @@ final class MacMarkdownHighlighterTests: XCTestCase {
         let storage = NSTextStorage(string: text)
         // Sentinel attribute outside the dirty range.
         storage.addAttribute(.foregroundColor, value: UIColor.red, range: NSRange(location: 0, length: 4))
-        MacMarkdownHighlighter.applyIOSHighlighting(
+        MarkdownHighlighter.applyIOSHighlighting(
             to: storage, text: text,
             dirtyRange: NSRange(location: 9, length: 8),   // only the second line
             fontSize: 16, lineHeightMultiple: 1.3

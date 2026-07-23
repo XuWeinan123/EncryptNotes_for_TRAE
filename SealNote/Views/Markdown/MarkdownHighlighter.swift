@@ -35,7 +35,7 @@ struct MarkdownHighlightSpan {
     let role: MarkdownHighlightRole
 }
 
-final class MacMarkdownHighlighter {
+final class MarkdownHighlighter {
     private enum RegexCache {
         static let codeFence = try! NSRegularExpression(pattern: "^([ \\t]{0,3})(```|~~~)([^`~\\n]*)$", options: [.anchorsMatchLines])
         static let heading = try! NSRegularExpression(pattern: "^(\\s{0,3})(#{1,6})(\\s+)(.*)$", options: [.anchorsMatchLines])
@@ -734,7 +734,7 @@ final class MacMarkdownHighlighter {
 }
 
 #if os(macOS)
-extension MacMarkdownHighlighter {
+extension MarkdownHighlighter {
     static func attributes(for role: MarkdownHighlightRole, fontSize: CGFloat) -> [NSAttributedString.Key: Any] {
         let bodyFont = bodyFont(size: fontSize)
         let monoFontValue = monoFont(size: fontSize)
@@ -917,7 +917,7 @@ extension MacMarkdownHighlighter {
 #endif
 
 #if os(iOS)
-extension MacMarkdownHighlighter {
+extension MarkdownHighlighter {
     static func makeIOSHighlightedAttributedString(text: String, fontSize: CGFloat, lineHeightMultiple: CGFloat = 1.3) -> NSAttributedString {
         let bodyFont = UIFont.systemFont(ofSize: fontSize)
         let paragraphStyle = NSMutableParagraphStyle()

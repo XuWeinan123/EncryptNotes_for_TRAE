@@ -118,8 +118,8 @@ struct StickyNoteEditorView: View {
             MacTextView(
                 text: $viewModel.text,
                 placeholder: "随便写点什么吧",
-                fontSize: CGFloat(settings.macEditorFontSize),
-                lineHeightMultiple: CGFloat(settings.macEditorLineHeightMultiple),
+                fontSize: CGFloat(settings.editorFontSize),
+                lineHeightMultiple: CGFloat(settings.editorLineHeightMultiple),
                 autoFocus: true,
                 isEditable: !viewModel.isContentLocked,
                 onChange: { viewModel.textDidChange($0) },
@@ -147,8 +147,8 @@ struct StickyNoteEditorView: View {
             if hasCreatedMarkdownPreview {
                 MacMarkdownPreview(
                     text: markdownPreviewText,
-                    fontSize: CGFloat(settings.macEditorFontSize),
-                    lineHeightMultiple: CGFloat(settings.macEditorLineHeightMultiple),
+                    fontSize: CGFloat(settings.editorFontSize),
+                    lineHeightMultiple: CGFloat(settings.editorLineHeightMultiple),
                     scrollY: $editorScrollY
                 )
                 .background(MacMarkdownPreviewShortcutMonitor(
@@ -374,7 +374,7 @@ struct StickyNoteEditorView: View {
     }
 
     private func adjustFontSize(by delta: Double) {
-        settings.macEditorFontSize = SettingsStore.clampedFontSize(settings.macEditorFontSize + delta)
+        settings.editorFontSize = SettingsStore.clampedFontSize(settings.editorFontSize + delta)
     }
 
     private var markdownPreviewShortcut: MarkdownShortcut {
@@ -539,7 +539,7 @@ enum MacStickyEditorLayout {
     }
 
     static func textContainerInset(fontSize: CGFloat) -> NSSize {
-        let baseInset = MacMarkdownHighlighter.textContainerInset(size: fontSize)
+        let baseInset = MarkdownHighlighter.textContainerInset(size: fontSize)
         return NSSize(
             width: baseInset.width + editorHorizontalInset,
             height: baseInset.height
@@ -586,7 +586,7 @@ struct MacMarkdownPreview: View {
                         .markdownComponentSpacing(verticalSpacing)
                         .markdownMathRenderingEnabled()
                         .markdownCodeBlockStyle(MacMarkdownPreviewCodeBlockStyle(
-                            theme: settings.macTheme,
+                            theme: settings.appTheme,
                             font: codeFont
                         ))
                         .foregroundStyle(DS.textBody)
@@ -600,7 +600,7 @@ struct MacMarkdownPreview: View {
                         .tint(DS.link, for: .link)
                         .tint(DS.link, for: .blockQuote)
                         .tint(DS.primaryDeep, for: .inlineCodeBlock)
-                        .id(settings.macTheme)
+                        .id(settings.appTheme)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -615,7 +615,7 @@ struct MacMarkdownPreview: View {
 }
 
 private struct MacMarkdownPreviewCodeBlockStyle: MarkdownCodeBlockStyle {
-    let theme: MacTheme
+    let theme: AppTheme
     let font: Font
 
     func makeBody(configuration: Configuration) -> some View {
@@ -625,7 +625,7 @@ private struct MacMarkdownPreviewCodeBlockStyle: MarkdownCodeBlockStyle {
 
 private struct MacMarkdownPreviewCodeBlock: View {
     let configuration: MarkdownCodeBlockStyleConfiguration
-    let theme: MacTheme
+    let theme: AppTheme
     let font: Font
     @State private var didCopy = false
 
@@ -1223,7 +1223,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
     func copyNoteText() {
         guard !isContentLocked else { return }
         let copiedText = settings.copyAddsParagraphSpacing
-            ? MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
+            ? MarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
             : text
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(copiedText, forType: .string)
@@ -1333,7 +1333,7 @@ final class StickyNoteEditorViewModel: ObservableObject {
         StickyNoteWindowManager.shared.fitWindowToContent(
             noteId: note.id,
             text: text,
-            fontSize: CGFloat(SettingsStore.shared.macEditorFontSize)
+            fontSize: CGFloat(SettingsStore.shared.editorFontSize)
         )
     }
 
@@ -1983,16 +1983,16 @@ struct MacTextView: NSViewRepresentable {
 
         if needsExternalTextReplace {
             let selectedRanges = textView.selectedRanges
-            let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: text, fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
+            let attributed = MarkdownHighlighter.makeHighlightedAttributedString(text: text, fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
             scrollView.preservingVisibleOrigin {
                 textView.textStorage?.setAttributedString(attributed)
                 textView.selectedRanges = selectedRanges
             }
             context.coordinator.markStyleRendered(fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
         } else if needsStyleRefresh {
-            let paraStyle = MacMarkdownHighlighter.paragraphStyle(size: fontSize, multiple: lineHeightMultiple)
-            let bodyFont = MacMarkdownHighlighter.bodyFont(size: fontSize)
-            let baselineOff = MacMarkdownHighlighter.baselineOffset(size: fontSize, font: bodyFont, multiple: lineHeightMultiple)
+            let paraStyle = MarkdownHighlighter.paragraphStyle(size: fontSize, multiple: lineHeightMultiple)
+            let bodyFont = MarkdownHighlighter.bodyFont(size: fontSize)
+            let baselineOff = MarkdownHighlighter.baselineOffset(size: fontSize, font: bodyFont, multiple: lineHeightMultiple)
             let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
             if fullRange.length > 0 {
                 scrollView.preservingVisibleOrigin {
@@ -2001,7 +2001,7 @@ struct MacTextView: NSViewRepresentable {
                         .paragraphStyle: paraStyle,
                         .baselineOffset: baselineOff
                     ], range: fullRange)
-                    MacMarkdownHighlighter.applyMarkdownHighlighting(to: textView, lineHeightMultiple: lineHeightMultiple)
+                    MarkdownHighlighter.applyMarkdownHighlighting(to: textView, lineHeightMultiple: lineHeightMultiple)
                 }
             }
             context.coordinator.markStyleRendered(fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
@@ -2031,9 +2031,9 @@ struct MacTextView: NSViewRepresentable {
     }
 
     private func updatePlaceholderStyle(_ textView: AutoFocusTextView, fontSize: CGFloat) {
-        let bodyFont = MacMarkdownHighlighter.bodyFont(size: fontSize)
-        let paraStyle = MacMarkdownHighlighter.paragraphStyle(size: fontSize, multiple: lineHeightMultiple)
-        let baselineOff = MacMarkdownHighlighter.baselineOffset(size: fontSize, font: bodyFont, multiple: lineHeightMultiple)
+        let bodyFont = MarkdownHighlighter.bodyFont(size: fontSize)
+        let paraStyle = MarkdownHighlighter.paragraphStyle(size: fontSize, multiple: lineHeightMultiple)
+        let baselineOff = MarkdownHighlighter.baselineOffset(size: fontSize, font: bodyFont, multiple: lineHeightMultiple)
         textView.placeholderLabel.font = bodyFont
         textView.placeholderLabel.paragraphStyle = paraStyle
         textView.placeholderLabel.textColor = NSColor.placeholderTextColor
@@ -2061,7 +2061,7 @@ extension MacTextView {
         }
 
         func configureTextView(_ textView: AutoFocusTextView, text: String, fontSize: CGFloat) {
-            let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(text: text, fontSize: fontSize, lineHeightMultiple: fontSize == parent.fontSize ? parent.lineHeightMultiple : CGFloat(SettingsStore.defaultMacEditorLineHeightMultiple))
+            let attributed = MarkdownHighlighter.makeHighlightedAttributedString(text: text, fontSize: fontSize, lineHeightMultiple: fontSize == parent.fontSize ? parent.lineHeightMultiple : CGFloat(SettingsStore.defaultEditorLineHeightMultiple))
             textView.textStorage?.setAttributedString(attributed)
             textView.typingAttributes = Self.typingAttributes(fontSize: fontSize, lineHeightMultiple: parent.lineHeightMultiple)
             lastText = text
@@ -2079,12 +2079,12 @@ extension MacTextView {
         }
 
         static func typingAttributes(fontSize: CGFloat, lineHeightMultiple: CGFloat) -> [NSAttributedString.Key: Any] {
-            let bodyFont = MacMarkdownHighlighter.bodyFont(size: fontSize)
+            let bodyFont = MarkdownHighlighter.bodyFont(size: fontSize)
             return [
                 .font: bodyFont,
                 .foregroundColor: NSColor(DS.textBody),
-                .paragraphStyle: MacMarkdownHighlighter.paragraphStyle(size: fontSize, multiple: lineHeightMultiple),
-                .baselineOffset: MacMarkdownHighlighter.baselineOffset(size: fontSize, font: bodyFont, multiple: lineHeightMultiple)
+                .paragraphStyle: MarkdownHighlighter.paragraphStyle(size: fontSize, multiple: lineHeightMultiple),
+                .baselineOffset: MarkdownHighlighter.baselineOffset(size: fontSize, font: bodyFont, multiple: lineHeightMultiple)
             ]
         }
 
@@ -2104,7 +2104,7 @@ extension MacTextView {
             lastText = newText
             let scrollView = textView.enclosingScrollView as? ToolbarInsetScrollView
             let refreshEditorState = {
-                MacMarkdownHighlighter.applyMarkdownHighlighting(
+                MarkdownHighlighter.applyMarkdownHighlighting(
                     to: textView,
                     lineHeightMultiple: self.parent.lineHeightMultiple,
                     limitedTo: textView.selectedRange()
@@ -2275,7 +2275,7 @@ extension MacTextView {
         private func completeMarkdownCodeFence() -> Bool {
         guard isEditable else { return false }
         guard !hasMarkedText() else { return false }
-        guard let result = MacMarkdownFormatter.completeCodeFenceIfNeeded(in: string, selection: selectedRange()) else {
+        guard let result = MarkdownFormatter.completeCodeFenceIfNeeded(in: string, selection: selectedRange()) else {
             return false
         }
         applyTextResult(result.text, selection: result.selection)
@@ -2285,7 +2285,7 @@ extension MacTextView {
         private func continueMarkdownList() -> Bool {
         guard isEditable else { return false }
         guard !hasMarkedText() else { return false }
-        guard let result = MacMarkdownFormatter.continueListIfNeeded(in: string, selection: selectedRange()) else {
+        guard let result = MarkdownFormatter.continueListIfNeeded(in: string, selection: selectedRange()) else {
             return false
         }
         applyTextResult(result.text, selection: result.selection)
@@ -2302,11 +2302,11 @@ extension MacTextView {
         if case .link = command {
             let pasteboard = NSPasteboard.general
             let clipboardString = pasteboard.string(forType: .URL) ?? pasteboard.string(forType: .string)
-            linkURL = MacMarkdownFormatter.webURL(fromClipboardString: clipboardString)
+            linkURL = MarkdownFormatter.webURL(fromClipboardString: clipboardString)
         } else {
             linkURL = nil
         }
-        let result = MacMarkdownFormatter.apply(
+        let result = MarkdownFormatter.apply(
             command: command,
             to: currentText,
             selection: selection,
@@ -2319,7 +2319,7 @@ extension MacTextView {
     private func applyTextResult(_ text: String, selection: NSRange) {
         isUpdating = true
         let fontSize = (coordinator?.parent.fontSize) ?? 14
-        let lineHeightMultiple = (coordinator?.parent.lineHeightMultiple) ?? CGFloat(SettingsStore.defaultMacEditorLineHeightMultiple)
+        let lineHeightMultiple = (coordinator?.parent.lineHeightMultiple) ?? CGFloat(SettingsStore.defaultEditorLineHeightMultiple)
         let oldText = string
         let change = replacementChange(from: oldText, to: text)
         let scrollView = enclosingScrollView as? ToolbarInsetScrollView
@@ -2334,11 +2334,11 @@ extension MacTextView {
         coordinator?.parent.onChange(text)
         if let scrollView {
             scrollView.preservingVisibleOrigin {
-                MacMarkdownHighlighter.applyMarkdownHighlighting(to: self, lineHeightMultiple: lineHeightMultiple)
+                MarkdownHighlighter.applyMarkdownHighlighting(to: self, lineHeightMultiple: lineHeightMultiple)
                 scrollView.syncDocumentSize(self)
             }
         } else {
-            MacMarkdownHighlighter.applyMarkdownHighlighting(to: self, lineHeightMultiple: lineHeightMultiple)
+            MarkdownHighlighter.applyMarkdownHighlighting(to: self, lineHeightMultiple: lineHeightMultiple)
         }
         typingAttributes = MacTextView.Coordinator.typingAttributes(fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
         coordinator?.markStyleRendered(fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
@@ -2444,7 +2444,7 @@ final class PlaceholderLabel: NSTextField {
     }
 }
 
-extension MacMarkdownHighlighter {
+extension MarkdownHighlighter {
     static func applyMarkdownHighlighting(
         to textView: NSTextView,
         lineHeightMultiple: CGFloat,
@@ -2456,7 +2456,7 @@ extension MacMarkdownHighlighter {
         let selectedRanges = textView.selectedRanges
 
         let text = textView.string
-        let fontSize = textView.font?.pointSize ?? CGFloat(SettingsStore.shared.macEditorFontSize)
+        let fontSize = textView.font?.pointSize ?? CGFloat(SettingsStore.shared.editorFontSize)
 
         let bodyFont = bodyFont(size: fontSize)
         let paraStyle = paragraphStyle(size: fontSize, multiple: lineHeightMultiple)

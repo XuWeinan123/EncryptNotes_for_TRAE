@@ -164,8 +164,8 @@ struct MacSettingsView: View {
 
             macPanel("主题") {
                 SWSettingsRow("主题色", systemImage: "paintpalette", tint: DS.primaryDeep) {
-                    Picker("主题色", selection: $settings.macTheme) {
-                        ForEach(MacTheme.allCases) { theme in
+                    Picker("主题色", selection: $settings.appTheme) {
+                        ForEach(AppTheme.allCases) { theme in
                             Text(theme.title).tag(theme)
                         }
                     }
@@ -381,14 +381,14 @@ struct MacSettingsView: View {
             macPanel("编辑体验") {
                 SWSettingsRow("编辑字号", systemImage: "textformat.size") {
                     VStack(alignment: .trailing, spacing: DS.s1) {
-                        Text(String(format: "%.0f", settings.macEditorFontSize))
+                        Text(String(format: "%.0f", settings.editorFontSize))
                             .font(DS.caption())
                             .foregroundColor(DS.textSecondary)
                             .monospacedDigit()
                         Slider(
                             value: fontSizeBinding,
-                            in: SettingsStore.macEditorFontSizeRange,
-                            step: SettingsStore.macEditorFontSizeStep
+                            in: SettingsStore.editorFontSizeRange,
+                            step: SettingsStore.editorFontSizeStep
                         )
                         .frame(width: 150)
                         .tint(DS.primary)
@@ -399,13 +399,13 @@ struct MacSettingsView: View {
 
                 SWSettingsRow("行高", systemImage: "line.3.horizontal.decrease") {
                     VStack(alignment: .trailing, spacing: DS.s1) {
-                        Text(String(format: "%.2fx", settings.macEditorLineHeightMultiple))
+                        Text(String(format: "%.2fx", settings.editorLineHeightMultiple))
                             .font(DS.caption())
                             .foregroundColor(DS.textSecondary)
                             .monospacedDigit()
                         Slider(
                             value: lineHeightBinding,
-                            in: SettingsStore.macEditorLineHeightRange,
+                            in: SettingsStore.editorLineHeightRange,
                             step: 0.05
                         )
                         .frame(width: 150)
@@ -495,9 +495,9 @@ struct MacSettingsView: View {
 
     private var fontSizeBinding: Binding<Double> {
         Binding(
-            get: { settings.macEditorFontSize },
+            get: { settings.editorFontSize },
             set: { newValue in
-                settings.macEditorFontSize = newValue
+                settings.editorFontSize = newValue
             }
         )
     }
@@ -658,8 +658,8 @@ struct MacSettingsView: View {
 
     private var lineHeightBinding: Binding<Double> {
         Binding(
-            get: { settings.macEditorLineHeightMultiple },
-            set: { settings.macEditorLineHeightMultiple = $0 }
+            get: { settings.editorLineHeightMultiple },
+            set: { settings.editorLineHeightMultiple = $0 }
         )
     }
 
@@ -863,13 +863,13 @@ struct MacSettingsView: View {
 
     @ViewBuilder
     private var aboutLogo: some View {
-        if let image = MacAppIconController.image(for: settings.macTheme) {
+        if let image = MacAppIconController.image(for: settings.appTheme) {
             Image(nsImage: image)
                 .resizable()
                 .frame(width: 82, height: 82)
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .shadow(color: DS.floatShadow.color, radius: DS.floatShadow.radius, x: DS.floatShadow.x, y: DS.floatShadow.y)
-                .id(settings.macTheme)
+                .id(settings.appTheme)
         } else {
             Color.clear
                 .frame(width: 82, height: 82)

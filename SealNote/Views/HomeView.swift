@@ -15,7 +15,6 @@ struct HomeView: View {
     @State private var showDeleteConfirmation = false
     @State private var noteToRename: Note?
     @State private var renameTitle = ""
-    @FocusState private var searchFocused: Bool
 
     @State private var isSelecting = false
     @State private var selectedIDs: Set<String> = []
@@ -264,7 +263,7 @@ struct HomeView: View {
 
         ToolbarItem(placement: .principal) {
             if isSelecting {
-                Text("\(selectedItems.count) selected")
+                Text("已选 \(selectedItems.count) 条")
                     .font(DS.title())
                     .foregroundColor(DS.textEmphasize)
             } else {
@@ -442,9 +441,6 @@ struct HomeView: View {
         .animation(.easeInOut(duration: 0.2), value: filteredItems.count)
         .animation(.easeInOut(duration: 0.2), value: isSelecting)
         .animation(.easeInOut(duration: 0.2), value: selectedIDs)
-        .onAppear {
-            vaultStore.searchText = ""
-        }
     }
 
     private var tagChips: some View {
@@ -562,40 +558,12 @@ struct HomeView: View {
         .padding(.horizontal, DS.s2)
     }
 
+    // Pre-iOS-26 bottom action bar. Search now lives entirely in the system
+    // `.searchable` field, so this carries only the new-note button (iOS 26 uses a
+    // dedicated bottomBar toolbar item instead).
     private var bottomSearchBar: some View {
-        HStack(spacing: DS.s2) {
-            HStack(spacing: DS.s2) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(DS.textSecondary)
-
-                TextField("搜索", text: $vaultStore.searchText)
-                    .font(DS.body())
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .focused($searchFocused)
-                    .submitLabel(.search)
-
-                Button {
-                    searchFocused = true
-                } label: {
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 16, weight: .regular))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(DS.textSecondary)
-                .accessibilityLabel("语音搜索")
-            }
-            .padding(.horizontal, DS.s3)
-            .frame(height: 44)
-            .background(.regularMaterial)
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(Color.white.opacity(0.42), lineWidth: 0.5)
-            )
-            .shadow(color: Color.black.opacity(0.08), radius: 18, x: 0, y: 6)
-
+        HStack {
+            Spacer()
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     showNewNoteEditor = true

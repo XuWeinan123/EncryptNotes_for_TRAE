@@ -265,8 +265,8 @@ struct NoteEditorView: View {
             text: $noteBody,
             selectedRange: $editorSelection,
             placeholder: "写下想法，支持 Markdown 和 #标签",
-            fontSize: CGFloat(settings.macEditorFontSize),
-            lineHeightMultiple: CGFloat(settings.macEditorLineHeightMultiple)
+            fontSize: CGFloat(settings.editorFontSize),
+            lineHeightMultiple: CGFloat(settings.editorLineHeightMultiple)
         )
         .frame(maxWidth: DS.contentMax)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -302,18 +302,18 @@ struct NoteEditorView: View {
             Group {
                 if noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("随便写点什么吧")
-                        .font(.system(size: CGFloat(settings.macEditorFontSize)))
+                        .font(.system(size: CGFloat(settings.editorFontSize)))
                         .foregroundColor(DS.textSubtle)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     MarkdownView(noteBody)
-                        .font(.system(size: CGFloat(settings.macEditorFontSize)), for: .body)
+                        .font(.system(size: CGFloat(settings.editorFontSize)), for: .body)
                         .font(
-                            .system(size: max(11, CGFloat(settings.macEditorFontSize) - 1), design: .monospaced),
+                            .system(size: max(11, CGFloat(settings.editorFontSize) - 1), design: .monospaced),
                             for: .codeBlock
                         )
                         .markdownComponentSpacing(
-                            max(8, CGFloat(settings.macEditorFontSize) * (CGFloat(settings.macEditorLineHeightMultiple) - 0.7))
+                            max(8, CGFloat(settings.editorFontSize) * (CGFloat(settings.editorLineHeightMultiple) - 0.7))
                         )
                         .markdownMathRenderingEnabled()
                         .foregroundStyle(DS.textBody)
@@ -458,7 +458,7 @@ struct NoteEditorView: View {
     private func copyNoteText() {
         #if os(iOS)
         UIPasteboard.general.string = settings.copyAddsParagraphSpacing
-            ? MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: noteBody)
+            ? MarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: noteBody)
             : noteBody
         #endif
     }
@@ -467,11 +467,11 @@ struct NoteEditorView: View {
         #if os(iOS)
         let linkURL: String?
         if case .link = command {
-            linkURL = MacMarkdownFormatter.webURL(fromClipboardString: UIPasteboard.general.string)
+            linkURL = MarkdownFormatter.webURL(fromClipboardString: UIPasteboard.general.string)
         } else {
             linkURL = nil
         }
-        let result = MacMarkdownFormatter.apply(
+        let result = MarkdownFormatter.apply(
             command: command,
             to: noteBody,
             selection: editorSelection,
@@ -622,7 +622,7 @@ private class PlaceholderTextView: UITextView {
 
         let font = UIFont.systemFont(ofSize: editorFontSize)
         self.font = font
-        typingAttributes = MacMarkdownHighlighter.iosTypingAttributes(
+        typingAttributes = MarkdownHighlighter.iosTypingAttributes(
             fontSize: editorFontSize,
             lineHeightMultiple: editorLineHeightMultiple
         )
@@ -660,7 +660,7 @@ private class PlaceholderTextView: UITextView {
         editorFontSize = fontSize
         editorLineHeightMultiple = lineHeightMultiple
         placeholderLabel.font = UIFont.systemFont(ofSize: fontSize)
-        let attributed = MacMarkdownHighlighter.makeIOSHighlightedAttributedString(
+        let attributed = MarkdownHighlighter.makeIOSHighlightedAttributedString(
             text: newText,
             fontSize: fontSize,
             lineHeightMultiple: lineHeightMultiple
@@ -675,7 +675,7 @@ private class PlaceholderTextView: UITextView {
         if shouldRestoreUndoRegistration, undoManager?.isUndoRegistrationEnabled == false {
             undoManager?.enableUndoRegistration()
         }
-        typingAttributes = MacMarkdownHighlighter.iosTypingAttributes(
+        typingAttributes = MarkdownHighlighter.iosTypingAttributes(
             fontSize: fontSize,
             lineHeightMultiple: lineHeightMultiple
         )
@@ -688,14 +688,14 @@ private class PlaceholderTextView: UITextView {
     /// per keystroke (P1-1). Spans are computed globally so fences/tables stay correct.
     func applyIncrementalHighlighting() {
         let ns = text as NSString
-        typingAttributes = MacMarkdownHighlighter.iosTypingAttributes(
+        typingAttributes = MarkdownHighlighter.iosTypingAttributes(
             fontSize: editorFontSize,
             lineHeightMultiple: editorLineHeightMultiple
         )
         guard ns.length > 0 else { return }
         let caret = min(max(0, selectedRange.location), ns.length)
         let dirtyRange = ns.paragraphRange(for: NSRange(location: caret, length: 0))
-        MacMarkdownHighlighter.applyIOSHighlighting(
+        MarkdownHighlighter.applyIOSHighlighting(
             to: textStorage,
             text: text,
             dirtyRange: dirtyRange,
@@ -837,7 +837,7 @@ private struct NoteTextView: UIViewRepresentable {
             let currentText = textView.text ?? ""
             let currentSelection = NSRange(location: range.location, length: 0)
             let result: MacMarkdownFormatResult?
-            if let completion = MacMarkdownFormatter.completeCodeFenceIfNeeded(
+            if let completion = MarkdownFormatter.completeCodeFenceIfNeeded(
                 in: currentText,
                 selection: currentSelection
             ) {
@@ -845,7 +845,7 @@ private struct NoteTextView: UIViewRepresentable {
                     text: completion.text,
                     selection: completion.selection
                 )
-            } else if let continuation = MacMarkdownFormatter.continueListIfNeeded(
+            } else if let continuation = MarkdownFormatter.continueListIfNeeded(
                 in: currentText,
                 selection: currentSelection
             ) {

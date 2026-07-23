@@ -2638,7 +2638,7 @@ final class VaultStore: ObservableObject {
                     skipped += 1
                 } else {
                     let copiedBody = settings.copyAddsParagraphSpacing
-                        ? MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: note.body)
+                        ? MarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: note.body)
                         : note.body
                     plainBodies.append(copiedBody)
                 }

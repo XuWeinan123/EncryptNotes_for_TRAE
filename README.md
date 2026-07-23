@@ -30,8 +30,9 @@
 | 平台 | 最低版本 | 形态 |
 | --- | --- | --- |
 | macOS | macOS 26 | 菜单栏应用 + 独立悬浮便签窗口 |
+| iOS / iPadOS | iOS 17 | 笔记列表 + 全屏编辑器（iPhone 与 iPad 通用） |
 
-iOS 版本正在开发中。
+iOS 端支持 iCloud Drive 同步与本机端侧加密（AES-256，仅正文）。密钥存于本机 Keychain、不随 iCloud 同步，请通过导出 `.snkey` 备份。加密范围与密钥管理等说明见[隐私政策](PRIVACY.md)与 [docs/ios-stabilization.md](docs/ios-stabilization.md)。
 
 ## 数据与安全
 

@@ -21,7 +21,7 @@ struct MacNoteWindowState: Codable, Equatable {
 final class MacNoteWindowStore: ObservableObject {
     static let shared = MacNoteWindowStore()
     static var defaultWindowSize: CGSize {
-        let fontSize = CGFloat(SettingsStore.defaultMacEditorFontSize)
+        let fontSize = CGFloat(SettingsStore.defaultEditorFontSize)
         return CGSize(
             width: MacStickyEditorLayout.fittedWindowWidth(fontSize: fontSize),
             height: MacStickyEditorLayout.minimumFittedWindowHeight(fontSize: fontSize)

@@ -5,7 +5,7 @@ import Combine
 import ServiceManagement
 #endif
 
-enum MacTheme: String, CaseIterable, Identifiable, Codable {
+enum AppTheme: String, CaseIterable, Identifiable, Codable {
     case pink
     case cyan
     case green
@@ -79,12 +79,12 @@ struct VaultKeyFileReference: Codable, Equatable {
 final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
 
-    static let macEditorFontSizeRange: ClosedRange<Double> = 12...18
-    static let macEditorFontSizeStep: Double = 1
-    static let defaultMacEditorFontSize: Double = 14
-    static let defaultMacEditorLineHeightMultiple: Double = 1.5
-    static let macEditorLineHeightRange: ClosedRange<Double> = 1.2...2.0
-    static let defaultMacTheme: MacTheme = .pink
+    static let editorFontSizeRange: ClosedRange<Double> = 12...18
+    static let editorFontSizeStep: Double = 1
+    static let defaultEditorFontSize: Double = 14
+    static let defaultEditorLineHeightMultiple: Double = 1.5
+    static let editorLineHeightRange: ClosedRange<Double> = 1.2...2.0
+    static let defaultAppTheme: AppTheme = .pink
     static let macThemeDefaultsKey = "SNMacTheme"
     static let macRecentNotesLimitOptions = [5, 10, 15]
     static let defaultMacRecentNotesLimit = 5
@@ -148,25 +148,25 @@ final class SettingsStore: ObservableObject {
         }
     }
 
-    @Published var macEditorFontSize: Double {
+    @Published var editorFontSize: Double {
         didSet {
-            let clamped = Self.clampedFontSize(macEditorFontSize)
-            if macEditorFontSize != clamped {
-                macEditorFontSize = clamped
+            let clamped = Self.clampedFontSize(editorFontSize)
+            if editorFontSize != clamped {
+                editorFontSize = clamped
                 return
             }
-            defaults.set(macEditorFontSize, forKey: Keys.macEditorFontSize)
+            defaults.set(editorFontSize, forKey: Keys.editorFontSize)
         }
     }
 
-    @Published var macEditorLineHeightMultiple: Double {
+    @Published var editorLineHeightMultiple: Double {
         didSet {
-            let clamped = Self.clampedLineHeightMultiple(macEditorLineHeightMultiple)
-            if macEditorLineHeightMultiple != clamped {
-                macEditorLineHeightMultiple = clamped
+            let clamped = Self.clampedLineHeightMultiple(editorLineHeightMultiple)
+            if editorLineHeightMultiple != clamped {
+                editorLineHeightMultiple = clamped
                 return
             }
-            defaults.set(macEditorLineHeightMultiple, forKey: Keys.macEditorLineHeightMultiple)
+            defaults.set(editorLineHeightMultiple, forKey: Keys.editorLineHeightMultiple)
         }
     }
 
@@ -195,11 +195,11 @@ final class SettingsStore: ObservableObject {
         }
     }
 
-    @Published var macTheme: MacTheme {
+    @Published var appTheme: AppTheme {
         didSet {
-            defaults.set(macTheme.rawValue, forKey: Self.macThemeDefaultsKey)
+            defaults.set(appTheme.rawValue, forKey: Self.macThemeDefaultsKey)
             #if os(macOS)
-            MacAppIconController.shared.apply(theme: macTheme)
+            MacAppIconController.shared.apply(theme: appTheme)
             #endif
         }
     }
@@ -278,18 +278,18 @@ final class SettingsStore: ObservableObject {
         self.needsKeyExportPending = defaults.bool(forKey: Keys.needsKeyExportPending)
         self.pinnedStorageRoot = defaults.string(forKey: Keys.pinnedStorageRoot)
 
-        let storedFontSize = defaults.double(forKey: Keys.macEditorFontSize)
+        let storedFontSize = defaults.double(forKey: Keys.editorFontSize)
         if storedFontSize > 0 {
-            self.macEditorFontSize = Self.clampedFontSize(storedFontSize)
+            self.editorFontSize = Self.clampedFontSize(storedFontSize)
         } else {
-            self.macEditorFontSize = Self.defaultMacEditorFontSize
+            self.editorFontSize = Self.defaultEditorFontSize
         }
 
-        let storedLineHeight = defaults.double(forKey: Keys.macEditorLineHeightMultiple)
+        let storedLineHeight = defaults.double(forKey: Keys.editorLineHeightMultiple)
         if storedLineHeight > 0 {
-            self.macEditorLineHeightMultiple = Self.clampedLineHeightMultiple(storedLineHeight)
+            self.editorLineHeightMultiple = Self.clampedLineHeightMultiple(storedLineHeight)
         } else {
-            self.macEditorLineHeightMultiple = Self.defaultMacEditorLineHeightMultiple
+            self.editorLineHeightMultiple = Self.defaultEditorLineHeightMultiple
         }
 
         self.copyAddsParagraphSpacing = defaults.object(forKey: Keys.copyAddsParagraphSpacing) as? Bool ?? false
@@ -297,7 +297,7 @@ final class SettingsStore: ObservableObject {
         self.autoRenameNotesOnSave = defaults.object(forKey: Keys.autoRenameNotesOnSave) as? Bool ?? false
         self.excludeHexColorsFromTags = defaults.object(forKey: Keys.excludeHexColorsFromTags) as? Bool ?? true
         self.maintenanceLoggingEnabled = defaults.object(forKey: Keys.maintenanceLoggingEnabled) as? Bool ?? false
-        self.macTheme = MacTheme(rawValue: defaults.string(forKey: Self.macThemeDefaultsKey) ?? "") ?? Self.defaultMacTheme
+        self.appTheme = AppTheme(rawValue: defaults.string(forKey: Self.macThemeDefaultsKey) ?? "") ?? Self.defaultAppTheme
         let storedRecentNotesLimit = defaults.integer(forKey: Keys.macRecentNotesLimit)
         self.macRecentNotesLimit = storedRecentNotesLimit > 0
             ? Self.clampedRecentNotesLimit(storedRecentNotesLimit)
@@ -348,14 +348,14 @@ final class SettingsStore: ObservableObject {
         hasSeededDefaultNotes = false
         needsKeyExportPending = false
         pinnedStorageRoot = nil
-        macEditorFontSize = Self.defaultMacEditorFontSize
-        macEditorLineHeightMultiple = Self.defaultMacEditorLineHeightMultiple
+        editorFontSize = Self.defaultEditorFontSize
+        editorLineHeightMultiple = Self.defaultEditorLineHeightMultiple
         copyAddsParagraphSpacing = false
         autoDeleteEmptyNotes = true
         autoRenameNotesOnSave = false
         excludeHexColorsFromTags = true
         maintenanceLoggingEnabled = false
-        macTheme = Self.defaultMacTheme
+        appTheme = Self.defaultAppTheme
         macRecentNotesLimit = Self.defaultMacRecentNotesLimit
         iOSAppIconName = nil
         #if os(macOS)
@@ -381,14 +381,14 @@ final class SettingsStore: ObservableObject {
         autoUnloadKeyOnForeground = false
         lockSessionOnBackground = false
         hasSeenFirstKeyPrompt = false
-        macEditorFontSize = Self.defaultMacEditorFontSize
-        macEditorLineHeightMultiple = Self.defaultMacEditorLineHeightMultiple
+        editorFontSize = Self.defaultEditorFontSize
+        editorLineHeightMultiple = Self.defaultEditorLineHeightMultiple
         copyAddsParagraphSpacing = false
         autoDeleteEmptyNotes = true
         autoRenameNotesOnSave = false
         excludeHexColorsFromTags = true
         maintenanceLoggingEnabled = false
-        macTheme = Self.defaultMacTheme
+        appTheme = Self.defaultAppTheme
         macRecentNotesLimit = Self.defaultMacRecentNotesLimit
         pinNewNotesByDefault = Self.defaultPinNewNotes
         lockEncryptedNotesOnSleep = Self.defaultLockEncryptedNotesOnSleep
@@ -463,11 +463,11 @@ final class SettingsStore: ObservableObject {
     #endif
 
     static func clampedFontSize(_ value: Double) -> Double {
-        min(max(value.rounded(), macEditorFontSizeRange.lowerBound), macEditorFontSizeRange.upperBound)
+        min(max(value.rounded(), editorFontSizeRange.lowerBound), editorFontSizeRange.upperBound)
     }
 
     static func clampedLineHeightMultiple(_ value: Double) -> Double {
-        min(max(value, macEditorLineHeightRange.lowerBound), macEditorLineHeightRange.upperBound)
+        min(max(value, editorLineHeightRange.lowerBound), editorLineHeightRange.upperBound)
     }
 
     static func clampedRecentNotesLimit(_ value: Int) -> Int {
@@ -484,8 +484,8 @@ final class SettingsStore: ObservableObject {
         static let hasSeededDefaultNotes = "SNHasSeededDefaultNotes"
         static let needsKeyExportPending = "SNNeedsKeyExportPending"
         static let pinnedStorageRoot = "SNPinnedStorageRoot"
-        static let macEditorFontSize = "SNMacEditorFontSize"
-        static let macEditorLineHeightMultiple = "SNMacEditorLineHeightMultiple"
+        static let editorFontSize = "SNMacEditorFontSize"
+        static let editorLineHeightMultiple = "SNMacEditorLineHeightMultiple"
         static let copyAddsParagraphSpacing = "SNCopyAddsParagraphSpacing"
         static let autoDeleteEmptyNotes = "SNAutoDeleteEmptyNotes"
         static let autoRenameNotesOnSave = "SNAutoRenameNotesOnSave"

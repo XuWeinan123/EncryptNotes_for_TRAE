@@ -6,7 +6,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
     // MARK: - Empty selection: insert placeholder
 
     func testBoldEmptySelectionInsertsPlaceholder() {
-        let result = MacMarkdownFormatter.apply(
+        let result = MarkdownFormatter.apply(
             command: .bold,
             to: "",
             selection: NSRange(location: 0, length: 0)
@@ -16,7 +16,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
     }
 
     func testItalicEmptySelectionInsertsPlaceholder() {
-        let result = MacMarkdownFormatter.apply(
+        let result = MarkdownFormatter.apply(
             command: .italic,
             to: "hello",
             selection: NSRange(location: 5, length: 0)
@@ -26,43 +26,43 @@ final class MacMarkdownFormatterTests: XCTestCase {
     }
 
     func testUnderlineEmptySelectionInsertsPlaceholder() {
-        let result = MacMarkdownFormatter.apply(command: .underline, to: "", selection: .init(location: 0, length: 0))
+        let result = MarkdownFormatter.apply(command: .underline, to: "", selection: .init(location: 0, length: 0))
         XCTAssertEqual(result.text, "<u>underline</u>")
         XCTAssertEqual(result.selection, NSRange(location: 3, length: 9))
     }
 
     func testInlineCodeEmptySelectionInsertsPlaceholder() {
-        let result = MacMarkdownFormatter.apply(command: .inlineCode, to: "", selection: .init(location: 0, length: 0))
+        let result = MarkdownFormatter.apply(command: .inlineCode, to: "", selection: .init(location: 0, length: 0))
         XCTAssertEqual(result.text, "`code`")
         XCTAssertEqual(result.selection, NSRange(location: 1, length: 4))
     }
 
     func testInlineMathEmptySelectionInsertsPlaceholder() {
-        let result = MacMarkdownFormatter.apply(command: .inlineMath, to: "", selection: .init(location: 0, length: 0))
+        let result = MarkdownFormatter.apply(command: .inlineMath, to: "", selection: .init(location: 0, length: 0))
         XCTAssertEqual(result.text, "$math$")
         XCTAssertEqual(result.selection, NSRange(location: 1, length: 4))
     }
 
     func testStrikeEmptySelectionInsertsPlaceholder() {
-        let result = MacMarkdownFormatter.apply(command: .strike, to: "", selection: .init(location: 0, length: 0))
+        let result = MarkdownFormatter.apply(command: .strike, to: "", selection: .init(location: 0, length: 0))
         XCTAssertEqual(result.text, "~~strike~~")
         XCTAssertEqual(result.selection, NSRange(location: 2, length: 6))
     }
 
     func testHTMLCommentEmptySelectionInsertsPlaceholder() {
-        let result = MacMarkdownFormatter.apply(command: .htmlComment, to: "", selection: .init(location: 0, length: 0))
+        let result = MarkdownFormatter.apply(command: .htmlComment, to: "", selection: .init(location: 0, length: 0))
         XCTAssertEqual(result.text, "<!--待办-->")
         XCTAssertEqual(result.selection, NSRange(location: 4, length: 2))
     }
 
     func testLinkEmptySelectionPlacesCursorInBrackets() {
-        let result = MacMarkdownFormatter.apply(command: .link, to: "", selection: .init(location: 0, length: 0))
+        let result = MarkdownFormatter.apply(command: .link, to: "", selection: .init(location: 0, length: 0))
         XCTAssertEqual(result.text, "[]()")
         XCTAssertEqual(result.selection, NSRange(location: 1, length: 0))
     }
 
     func testLinkEmptySelectionWithCopiedURLPlacesCursorAfterClosingParenthesis() {
-        let result = MacMarkdownFormatter.apply(
+        let result = MarkdownFormatter.apply(
             command: .link,
             to: "",
             selection: .init(location: 0, length: 0),
@@ -76,7 +76,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testBoldWrapsSelection() {
         let text = "hello world"
-        let result = MacMarkdownFormatter.apply(
+        let result = MarkdownFormatter.apply(
             command: .bold,
             to: text,
             selection: NSRange(location: 6, length: 5)
@@ -86,7 +86,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
     }
 
     func testLinkWrapsSelection() {
-        let result = MacMarkdownFormatter.apply(
+        let result = MarkdownFormatter.apply(
             command: .link,
             to: "click here",
             selection: NSRange(location: 6, length: 4)
@@ -96,7 +96,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
     }
 
     func testLinkWrapsSelectionAndFillsCopiedURL() {
-        let result = MacMarkdownFormatter.apply(
+        let result = MarkdownFormatter.apply(
             command: .link,
             to: "查看官网",
             selection: NSRange(location: 2, length: 2),
@@ -108,20 +108,20 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testClipboardWebURLAcceptsHTTPAndHTTPSOnly() {
         XCTAssertEqual(
-            MacMarkdownFormatter.webURL(fromClipboardString: "  https://example.com/path?q=1\n"),
+            MarkdownFormatter.webURL(fromClipboardString: "  https://example.com/path?q=1\n"),
             "https://example.com/path?q=1"
         )
-        XCTAssertEqual(MacMarkdownFormatter.webURL(fromClipboardString: "http://localhost:8080"), "http://localhost:8080")
-        XCTAssertNil(MacMarkdownFormatter.webURL(fromClipboardString: "example.com"))
-        XCTAssertNil(MacMarkdownFormatter.webURL(fromClipboardString: "file:///tmp/note"))
-        XCTAssertNil(MacMarkdownFormatter.webURL(fromClipboardString: "https://example.com copied"))
+        XCTAssertEqual(MarkdownFormatter.webURL(fromClipboardString: "http://localhost:8080"), "http://localhost:8080")
+        XCTAssertNil(MarkdownFormatter.webURL(fromClipboardString: "example.com"))
+        XCTAssertNil(MarkdownFormatter.webURL(fromClipboardString: "file:///tmp/note"))
+        XCTAssertNil(MarkdownFormatter.webURL(fromClipboardString: "https://example.com copied"))
     }
 
     // MARK: - Code fence completion
 
     func testCodeFenceCompletionRequiresInfoString() {
         let text = "```markdown"
-        let result = MacMarkdownFormatter.completeCodeFenceIfNeeded(
+        let result = MarkdownFormatter.completeCodeFenceIfNeeded(
             in: text,
             selection: NSRange(location: (text as NSString).length, length: 0)
         )
@@ -132,7 +132,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testCodeFenceCompletionIgnoresPlainFenceLine() {
         let text = "```"
-        let result = MacMarkdownFormatter.completeCodeFenceIfNeeded(
+        let result = MarkdownFormatter.completeCodeFenceIfNeeded(
             in: text,
             selection: NSRange(location: (text as NSString).length, length: 0)
         )
@@ -142,7 +142,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testCodeFenceCompletionIgnoresClosingFenceLine() {
         let text = "```markdown\nbody\n```"
-        let result = MacMarkdownFormatter.completeCodeFenceIfNeeded(
+        let result = MarkdownFormatter.completeCodeFenceIfNeeded(
             in: text,
             selection: NSRange(location: (text as NSString).length, length: 0)
         )
@@ -151,7 +151,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
     }
 
     func testInlineMathWrapsSelection() {
-        let result = MacMarkdownFormatter.apply(
+        let result = MarkdownFormatter.apply(
             command: .inlineMath,
             to: "use x",
             selection: NSRange(location: 4, length: 1)
@@ -164,7 +164,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testBoldToggleRemovesMarkerWhenAlreadyWrapped() {
         let text = "**hello**"
-        let result = MacMarkdownFormatter.apply(
+        let result = MarkdownFormatter.apply(
             command: .bold,
             to: text,
             selection: NSRange(location: 2, length: 5)
@@ -175,7 +175,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testItalicToggleRemovesMarker() {
         let text = "*hi*"
-        let result = MacMarkdownFormatter.apply(
+        let result = MarkdownFormatter.apply(
             command: .italic,
             to: text,
             selection: NSRange(location: 1, length: 2)
@@ -186,7 +186,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testInlineCodeToggleRemovesBackticks() {
         let text = "`code`"
-        let result = MacMarkdownFormatter.apply(
+        let result = MarkdownFormatter.apply(
             command: .inlineCode,
             to: text,
             selection: NSRange(location: 1, length: 4)
@@ -197,7 +197,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testInlineMathToggleRemovesDollarMarkers() {
         let text = "$math$"
-        let result = MacMarkdownFormatter.apply(
+        let result = MarkdownFormatter.apply(
             command: .inlineMath,
             to: text,
             selection: NSRange(location: 1, length: 4)
@@ -208,7 +208,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testUnderlineToggleRemovesTags() {
         let text = "<u>under</u>"
-        let result = MacMarkdownFormatter.apply(
+        let result = MarkdownFormatter.apply(
             command: .underline,
             to: text,
             selection: NSRange(location: 3, length: 5)
@@ -219,7 +219,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testStrikeToggleRemovesMarker() {
         let text = "~~strike~~"
-        let result = MacMarkdownFormatter.apply(
+        let result = MarkdownFormatter.apply(
             command: .strike,
             to: text,
             selection: NSRange(location: 2, length: 6)
@@ -230,7 +230,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testCommentToggleRemovesMarker() {
         let text = "<!--hello-->"
-        let result = MacMarkdownFormatter.apply(
+        let result = MarkdownFormatter.apply(
             command: .htmlComment,
             to: text,
             selection: NSRange(location: 4, length: 5)
@@ -243,7 +243,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testNumberedListReturnContinuesWithNextNumber() {
         let text = "1. hello"
-        let result = MacMarkdownFormatter.continueListIfNeeded(
+        let result = MarkdownFormatter.continueListIfNeeded(
             in: text,
             selection: NSRange(location: (text as NSString).length, length: 0)
         )
@@ -264,7 +264,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
         9. 官网登录页面
         """
         let cursor = (text as NSString).range(of: "5. 自动任务页面").location + ("5. 自动任务页面" as NSString).length
-        let result = MacMarkdownFormatter.continueListIfNeeded(
+        let result = MarkdownFormatter.continueListIfNeeded(
             in: text,
             selection: NSRange(location: cursor, length: 0)
         )
@@ -296,7 +296,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
         10. 官网登录页面
         """
         let cursor = (text as NSString).range(of: "6. ").location + ("6. " as NSString).length
-        let result = MacMarkdownFormatter.continueListIfNeeded(
+        let result = MarkdownFormatter.continueListIfNeeded(
             in: text,
             selection: NSRange(location: cursor, length: 0)
         )
@@ -316,7 +316,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testBulletListReturnContinuesSameMarker() {
         let text = "- hello"
-        let result = MacMarkdownFormatter.continueListIfNeeded(
+        let result = MarkdownFormatter.continueListIfNeeded(
             in: text,
             selection: NSRange(location: (text as NSString).length, length: 0)
         )
@@ -325,7 +325,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testBulletListReturnBeforeContentSplitsAndKeepsBothMarkers() {
         let text = "* 第一行内容"
-        let result = MacMarkdownFormatter.continueListIfNeeded(
+        let result = MarkdownFormatter.continueListIfNeeded(
             in: text,
             selection: NSRange(location: 2, length: 0)
         )
@@ -336,7 +336,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testNumberedListReturnBeforeContentSplitsAndRenumbersFollowingItem() {
         let text = "1. 第一行\n2. 第二行"
-        let result = MacMarkdownFormatter.continueListIfNeeded(
+        let result = MarkdownFormatter.continueListIfNeeded(
             in: text,
             selection: NSRange(location: 3, length: 0)
         )
@@ -347,7 +347,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testTaskListReturnContinuesWithUncheckedMarker() {
         let text = "- [ ] first task"
-        let result = MacMarkdownFormatter.continueListIfNeeded(
+        let result = MarkdownFormatter.continueListIfNeeded(
             in: text,
             selection: NSRange(location: (text as NSString).length, length: 0)
         )
@@ -356,7 +356,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testCompletedTaskListReturnContinuesWithUncheckedMarker() {
         let text = "- [x] finished task"
-        let result = MacMarkdownFormatter.continueListIfNeeded(
+        let result = MarkdownFormatter.continueListIfNeeded(
             in: text,
             selection: NSRange(location: (text as NSString).length, length: 0)
         )
@@ -365,7 +365,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testEmptyGeneratedTaskListMarkerExitsList() {
         let text = "- [ ] first task\n- [ ] "
-        let result = MacMarkdownFormatter.continueListIfNeeded(
+        let result = MarkdownFormatter.continueListIfNeeded(
             in: text,
             selection: NSRange(location: (text as NSString).length, length: 0)
         )
@@ -375,7 +375,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testEmptyGeneratedListMarkerExitsList() {
         let text = "1. hello\n2. "
-        let result = MacMarkdownFormatter.continueListIfNeeded(
+        let result = MarkdownFormatter.continueListIfNeeded(
             in: text,
             selection: NSRange(location: (text as NSString).length, length: 0)
         )
@@ -385,7 +385,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testListContinuationSkipsFencedCodeBlocks() {
         let text = "```\n1. code"
-        let result = MacMarkdownFormatter.continueListIfNeeded(
+        let result = MarkdownFormatter.continueListIfNeeded(
             in: text,
             selection: NSRange(location: (text as NSString).length, length: 0)
         )
@@ -396,7 +396,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testCopySpacingAddsBlankLinesBetweenParagraphLines() {
         let text = "第一段\n第二段\n\n- item\n- item2\n\n```swift\nlet x = 1\nlet y = 2\n```"
-        let result = MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
+        let result = MarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
         XCTAssertEqual(result, "第一段\n\n第二段\n\n- item\n- item2\n\n```swift\nlet x = 1\nlet y = 2\n```\n")
     }
 
@@ -414,7 +414,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
         **需求 7**：设置页增加维护日志开关
         用户可以开启维护日志，辅助排查同步与存储问题；默认关闭，不影响正常使用。
         """
-        let result = MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
+        let result = MarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
         XCTAssertEqual(result, """
         # Seal Note 更新需求 0701
 
@@ -457,7 +457,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
         ```
         正文
         """
-        let result = MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
+        let result = MarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
         XCTAssertEqual(result, """
         正文
 
@@ -495,7 +495,7 @@ final class MacMarkdownFormatterTests: XCTestCase {
         ---
         4. 第四项
         """
-        let result = MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
+        let result = MarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
         XCTAssertEqual(result, """
         正文
 
@@ -513,18 +513,18 @@ final class MacMarkdownFormatterTests: XCTestCase {
 
     func testCopySpacingDoesNotTreatInlineTripleBackticksAsFence() {
         let text = "注意到 ```内容``` 这种格式会被错误识别。\n下一句"
-        let result = MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
+        let result = MarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
         XCTAssertEqual(result, "注意到 ```内容``` 这种格式会被错误识别。\n\n下一句\n")
     }
 
     func testCopySpacingCompressesBlankLinesAndTrimsLeadingBlanks() {
         let text = "\n\n第一段\n\n\n第二段\n\n"
-        let result = MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
+        let result = MarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: text)
         XCTAssertEqual(result, "第一段\n\n第二段\n")
     }
 
     func testCopySpacingReturnsEmptyStringForBlankInput() {
-        XCTAssertEqual(MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: ""), "")
-        XCTAssertEqual(MacMarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: "\n \n\t\n"), "")
+        XCTAssertEqual(MarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: ""), "")
+        XCTAssertEqual(MarkdownFormatter.stringByAddingMarkdownParagraphSpacing(to: "\n \n\t\n"), "")
     }
 }

@@ -26,66 +26,66 @@ final class SettingsStoreTests: XCTestCase {
 
     func testDefaultFontSizeIs14() {
         let store = makeStore()
-        XCTAssertEqual(store.macEditorFontSize, 14)
+        XCTAssertEqual(store.editorFontSize, 14)
     }
 
     func testAllowedFontSizesCanBeSet() {
         let store = makeStore()
         for size in [12.0, 13.0, 14.0, 16.0, 18.0] {
-            store.macEditorFontSize = size
-            XCTAssertEqual(store.macEditorFontSize, size)
+            store.editorFontSize = size
+            XCTAssertEqual(store.editorFontSize, size)
         }
     }
 
     func testIllegalFontSizeIsClamped() {
         let store = makeStore()
-        store.macEditorFontSize = 100
-        XCTAssertEqual(store.macEditorFontSize, 18)
-        store.macEditorFontSize = 0
-        XCTAssertEqual(store.macEditorFontSize, 12)
+        store.editorFontSize = 100
+        XCTAssertEqual(store.editorFontSize, 18)
+        store.editorFontSize = 0
+        XCTAssertEqual(store.editorFontSize, 12)
     }
 
     func testResetForTestingRestoresFontSize() {
         let store = makeStore()
-        store.macEditorFontSize = 18
-        XCTAssertEqual(store.macEditorFontSize, 18)
-        store.macEditorLineHeightMultiple = 1.6
+        store.editorFontSize = 18
+        XCTAssertEqual(store.editorFontSize, 18)
+        store.editorLineHeightMultiple = 1.6
         store.resetForTesting()
-        XCTAssertEqual(store.macEditorFontSize, 14)
-        XCTAssertEqual(store.macEditorLineHeightMultiple, 1.5, accuracy: 0.0001)
+        XCTAssertEqual(store.editorFontSize, 14)
+        XCTAssertEqual(store.editorLineHeightMultiple, 1.5, accuracy: 0.0001)
     }
 
     func testPersistedFontSizeIsLoaded() {
         defaults.set(15.0, forKey: "SNMacEditorFontSize")
         let store = makeStore()
-        XCTAssertEqual(store.macEditorFontSize, 15)
+        XCTAssertEqual(store.editorFontSize, 15)
     }
 
     func testDefaultLineHeightMultipleIs150() {
         let store = makeStore()
-        XCTAssertEqual(store.macEditorLineHeightMultiple, 1.5, accuracy: 0.0001)
+        XCTAssertEqual(store.editorLineHeightMultiple, 1.5, accuracy: 0.0001)
     }
 
     func testLineHeightMultipleCanBeSetInRange() {
         let store = makeStore()
         for multiple in [1.2, 1.25, 2.0] {
-            store.macEditorLineHeightMultiple = multiple
-            XCTAssertEqual(store.macEditorLineHeightMultiple, multiple, accuracy: 0.0001)
+            store.editorLineHeightMultiple = multiple
+            XCTAssertEqual(store.editorLineHeightMultiple, multiple, accuracy: 0.0001)
         }
     }
 
     func testLineHeightMultipleIsClamped() {
         let store = makeStore()
-        store.macEditorLineHeightMultiple = 1.0
-        XCTAssertEqual(store.macEditorLineHeightMultiple, 1.2, accuracy: 0.0001)
-        store.macEditorLineHeightMultiple = 2.5
-        XCTAssertEqual(store.macEditorLineHeightMultiple, 2.0, accuracy: 0.0001)
+        store.editorLineHeightMultiple = 1.0
+        XCTAssertEqual(store.editorLineHeightMultiple, 1.2, accuracy: 0.0001)
+        store.editorLineHeightMultiple = 2.5
+        XCTAssertEqual(store.editorLineHeightMultiple, 2.0, accuracy: 0.0001)
     }
 
     func testPersistedLineHeightMultipleIsLoaded() {
         defaults.set(1.5, forKey: "SNMacEditorLineHeightMultiple")
         let store = makeStore()
-        XCTAssertEqual(store.macEditorLineHeightMultiple, 1.5, accuracy: 0.0001)
+        XCTAssertEqual(store.editorLineHeightMultiple, 1.5, accuracy: 0.0001)
     }
 
     func testNewMacSettingsDefaults() {
@@ -94,15 +94,15 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.autoDeleteEmptyNotes)
         XCTAssertFalse(store.autoRenameNotesOnSave)
         XCTAssertTrue(store.excludeHexColorsFromTags)
-        XCTAssertEqual(store.macTheme, .pink)
+        XCTAssertEqual(store.appTheme, .pink)
         XCTAssertEqual(store.macRecentNotesLimit, 5)
     }
 
     func testMacThemePersists() {
         let store = makeStore()
-        store.macTheme = .cyan
+        store.appTheme = .cyan
         let reloaded = makeStore()
-        XCTAssertEqual(reloaded.macTheme, .cyan)
+        XCTAssertEqual(reloaded.appTheme, .cyan)
     }
 
     func testEditingPrivacyAndDataPreferencesPersist() {

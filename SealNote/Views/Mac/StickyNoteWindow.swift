@@ -229,10 +229,10 @@ final class StickyNoteWindowManager: NSObject {
     }
 
     private func measureTextHeight(text: String, width: CGFloat, fontSize: CGFloat) -> CGFloat {
-        let attributed = MacMarkdownHighlighter.makeHighlightedAttributedString(
+        let attributed = MarkdownHighlighter.makeHighlightedAttributedString(
             text: text,
             fontSize: fontSize,
-            lineHeightMultiple: CGFloat(SettingsStore.shared.macEditorLineHeightMultiple)
+            lineHeightMultiple: CGFloat(SettingsStore.shared.editorLineHeightMultiple)
         )
         let textStorage = NSTextStorage(attributedString: attributed)
         let layoutManager = NSLayoutManager()

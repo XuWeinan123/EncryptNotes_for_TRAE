@@ -112,7 +112,6 @@
 				Views/HomeView.swift,
 				Views/NoteEditorView.swift,
 				Views/SettingsView.swift,
-				Views/SidebarView.swift,
 				Views/TrashView.swift,
 			);
 			target = 000000000000000500000000 /* SealNoteMac */;

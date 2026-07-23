@@ -159,14 +159,14 @@ private struct NotesSettingsView: View {
             SWSectionPanel("编辑外观") {
                 SWSettingsRow("编辑字号", systemImage: "textformat.size") {
                     VStack(alignment: .trailing, spacing: DS.s1) {
-                        Text(String(format: "%.0f", settings.macEditorFontSize))
+                        Text(String(format: "%.0f", settings.editorFontSize))
                             .font(DS.caption())
                             .foregroundColor(DS.textSecondary)
                             .monospacedDigit()
                         Slider(
-                            value: $settings.macEditorFontSize,
-                            in: SettingsStore.macEditorFontSizeRange,
-                            step: SettingsStore.macEditorFontSizeStep
+                            value: $settings.editorFontSize,
+                            in: SettingsStore.editorFontSizeRange,
+                            step: SettingsStore.editorFontSizeStep
                         )
                         .frame(width: 132)
                         .tint(DS.primary)
@@ -177,13 +177,13 @@ private struct NotesSettingsView: View {
 
                 SWSettingsRow("行高", systemImage: "line.3.horizontal.decrease") {
                     VStack(alignment: .trailing, spacing: DS.s1) {
-                        Text(String(format: "%.2fx", settings.macEditorLineHeightMultiple))
+                        Text(String(format: "%.2fx", settings.editorLineHeightMultiple))
                             .font(DS.caption())
                             .foregroundColor(DS.textSecondary)
                             .monospacedDigit()
                         Slider(
-                            value: $settings.macEditorLineHeightMultiple,
-                            in: SettingsStore.macEditorLineHeightRange,
+                            value: $settings.editorLineHeightMultiple,
+                            in: SettingsStore.editorLineHeightRange,
                             step: 0.05
                         )
                         .frame(width: 132)
@@ -817,6 +817,26 @@ private struct DataSettingsView: View {
                     }
                     .font(DS.caption())
                 }
+                SWRowDivider()
+                SWSettingsRow(
+                    "存储位置",
+                    subtitle: vaultStore.isUsingICloudStorage ? "iCloud Drive" : "仅本机",
+                    systemImage: vaultStore.isUsingICloudStorage ? "icloud" : "internaldrive",
+                    tint: DS.textSecondary
+                ) {
+                    EmptyView()
+                }
+                if vaultStore.storageRootMismatch {
+                    SWRowDivider()
+                    SWSettingsRow(
+                        "iCloud 暂时不可用",
+                        subtitle: "正在临时使用本机存储，iCloud 恢复后会自动切回",
+                        systemImage: "exclamationmark.icloud",
+                        tint: DS.destructive
+                    ) {
+                        EmptyView()
+                    }
+                }
                 if vaultStore.strandedLocalDataDetected {
                     SWRowDivider()
                     Button {
@@ -1013,16 +1033,16 @@ private struct AppearanceSettingsView: View {
     var body: some View {
         SWPanelStack {
             SWSectionPanel("主题色") {
-                ForEach(Array(MacTheme.allCases.enumerated()), id: \.element.id) { index, theme in
+                ForEach(Array(AppTheme.allCases.enumerated()), id: \.element.id) { index, theme in
                     Button {
-                        settings.macTheme = theme
+                        settings.appTheme = theme
                     } label: {
-                        SWSettingsRow(theme.title, subtitle: themeSubtitle(theme), systemImage: theme == settings.macTheme ? "checkmark.circle.fill" : "circle", tint: tint(for: theme)) {
+                        SWSettingsRow(theme.title, subtitle: themeSubtitle(theme), systemImage: theme == settings.appTheme ? "checkmark.circle.fill" : "circle", tint: tint(for: theme)) {
                             themeSwatch(theme)
                         }
                     }
                     .buttonStyle(.plain)
-                    if index < MacTheme.allCases.count - 1 {
+                    if index < AppTheme.allCases.count - 1 {
                         SWRowDivider()
                     }
                 }
@@ -1059,11 +1079,11 @@ private struct AppearanceSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func themeSubtitle(_ theme: MacTheme) -> String? {
-        theme == settings.macTheme ? "当前主题色" : nil
+    private func themeSubtitle(_ theme: AppTheme) -> String? {
+        theme == settings.appTheme ? "当前主题色" : nil
     }
 
-    private func tint(for theme: MacTheme) -> Color {
+    private func tint(for theme: AppTheme) -> Color {
         switch theme {
         case .pink: return Color(light: 0x8F2D5A, dark: 0xFFD8E8)
         case .cyan: return Color(light: 0x246A73, dark: 0xCFF7FB)
@@ -1071,7 +1091,7 @@ private struct AppearanceSettingsView: View {
         }
     }
 
-    private func themeSwatch(_ theme: MacTheme) -> some View {
+    private func themeSwatch(_ theme: AppTheme) -> some View {
         Circle()
             .fill(tint(for: theme))
             .frame(width: 22, height: 22)

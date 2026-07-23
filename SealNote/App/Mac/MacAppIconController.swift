@@ -6,12 +6,12 @@ final class MacAppIconController {
 
     private init() {}
 
-    func apply(theme: MacTheme) {
+    func apply(theme: AppTheme) {
         guard let image = Self.image(for: theme) else { return }
         NSApp.applicationIconImage = image
     }
 
-    static func image(for theme: MacTheme) -> NSImage? {
+    static func image(for theme: AppTheme) -> NSImage? {
         let resourceName = theme.macAppIconResourceName
         if let image = NSImage(named: NSImage.Name(resourceName)), image.isValid {
             return image
@@ -26,7 +26,7 @@ final class MacAppIconController {
     }
 }
 
-private extension MacTheme {
+private extension AppTheme {
     var macAppIconResourceName: String {
         switch self {
         case .pink: return "Icon"

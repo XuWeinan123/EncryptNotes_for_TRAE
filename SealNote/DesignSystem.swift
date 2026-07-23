@@ -14,7 +14,7 @@ enum DS {
 
     /// 品牌叶绿色；主按钮、发送、`#tags`、浮动按钮、热力图。
     static var primary: Color {
-        switch currentMacTheme {
+        switch currentAppTheme {
         case .green: return Color(light: 0x30CF79, dark: 0x397354)
         case .pink: return Color(light: 0xFF94C5, dark: 0xFF94C5)
         case .cyan: return Color(light: 0x14C8D8, dark: 0x33D2E3)
@@ -22,7 +22,7 @@ enum DS {
     }
     /// 带强调色的浅色表面，用于选中状态。
     static var primaryContainer: Color {
-        switch currentMacTheme {
+        switch currentAppTheme {
         case .green: return Color(light: 0xE6F9EF, dark: 0x397354, darkAlpha: 0.32)
         case .pink: return Color(light: 0xFFE8F3, dark: 0xFF94C5, darkAlpha: 0.24)
         case .cyan: return Color(light: 0xE3FAFC, dark: 0x33D2E3, darkAlpha: 0.24)
@@ -30,7 +30,7 @@ enum DS {
     }
     /// 浅色背景上的强调文字。
     static var primaryDeep: Color {
-        switch currentMacTheme {
+        switch currentAppTheme {
         case .green: return Color(light: 0x397354, dark: 0xD4D4D4)
         case .pink: return Color(light: 0x8F2D5A, dark: 0xFFD8E8)
         case .cyan: return Color(light: 0x246A73, dark: 0xCFF7FB)
@@ -68,7 +68,7 @@ enum DS {
     static let line = Color(light: 0x000000, dark: 0x787878, lightAlpha: 0.08, darkAlpha: 0.18)
     /// 主按钮文字。
     static var onPrimary: Color {
-        switch currentMacTheme {
+        switch currentAppTheme {
         case .green: return Color.white
         case .pink: return Color(hex: 0x351625)
         case .cyan: return Color(hex: 0x10363C)
@@ -127,8 +127,8 @@ enum DS {
     /// 固定 toolbar 图标宽度，避免状态切换时按钮组跳动。
     static let macToolbarIconWidth: CGFloat = 18
 
-    private static var currentMacTheme: MacTheme {
-        MacTheme(rawValue: UserDefaults.standard.string(forKey: "SNMacTheme") ?? "") ?? .pink
+    private static var currentAppTheme: AppTheme {
+        AppTheme(rawValue: UserDefaults.standard.string(forKey: SettingsStore.macThemeDefaultsKey) ?? "") ?? .pink
     }
 
     // MARK: - Elevation
